@@ -1,0 +1,26 @@
+[project]
+name = "halo"
+version = "0.1.0"
+description = "HLO-Aware Lowering Optimizer - an agentic optimization loop around JAX/XLA"
+requires-python = ">=3.12"
+dependencies = [
+    "jax>=0.4.35",
+    "google-genai>=1.0",
+]
+
+[project.scripts]
+halo = "halo.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/halo"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: runs the real harness in a subprocess (tens of seconds)"]
