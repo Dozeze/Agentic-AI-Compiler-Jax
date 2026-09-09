@@ -122,9 +122,38 @@ def test_every_level_states_the_task_and_the_code(level):
     assert "## Your task" in text
 
 
+#: The levels that vary how much the agent is told. `algorithmic` is not one of
+#: them: it shows exactly what `full` shows and varies only the framing.
+INFORMATION_LEVELS = ("code", "timing", "hlo", "full")
+
+
 def test_levels_add_information_and_never_remove_it():
-    sizes = [len(ctx.render(_context(), min_speedup=1.05, level=l)) for l in ctx.LEVELS]
+    sizes = [len(ctx.render(_context(), min_speedup=1.05, level=l))
+             for l in INFORMATION_LEVELS]
     assert sizes == sorted(sizes), "each level should be a superset of the previous"
+
+
+def test_algorithmic_shows_the_same_evidence_as_full():
+    """The comparison that isolates prompt from data: if these two differed in what
+    they show, a difference in outcome could not be attributed to the framing."""
+    body = {l: ctx.render(_context(), min_speedup=1.05, level=l) for l in ("full", "algorithmic")}
+    for marker in ("jaxpr, what you wrote", "StableHLO, handed to XLA",
+                   "optimized HLO", "## Measurement"):
+        assert marker in body["full"] and marker in body["algorithmic"], marker
+
+
+def test_only_the_algorithmic_level_reframes_the_job():
+    assert ctx.system_for("algorithmic") == ctx.SYSTEM_ALGORITHMIC
+    for level in INFORMATION_LEVELS:
+        assert ctx.system_for(level) == ctx.SYSTEM
+
+
+def test_the_algorithmic_prompt_separates_the_two_questions():
+    """Guards the specific failure it was written for: the agent reading a clean
+    HLO summary as evidence that no better algorithm exists."""
+    text = ctx.SYSTEM_ALGORITHMIC
+    assert "Never treat a clean HLO summary as evidence against a rewrite" in text
+    assert "cannot do is change your algorithm" in text
 
 
 def test_code_level_reveals_no_measurement():
@@ -177,3 +206,12 @@ def test_a_different_expression_is_a_change():
 def test_unparseable_source_falls_back_to_text_comparison():
     assert ablation.is_changed(SEED, "def candidate(:")
     assert not ablation.is_changed("def candidate(:", "def candidate(:")
+
+
+def test_report_covers_every_context_level():
+    """The report once hardcoded its own list of conditions and silently omitted a
+    newly added level - the one the sweep had just been run to evaluate."""
+    rows = [row("matmul_chain", level, True, 11.31) for level in ctx.LEVELS]
+    text = ablation.report(rows)
+    for level in ctx.LEVELS:
+        assert f"| {level} |" in text, f"{level} missing from the report"

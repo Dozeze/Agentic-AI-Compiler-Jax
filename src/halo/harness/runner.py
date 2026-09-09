@@ -12,7 +12,7 @@ from pathlib import Path
 
 from halo.config import RunConfig
 from halo.tasks.base import TaskSpec
-from halo.types import Measurement
+from halo.types import Measurement, decode
 
 
 def measure(
@@ -71,4 +71,4 @@ def measure(
                 f"worker exited with code {completed.returncode} and wrote no "
                 f"result:\n{tail}",
             )
-        return Measurement.from_dict(json.loads(result_path.read_text()))
+        return decode(Measurement, json.loads(result_path.read_text()))

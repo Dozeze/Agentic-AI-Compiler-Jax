@@ -2,25 +2,18 @@
 
 Everything here is JSON-serialisable. These objects *are* the run artifacts: the
 report's tables and figures come from the files written under ``runs/``, not from
-console output. The ``from_dict`` methods exist because measurements cross a
+console output. :func:`decode` rebuilds them on the far side of the measurement
 subprocess boundary (see :mod:`halo.harness.runner`).
 """
 
 from __future__ import annotations
 
-import dataclasses
-import json
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Literal
 
+from halo.serde import decode, to_json  # re-exported: callers import both from here
 
-def to_json(obj: Any, *, indent: int | None = 2) -> str:
-    """Serialise any dataclass in this module (tuples become JSON arrays)."""
-    return json.dumps(dataclasses.asdict(obj), indent=indent, default=str)
-
-
-def _opt(cls: type, d: dict | None):
-    return cls.from_dict(d) if d is not None else None
+__all__ = ["decode", "to_json"]
 
 
 @dataclass(frozen=True)
@@ -41,9 +34,6 @@ class DeviceInfo:
     def fingerprint(self) -> str:
         return f"{self.platform}/{self.device_kind}/x{self.device_count}/jax{self.jax_version}"
 
-    @classmethod
-    def from_dict(cls, d: dict) -> DeviceInfo:
-        return cls(**d)
 
 
 @dataclass(frozen=True)
@@ -54,9 +44,6 @@ class CorrectnessCase:
     max_rel_err: float
     detail: str | None = None
 
-    @classmethod
-    def from_dict(cls, d: dict) -> CorrectnessCase:
-        return cls(**d)
 
 
 @dataclass(frozen=True)
@@ -84,14 +71,6 @@ class CorrectnessReport:
             f"max_rel_err={w.max_rel_err:.3e}, rtol={self.rtol:g}, atol={self.atol:g})"
         )
 
-    @classmethod
-    def from_dict(cls, d: dict) -> CorrectnessReport:
-        return cls(
-            passed=d["passed"],
-            rtol=d["rtol"],
-            atol=d["atol"],
-            cases=tuple(CorrectnessCase.from_dict(c) for c in d.get("cases", ())),
-        )
 
 
 @dataclass(frozen=True)
@@ -117,9 +96,6 @@ class HloSummary:
     def top_ops(self, n: int = 12) -> list[tuple[str, int]]:
         return sorted(self.op_counts.items(), key=lambda kv: -kv[1])[:n]
 
-    @classmethod
-    def from_dict(cls, d: dict) -> HloSummary:
-        return cls(**d)
 
 
 @dataclass(frozen=True)
@@ -137,9 +113,6 @@ class IRStats:
     def top_ops(self, n: int = 10) -> list[tuple[str, int]]:
         return sorted(self.op_counts.items(), key=lambda kv: -kv[1])[:n]
 
-    @classmethod
-    def from_dict(cls, d: dict) -> IRStats:
-        return cls(**d)
 
 
 @dataclass(frozen=True)
@@ -150,13 +123,6 @@ class BufferEntry:
     n_values: int
     shapes: tuple[str, ...]
 
-    @classmethod
-    def from_dict(cls, d: dict) -> BufferEntry:
-        return cls(
-            size_bytes=d["size_bytes"],
-            n_values=d["n_values"],
-            shapes=tuple(d["shapes"]),
-        )
 
 
 @dataclass(frozen=True)
@@ -170,13 +136,6 @@ class BufferReport:
     def top_shapes(self, n: int = 6) -> list[tuple[str, int]]:
         return list(self.shape_counts.items())[:n]
 
-    @classmethod
-    def from_dict(cls, d: dict) -> BufferReport:
-        return cls(
-            total_bytes=d["total_bytes"],
-            entries=tuple(BufferEntry.from_dict(e) for e in d.get("entries", ())),
-            shape_counts=d.get("shape_counts", {}),
-        )
 
 
 @dataclass(frozen=True)
@@ -192,14 +151,6 @@ class ProgramSummary:
     hlo: HloSummary | None = None
     buffers: BufferReport | None = None
 
-    @classmethod
-    def from_dict(cls, d: dict) -> ProgramSummary:
-        return cls(
-            jaxpr=_opt(IRStats, d.get("jaxpr")),
-            stablehlo=_opt(IRStats, d.get("stablehlo")),
-            hlo=_opt(HloSummary, d.get("hlo")),
-            buffers=_opt(BufferReport, d.get("buffers")),
-        )
 
 
 @dataclass(frozen=True)
@@ -209,14 +160,6 @@ class TimingStats:
     iqr_ms: float
     min_ms: float
 
-    @classmethod
-    def from_dict(cls, d: dict) -> TimingStats:
-        return cls(
-            samples_ms=tuple(d["samples_ms"]),
-            median_ms=d["median_ms"],
-            iqr_ms=d["iqr_ms"],
-            min_ms=d["min_ms"],
-        )
 
 
 @dataclass(frozen=True)
@@ -235,9 +178,6 @@ class SpeedupEstimate:
             f"[{self.ci_low:.3f}, {self.ci_high:.3f}], n={self.n_rounds})"
         )
 
-    @classmethod
-    def from_dict(cls, d: dict) -> SpeedupEstimate:
-        return cls(**d)
 
 
 @dataclass(frozen=True)
@@ -265,22 +205,6 @@ class Measurement:
     def failure(cls, task: str, error: str) -> Measurement:
         return cls(task=task, ok=False, error=error)
 
-    @classmethod
-    def from_dict(cls, d: dict) -> Measurement:
-        return cls(
-            task=d["task"],
-            ok=d["ok"],
-            error=d.get("error"),
-            device=_opt(DeviceInfo, d.get("device")),
-            correctness=_opt(CorrectnessReport, d.get("correctness")),
-            baseline=_opt(TimingStats, d.get("baseline")),
-            candidate=_opt(TimingStats, d.get("candidate")),
-            speedup=_opt(SpeedupEstimate, d.get("speedup")),
-            compile_s=d.get("compile_s"),
-            baseline_compile_s=d.get("baseline_compile_s"),
-            candidate_program=_opt(ProgramSummary, d.get("candidate_program")),
-            baseline_program=_opt(ProgramSummary, d.get("baseline_program")),
-        )
 
 
 @dataclass(frozen=True)
@@ -291,9 +215,6 @@ class Usage:
     cost_usd: float
     latency_s: float
 
-    @classmethod
-    def from_dict(cls, d: dict) -> Usage:
-        return cls(**d)
 
 
 @dataclass(frozen=True)

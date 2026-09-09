@@ -59,32 +59,28 @@ goes into the prompt.
 ## The ablation
 
 The experiment the suite exists for: hold the model, the tasks and the acceptance
-policy fixed, vary only how much the agent is told, and see what changes.
+policy fixed, vary only what the agent is told, and see what changes.
 
 ```bash
-uv run halo ablate --replicates 3
+uv run halo ablate --replicates 5
 ```
 
-Four context levels, each a superset of the last: `code` (the function and its
-semantics only), `timing` (adds runtimes), `hlo` (adds what XLA produced), `full`
-(adds the jaxpr and StableHLO levels and the buffer report). Improvable tasks are
-scored as the fraction of their known ceiling reached; controls are scored by how
-often something was wrongly accepted. Rows land in `runs/ablation.jsonl`, and the
-sweep is resumable — completed cells are skipped.
+Four levels vary the information, each a superset of the last: `code` (the function
+and its semantics only), `timing` (adds runtimes), `hlo` (adds what XLA produced),
+`full` (adds the jaxpr and StableHLO levels and the buffer report). A fifth,
+`algorithmic`, shows **exactly what `full` shows** and changes only how the job is
+framed, so comparing those two isolates the prompt from the data.
 
-First pilot, 10 tasks x 4 levels x 3 replicates, `gemini-2.5-flash-lite`, $0.037:
+Improvable tasks are scored as the fraction of their known ceiling reached; controls
+by how often something was wrongly accepted. Rows land in JSONL and sweeps are
+resumable.
 
-| context | improvable: accepted | % of ceiling | proposed a change | false positives |
-|---|---|---|---|---|
-| code | 15/15 | 99% | 15/15 | 1/15 |
-| timing | 11/15 | 72% | 11/15 | 1/15 |
-| hlo | 11/15 | 72% | 12/15 | 1/15 |
-| full | 12/15 | 79% | 12/15 | 0/15 |
+### What it found
 
-Read that table carefully rather than as "less context is better". Almost the whole
-difference is one task. On `pairwise_distances` the agent proposed a rewrite 3 times
-out of 3 with no compiler feedback and **0 times out of 9** with it, and its own
-words say why: it named the right answer and then dismissed it.
+The first pilot (`results/ablation-pilot-n3.md`) showed compiler feedback *hurting*:
+on `pairwise_distances` the agent proposed a rewrite 3/3 times with no compiler
+feedback and 0/9 times with it. Its own words explain why — it named the right answer
+and then dismissed it:
 
 > "The current implementation is already very close to optimal... XLA has fused them
 > effectively. Further optimization would likely involve a different approach, such as
@@ -93,8 +89,46 @@ words say why: it named the right answer and then dismissed it.
 
 Using matrix multiplication properties is exactly the 4.58x rewrite. Shown that XLA
 had fused its code well, the model reasoned like the compiler and stopped looking for
-the algorithmic change the compiler also cannot find. Everything else in the table is
-within noise at three replicates.
+the algorithmic change the compiler also cannot find.
+
+The prompt was at fault, and it was ours. It told the agent that few fusions meant
+"expect a smaller win", and every hint it offered was a help-the-compiler move. The
+`algorithmic` framing separates the two questions instead — *was this algorithm
+lowered well* (the compiler's job, which fusion counts answer) versus *is there a
+different algorithm* (the agent's job, which nothing in the compiler's output answers)
+— and lists the moves no rule-based compiler can make: algebraic identities,
+reassociation, streaming reformulation, exploiting structure.
+
+Same data, same tasks, same model. 10 tasks x 5 replicates (`results/framing-n5.md`):
+
+| context | improvable: accepted | % of ceiling | proposed a change | false positives |
+|---|---|---|---|---|
+| full | 16/25 | 64% | 18/25 | 0/25 |
+| **algorithmic** | **24/25** | **95%** | **25/25** | **0/25** |
+
+| task | ceiling | full | algorithmic |
+|---|---|---|---|
+| `matmul_chain` | 11.31x | 20% | **100%** |
+| `pairwise_distances` | 4.58x | 20% | **79%** |
+| `naive_attention` | 1.65x | 80% | **100%** |
+| `layernorm_loop` | 4.88x | 100% | 100% |
+| `batched_matmul_loop` | 2.63x | 99% | 95% |
+
+The gain is concentrated exactly where the thesis predicts: the two tasks needing an
+*algebraic* change, not a mechanical one. On `matmul_chain` the agent under `full`
+returned the code unchanged 4 times out of 5; under `algorithmic` it found the
+reassociation 5 times out of 5.
+
+Two things this did not cost. **False positives stayed at zero** — the more assertive
+framing did not make the agent start rewriting the five already-optimal controls. And
+it is more *consistent*: under `full` whether the agent acts at all sits near a
+decision boundary and flips between replicates, which is why `matmul_chain` scored
+100% in the n=3 pilot and 20% here.
+
+It did produce two candidates that failed to compile out of 50 (`a @ b` where
+`a @ b.T` was meant; `jnp.rsqrt`, which does not exist). The harness caught both, as
+it caught a correctness failure under `full`. That is the safety net doing its job,
+and it is why the acceptance gate is worth its complexity.
 
 ## Setup
 

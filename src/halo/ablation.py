@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Iterator
 
 from halo import controller
+from halo.agent.context import LEVELS
 from halo.config import RunConfig
 from halo.store import RunStore
 from halo.tasks import base, ceilings
@@ -150,8 +151,10 @@ def fraction_of_ceiling(task: str, speedup: float | None, accepted: bool) -> flo
 
 
 def report(rows: list[dict]) -> str:
-    conditions = [c for c in ("code", "timing", "hlo", "full")
-                  if any(r["condition"] == c for r in rows)]
+    # Ordered by LEVELS rather than a copy of it, so a new level cannot be
+    # silently dropped from the report that is supposed to evaluate it.
+    present = {r["condition"] for r in rows}
+    conditions = [c for c in LEVELS if c in present]
     improvable = set(ceilings.by_classification("headroom"))
     controls = set(ceilings.by_classification("null"))
 

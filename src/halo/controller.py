@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import difflib
 from dataclasses import dataclass
-from pathlib import Path
 
 from halo.agent.protocol import Agent, AttemptSummary, Context
 from halo.config import RunConfig

@@ -9,6 +9,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from halo.serde import decode
+
 
 @dataclass(frozen=True)
 class TimingConfig:
@@ -48,8 +50,10 @@ class RunConfig:
     task: str
     steps: int = 1
     agent: str = "vertex"
-    #: How much the agent is shown: code | timing | hlo | full. See halo.agent.context.
-    context: str = "full"
+    #: What the agent is shown and how the job is framed. See halo.agent.context.
+    #: Defaults to `algorithmic` on the evidence in results/framing-n5.md: same
+    #: data as `full`, 64% -> 95% of the available speedup, no extra false positives.
+    context: str = "algorithmic"
     seed: int = 0
     timeout_s: float = 600.0
     timing: TimingConfig = field(default_factory=TimingConfig)
@@ -64,19 +68,7 @@ class RunConfig:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> RunConfig:
-        sections = {
-            "timing": TimingConfig,
-            "correctness": CorrectnessConfig,
-            "accept": AcceptConfig,
-            "llm": LLMConfig,
-        }
-        kwargs: dict[str, Any] = {
-            k: v for k, v in d.items() if k not in sections
-        }
-        for name, klass in sections.items():
-            if name in d:
-                kwargs[name] = klass(**d[name])
-        return cls(**kwargs)
+        return decode(cls, d)
 
     def with_overrides(self, **kw: Any) -> RunConfig:
         return replace(self, **{k: v for k, v in kw.items() if v is not None})

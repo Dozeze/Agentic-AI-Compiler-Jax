@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from halo.agent.context import SYSTEM, render
+from halo.agent.context import render, system_for
 from halo.agent.llm import LLMClient
 from halo.agent.protocol import Context
 from halo.types import Proposal
@@ -46,7 +46,7 @@ class SingleShotAgent:
         prompt = render(
             context, min_speedup=self._min_speedup, level=self._context_level
         )
-        response = self._client.complete(SYSTEM, prompt)
+        response = self._client.complete(system_for(self._context_level), prompt)
         if response.parsed is None:
             raise AgentError(
                 "model returned no parseable proposal; raw response begins: "

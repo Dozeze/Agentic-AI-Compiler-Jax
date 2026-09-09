@@ -11,12 +11,13 @@ raw lines.
 from __future__ import annotations
 
 from halo.agent.protocol import Context
-from halo.types import BufferReport, HloSummary, Measurement, ProgramSummary
+from halo.types import BufferReport, Measurement, ProgramSummary
 
-#: Ordered from least to most information. Each level includes the ones before it.
-#: The point of the ordering is the ablation: holding everything else fixed and
-#: varying only this is how we find out whether compiler feedback actually helps.
-LEVELS = ("code", "timing", "hlo", "full")
+#: Ordered from least to most. The first four vary how much the agent is *told*;
+#: each includes the one before it. ``algorithmic`` shows exactly what ``full``
+#: shows and changes only how the job is framed, so comparing those two isolates
+#: the prompt from the data.
+LEVELS = ("code", "timing", "hlo", "full", "algorithmic")
 
 
 SYSTEM = """\
@@ -45,6 +46,66 @@ rejected outright.
 """
 
 
+CORRECTNESS_NOTE = """\
+Numerical correctness is checked before speed, against a float64 NumPy oracle, on
+adversarial inputs you cannot see - including inputs large enough that a softmax
+without max-subtraction overflows float32. A faster but less stable rewrite is
+rejected outright.
+"""
+
+
+#: The compiler is already good at the mechanical work. This prompt puts the agent
+#: where it is not redundant: changing the algorithm, which no rule-based compiler
+#: can do. It exists because the ablation caught the opposite prompt failing - told
+#: that XLA had fused its code well, the model concluded there was nothing to find
+#: and returned a kernel with a 4.6x algebraic rewrite available.
+SYSTEM_ALGORITHMIC = f"""\
+You are a performance engineer working alongside XLA, not in place of it.
+
+XLA is already good at everything mechanical: fusing elementwise chains, assigning
+layouts, scheduling, selecting kernels. What it cannot do is change your algorithm.
+It lowers faithfully whatever you wrote, and it has no way to discover that a
+different computation produces the same answer for less work.
+
+That leaves two separate questions, and only the second one is yours:
+
+  1. Was this algorithm lowered well? Fusion counts, layouts and scheduling answer
+     this. XLA usually gets it right, and when it does there is nothing here for you.
+
+  2. Is there a different algorithm that produces the same result for less work?
+     Nothing in the compiler's output answers this. Code can be perfectly fused and
+     still be computing the wrong algorithm.
+
+Never treat a clean HLO summary as evidence against a rewrite. It tells you the
+compiler did its job. It tells you nothing about whether a better algorithm exists.
+Work out question 2 from the mathematics first, on its own terms, before you let any
+measurement talk you out of it.
+
+Moves that are yours alone, because no rule-based compiler will find them:
+- Algebraic identities that avoid building a tensor you only reduce over. Expanding
+  ||a-b||^2 into ||a||^2 + ||b||^2 - 2a.b turns an (N, M, D) difference into a matmul.
+- Reassociation. (A@B)@C and A@(B@C) agree exactly and can differ by orders of
+  magnitude in cost when the dimensions are uneven. The compiler will not reorder them.
+- Streaming reformulation: carrying a running statistic to collapse several passes
+  over an array into one, the way streaming softmax removes a pass.
+- Structure the types do not express: symmetry, low rank, an identity block, a factor
+  that does not depend on the reduction axis and can leave the loop.
+- Batching work written as separate operations so one kernel replaces N.
+
+Only after that, the mechanical checks: something materialised that need not be,
+something recomputed, a Python-level loop traced into N copies of one operation.
+
+If you genuinely find no better algorithm, return the code unchanged and say which of
+the two questions you answered.
+
+{CORRECTNESS_NOTE}"""
+
+
+def system_for(level: str) -> str:
+    """The framing that goes with a context level."""
+    return SYSTEM_ALGORITHMIC if level == "algorithmic" else SYSTEM
+
+
 def _format_ops(stats, limit: int = 8) -> str:
     return ", ".join(f"{op}={n}" for op, n in stats.top_ops(limit))
 
@@ -68,7 +129,7 @@ def _format_buffers(report: BufferReport) -> list[str]:
 
 def _format_program(program: ProgramSummary, level: str) -> str:
     """The same program at every level, so the reader can see what XLA changed."""
-    full = level == "full"
+    full = level in ("full", "algorithmic")
     lines: list[str] = []
     if full and program.jaxpr is not None:
         lines.append(f"  1. jaxpr, what you wrote          {program.jaxpr.total_ops:>4} ops")
@@ -106,6 +167,10 @@ def _format_program(program: ProgramSummary, level: str) -> str:
 
 _PREAMBLE = {
     "hlo": "This is what XLA produced for your code.",
+    "algorithmic": (
+        "This is what XLA did with the algorithm you gave it. It answers question 1, "
+        "not question 2."
+    ),
     "full": (
         "Your code passes through three levels before it runs. Comparing them shows "
         "what XLA already fixed on its own, and what it could not - the operations "
@@ -209,7 +274,7 @@ def render(context: Context, *, min_speedup: float, level: str = "full") -> str:
 
     if level != "code":
         sections += ["", "## Measurement", "", _format_measurement(context.measurement)]
-    if level in ("hlo", "full"):
+    if level in ("hlo", "full", "algorithmic"):
         sections += ["", "## Compiler feedback", "",
                      _format_compiler_feedback(context.measurement, level)]
 

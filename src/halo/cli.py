@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from halo import ablation, controller
 from halo.agent import fake
 from halo.agent import context
-from halo.agent.context import SYSTEM, render
+from halo.agent.context import render, system_for
 from halo.agent.single_shot import SingleShotAgent
 from halo.config import RunConfig, TimingConfig
 from halo.controller import RunResult
@@ -17,16 +18,18 @@ from halo.harness import runner
 from halo.store import RunStore, new_run_id
 from halo.tasks import base, ceilings
 
-AGENTS = {
-    "fast": lambda cfg: fake.ScriptedAgent(fake.FAST_ATTENTION, "fast"),
-    "unstable": lambda cfg: fake.ScriptedAgent(fake.UNSTABLE_ATTENTION, "unstable"),
-    "echo": lambda cfg: fake.EchoAgent(),
+#: Agents that need no configuration, used for offline runs and tests.
+SCRIPTED = {
+    "fast": lambda: fake.ScriptedAgent(fake.FAST_ATTENTION, "fast"),
+    "unstable": lambda: fake.ScriptedAgent(fake.UNSTABLE_ATTENTION, "unstable"),
+    "echo": fake.EchoAgent,
 }
 
 
-def _build_agent(name: str, cfg: RunConfig):
-    if name in AGENTS:
-        return AGENTS[name](cfg)
+def _build_agent(cfg: RunConfig):
+    name = cfg.agent
+    if name in SCRIPTED:
+        return SCRIPTED[name]()
     if name == "vertex":
         from halo.agent.vertex import VertexGemini
 
@@ -37,7 +40,7 @@ def _build_agent(name: str, cfg: RunConfig):
             context_level=cfg.context,
         )
     raise SystemExit(
-        f"unknown agent '{name}'; choose from {', '.join(sorted(AGENTS))}, vertex"
+        f"unknown agent '{name}'; choose from {', '.join(sorted(SCRIPTED))}, vertex"
     )
 
 
@@ -97,7 +100,7 @@ def format_summary(result: RunResult, cfg: RunConfig) -> str:
 def _ablate(args: argparse.Namespace) -> int:
     cfg = RunConfig(task="", steps=1, agent=args.agent)
     if args.model:
-        cfg = cfg.with_overrides(llm=type(cfg.llm)(**{**vars(cfg.llm), "model": args.model}))
+        cfg = cfg.with_overrides(llm=replace(cfg.llm, model=args.model))
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
 
@@ -108,7 +111,7 @@ def _ablate(args: argparse.Namespace) -> int:
         replicates=args.replicates,
         out=out,
         runs_dir=Path(args.runs_dir) / "ablation",
-        make_agent=lambda c: _build_agent(c.agent, c),
+        make_agent=_build_agent,
     )
     summary = ablation.report(rows)
     out.with_suffix(".md").write_text(summary + "\n")
@@ -154,7 +157,7 @@ def _run(args: argparse.Namespace) -> int:
         context=getattr(args, 'context', None),
     )
     if args.model:
-        cfg = cfg.with_overrides(llm=type(cfg.llm)(**{**vars(cfg.llm), "model": args.model}))
+        cfg = cfg.with_overrides(llm=replace(cfg.llm, model=args.model))
 
     if args.dry_run:
         spec = base.load_spec(cfg.task)
@@ -162,12 +165,12 @@ def _run(args: argparse.Namespace) -> int:
         baseline = controller.baseline_attempt(cfg, spec, store)
         ctx = controller.build_context(spec, spec.load(), baseline, [baseline])
         print("=" * 30, "SYSTEM", "=" * 30)
-        print(SYSTEM)
+        print(system_for(cfg.context))
         print("=" * 30, "USER", "=" * 32)
         print(render(ctx, min_speedup=cfg.accept.min_speedup, level=cfg.context))
         return 0
 
-    agent = _build_agent(cfg.agent, cfg)
+    agent = _build_agent(cfg)
     store = RunStore(Path(args.runs_dir), new_run_id(cfg.task))
     result = controller.run(cfg, agent, store)
 
