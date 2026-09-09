@@ -48,6 +48,8 @@ class RunConfig:
     task: str
     steps: int = 1
     agent: str = "vertex"
+    #: How much the agent is shown: code | timing | hlo | full. See halo.agent.context.
+    context: str = "full"
     seed: int = 0
     timeout_s: float = 600.0
     timing: TimingConfig = field(default_factory=TimingConfig)

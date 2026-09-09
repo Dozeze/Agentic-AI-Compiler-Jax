@@ -112,13 +112,22 @@ def build_context(spec, task, best: Attempt, attempts: list[Attempt]) -> Context
     )
 
 
-def run(cfg: RunConfig, agent: Agent, store: RunStore) -> RunResult:
+def run(
+    cfg: RunConfig,
+    agent: Agent,
+    store: RunStore,
+    baseline: Attempt | None = None,
+) -> RunResult:
+    """Run the loop. ``baseline`` may be supplied to reuse a measurement of the
+    seed taken earlier for the same task on the same machine, which halves the
+    cost of a sweep. It only feeds the agent's context; every accept/reject
+    decision still rests on a fresh interleaved measurement."""
     spec = base.load_spec(cfg.task)
     task = spec.load()
     baseline_path = spec.directory / "candidate.py"
 
     store.write_config(cfg)
-    attempts = [baseline_attempt(cfg, spec, store)]
+    attempts = [baseline if baseline is not None else baseline_attempt(cfg, spec, store)]
     baseline_m = attempts[0].measurement
     store.write_env(
         {"device": baseline_m.device.fingerprint if baseline_m.device else None}

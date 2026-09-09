@@ -6,8 +6,9 @@ import argparse
 import sys
 from pathlib import Path
 
-from halo import controller
+from halo import ablation, controller
 from halo.agent import fake
+from halo.agent import context
 from halo.agent.context import SYSTEM, render
 from halo.agent.single_shot import SingleShotAgent
 from halo.config import RunConfig, TimingConfig
@@ -30,7 +31,10 @@ def _build_agent(name: str, cfg: RunConfig):
         from halo.agent.vertex import VertexGemini
 
         return SingleShotAgent(
-            VertexGemini(cfg.llm), cfg.accept.min_speedup, name=cfg.llm.model
+            VertexGemini(cfg.llm),
+            cfg.accept.min_speedup,
+            name=cfg.llm.model,
+            context_level=cfg.context,
         )
     raise SystemExit(
         f"unknown agent '{name}'; choose from {', '.join(sorted(AGENTS))}, vertex"
@@ -90,6 +94,30 @@ def format_summary(result: RunResult, cfg: RunConfig) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _ablate(args: argparse.Namespace) -> int:
+    cfg = RunConfig(task="", steps=1, agent=args.agent)
+    if args.model:
+        cfg = cfg.with_overrides(llm=type(cfg.llm)(**{**vars(cfg.llm), "model": args.model}))
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    rows = ablation.sweep(
+        cfg,
+        tasks=[args.task] if args.task else base.available(),
+        conditions=args.conditions.split(","),
+        replicates=args.replicates,
+        out=out,
+        runs_dir=Path(args.runs_dir) / "ablation",
+        make_agent=lambda c: _build_agent(c.agent, c),
+    )
+    summary = ablation.report(rows)
+    out.with_suffix(".md").write_text(summary + "\n")
+    print()
+    print(summary)
+    print(f"\nrows: {out}    report: {out.with_suffix('.md')}")
+    return 0
+
+
 def _ceilings(args: argparse.Namespace) -> int:
     """Measure the best known implementation against the seed, per task.
 
@@ -121,7 +149,10 @@ def _ceilings(args: argparse.Namespace) -> int:
 
 def _run(args: argparse.Namespace) -> int:
     cfg = RunConfig.from_toml(args.config) if args.config else RunConfig(task=args.task)
-    cfg = cfg.with_overrides(task=args.task, steps=args.steps, agent=args.agent)
+    cfg = cfg.with_overrides(
+        task=args.task, steps=args.steps, agent=args.agent,
+        context=getattr(args, 'context', None),
+    )
     if args.model:
         cfg = cfg.with_overrides(llm=type(cfg.llm)(**{**vars(cfg.llm), "model": args.model}))
 
@@ -129,11 +160,11 @@ def _run(args: argparse.Namespace) -> int:
         spec = base.load_spec(cfg.task)
         store = RunStore(Path(args.runs_dir), new_run_id(f"dryrun-{cfg.task}"))
         baseline = controller.baseline_attempt(cfg, spec, store)
-        context = controller.build_context(spec, spec.load(), baseline, [baseline])
+        ctx = controller.build_context(spec, spec.load(), baseline, [baseline])
         print("=" * 30, "SYSTEM", "=" * 30)
         print(SYSTEM)
         print("=" * 30, "USER", "=" * 32)
-        print(render(context, min_speedup=cfg.accept.min_speedup))
+        print(render(ctx, min_speedup=cfg.accept.min_speedup, level=cfg.context))
         return 0
 
     agent = _build_agent(cfg.agent, cfg)
@@ -157,11 +188,25 @@ def main(argv: list[str] | None = None) -> int:
                             help="vertex, or a scripted agent: fast, unstable, echo")
     run_parser.add_argument("--model", default=None, help="override the LLM model id")
     run_parser.add_argument("--steps", type=int, default=1)
+    run_parser.add_argument("--context", default=None, choices=context.LEVELS,
+                            help="how much the agent is shown (default: full)")
     run_parser.add_argument("--config", default=None, help="path to a TOML run config")
     run_parser.add_argument("--runs-dir", default="runs")
     run_parser.add_argument("--dry-run", action="store_true",
                             help="measure the baseline and print the prompt; no LLM call")
     run_parser.set_defaults(func=_run)
+
+    ablate_parser = sub.add_parser(
+        "ablate", help="sweep task x context level and score the result"
+    )
+    ablate_parser.add_argument("--conditions", default=",".join(context.LEVELS))
+    ablate_parser.add_argument("--replicates", type=int, default=3)
+    ablate_parser.add_argument("--task", default=None, choices=base.available())
+    ablate_parser.add_argument("--agent", default="vertex")
+    ablate_parser.add_argument("--model", default=None)
+    ablate_parser.add_argument("--out", default="runs/ablation.jsonl")
+    ablate_parser.add_argument("--runs-dir", default="runs")
+    ablate_parser.set_defaults(func=_ablate)
 
     ceilings_parser = sub.add_parser(
         "ceilings", help="measure each task's best known implementation vs its seed"

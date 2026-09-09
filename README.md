@@ -56,6 +56,46 @@ attention, measured 1.038x, and was rejected.
 Classification lives in `tasks/ceilings.py`, never in `task.py`, because `task.py`
 goes into the prompt.
 
+## The ablation
+
+The experiment the suite exists for: hold the model, the tasks and the acceptance
+policy fixed, vary only how much the agent is told, and see what changes.
+
+```bash
+uv run halo ablate --replicates 3
+```
+
+Four context levels, each a superset of the last: `code` (the function and its
+semantics only), `timing` (adds runtimes), `hlo` (adds what XLA produced), `full`
+(adds the jaxpr and StableHLO levels and the buffer report). Improvable tasks are
+scored as the fraction of their known ceiling reached; controls are scored by how
+often something was wrongly accepted. Rows land in `runs/ablation.jsonl`, and the
+sweep is resumable — completed cells are skipped.
+
+First pilot, 10 tasks x 4 levels x 3 replicates, `gemini-2.5-flash-lite`, $0.037:
+
+| context | improvable: accepted | % of ceiling | proposed a change | false positives |
+|---|---|---|---|---|
+| code | 15/15 | 99% | 15/15 | 1/15 |
+| timing | 11/15 | 72% | 11/15 | 1/15 |
+| hlo | 11/15 | 72% | 12/15 | 1/15 |
+| full | 12/15 | 79% | 12/15 | 0/15 |
+
+Read that table carefully rather than as "less context is better". Almost the whole
+difference is one task. On `pairwise_distances` the agent proposed a rewrite 3 times
+out of 3 with no compiler feedback and **0 times out of 9** with it, and its own
+words say why: it named the right answer and then dismissed it.
+
+> "The current implementation is already very close to optimal... XLA has fused them
+> effectively. Further optimization would likely involve a different approach, such as
+> using matrix multiplication properties. However, given the current HLO and
+> performance, significant gains are unlikely."
+
+Using matrix multiplication properties is exactly the 4.58x rewrite. Shown that XLA
+had fused its code well, the model reasoned like the compiler and stopped looking for
+the algorithmic change the compiler also cannot find. Everything else in the table is
+within noise at three replicates.
+
 ## Setup
 
 Requires [uv](https://docs.astral.sh/uv/). Python 3.12 is fetched automatically.

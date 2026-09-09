@@ -30,13 +30,22 @@ def _strip_fences(source: str) -> str:
 class SingleShotAgent:
     """Pure ``Context -> Proposal``. No tools, no benchmarking, no filesystem."""
 
-    def __init__(self, client: LLMClient, min_speedup: float, name: str = "llm") -> None:
+    def __init__(
+        self,
+        client: LLMClient,
+        min_speedup: float,
+        name: str = "llm",
+        context_level: str = "full",
+    ) -> None:
         self.name = name
         self._client = client
         self._min_speedup = min_speedup
+        self._context_level = context_level
 
     def propose(self, context: Context) -> Proposal:
-        prompt = render(context, min_speedup=self._min_speedup)
+        prompt = render(
+            context, min_speedup=self._min_speedup, level=self._context_level
+        )
         response = self._client.complete(SYSTEM, prompt)
         if response.parsed is None:
             raise AgentError(

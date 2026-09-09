@@ -13,11 +13,17 @@ from __future__ import annotations
 from halo.agent.protocol import Context
 from halo.types import BufferReport, HloSummary, Measurement, ProgramSummary
 
+#: Ordered from least to most information. Each level includes the ones before it.
+#: The point of the ordering is the ablation: holding everything else fixed and
+#: varying only this is how we find out whether compiler feedback actually helps.
+LEVELS = ("code", "timing", "hlo", "full")
+
+
 SYSTEM = """\
 You are a performance engineer optimizing JAX code that is compiled by XLA.
 
-You are given one function, its exact semantics, its current runtime, and a summary
-of the HLO that XLA produced for it. You propose one rewrite at a time.
+You are given one function and its exact semantics, together with whatever
+measurements and compiler feedback are available. You propose one rewrite at a time.
 
 What actually wins on this kind of code, roughly in order:
 - Removing Python-level loops that trace into many separate operations, so XLA sees
@@ -60,13 +66,14 @@ def _format_buffers(report: BufferReport) -> list[str]:
     return lines
 
 
-def _format_program(program: ProgramSummary) -> str:
+def _format_program(program: ProgramSummary, level: str) -> str:
     """The same program at every level, so the reader can see what XLA changed."""
+    full = level == "full"
     lines: list[str] = []
-    if program.jaxpr is not None:
+    if full and program.jaxpr is not None:
         lines.append(f"  1. jaxpr, what you wrote          {program.jaxpr.total_ops:>4} ops")
         lines.append(f"     {_format_ops(program.jaxpr)}")
-    if program.stablehlo is not None:
+    if full and program.stablehlo is not None:
         lines.append(f"  2. StableHLO, handed to XLA       {program.stablehlo.total_ops:>4} ops")
 
     summary = program.hlo
@@ -91,29 +98,38 @@ def _format_program(program: ProgramSummary) -> str:
         if summary.temp_bytes is not None:
             lines.append(f"     scratch memory    {summary.temp_bytes:,} bytes")
 
-    if program.buffers is not None:
+    if full and program.buffers is not None:
         lines.extend(_format_buffers(program.buffers))
 
     return "\n".join(lines) if lines else "  unavailable"
 
 
-def _format_compiler_feedback(measurement: Measurement) -> str:
+_PREAMBLE = {
+    "hlo": "This is what XLA produced for your code.",
+    "full": (
+        "Your code passes through three levels before it runs. Comparing them shows "
+        "what XLA already fixed on its own, and what it could not - the operations "
+        "that survive to level 3 are the ones a source rewrite still has leverage over."
+    ),
+}
+
+
+def _format_compiler_feedback(measurement: Measurement, level: str) -> str:
     current = measurement.candidate_program
     baseline = measurement.baseline_program
     if current is None:
         return "Compiler feedback unavailable."
 
     blocks = [
-        "Your code passes through three levels before it runs. Comparing them shows "
-        "what XLA already fixed on its own, and what it could not - the operations "
-        "that survive to level 3 are the ones a source rewrite still has leverage over.",
+        _PREAMBLE[level],
         "",
         "### Current implementation",
         "",
-        _format_program(current),
+        _format_program(current, level),
     ]
     if baseline is not None and baseline != current:
-        blocks += ["", "### Seed implementation, for comparison", "", _format_program(baseline)]
+        blocks += ["", "### Seed implementation, for comparison", "",
+                   _format_program(baseline, level)]
     elif baseline is not None:
         blocks += ["", "(The current implementation is still the seed; there is no second "
                    "program to compare against yet.)"]
@@ -163,49 +179,62 @@ def _format_history(context: Context) -> str:
     return "\n".join(blocks)
 
 
-def render(context: Context, *, min_speedup: float) -> str:
-    return f"""\
-## Task: {context.task_name}
+def render(context: Context, *, min_speedup: float, level: str = "full") -> str:
+    """Build the prompt, including only the sections ``level`` admits.
 
-{context.task_description}
+    ``code`` is the control: the function and its semantics, nothing measured.
+    ``timing`` adds runtimes, ``hlo`` adds what XLA produced, ``full`` adds the
+    levels above it and the buffer report.
+    """
+    if level not in LEVELS:
+        raise ValueError(f"unknown context level {level!r}; choose from {LEVELS}")
 
-## Exact semantics
+    sections = [
+        f"## Task: {context.task_name}",
+        "",
+        context.task_description,
+        "",
+        "## Exact semantics",
+        "",
+        "This is the oracle the result is graded against. It is read-only reference "
+        "material,\nwritten in NumPy float64; it is not the code you are optimizing "
+        "and you cannot change it.",
+        "",
+        f"```python\n{context.reference_source}\n```",
+        "",
+        "## Current implementation (candidate.py)",
+        "",
+        f"```python\n{context.current_source}\n```",
+    ]
 
-This is the oracle the result is graded against. It is read-only reference material,
-written in NumPy float64; it is not the code you are optimizing and you cannot change it.
+    if level != "code":
+        sections += ["", "## Measurement", "", _format_measurement(context.measurement)]
+    if level in ("hlo", "full"):
+        sections += ["", "## Compiler feedback", "",
+                     _format_compiler_feedback(context.measurement, level)]
 
-```python
-{context.reference_source}
-```
+    history = _format_history(context)
+    if history:
+        sections.append(history)
 
-## Current implementation (candidate.py)
-
-```python
-{context.current_source}
-```
-
-## Measurement
-
-{_format_measurement(context.measurement)}
-
-## Compiler feedback
-
-{_format_compiler_feedback(context.measurement)}
-{_format_history(context)}
-
-## Your task
-
-Propose ONE rewrite of `candidate.py` that runs faster on this device while
-computing the same result.
-
-Constraints:
-- Return the COMPLETE new contents of `candidate.py`, not a diff or a fragment.
-- It must define `candidate(...)` with exactly the same signature and semantics.
-- Import only from `jax`, `jax.numpy` and the standard library. No new dependencies.
-- It must be traceable by `jax.jit`: no Python control flow on array values, no
-  `.item()`, no printing, no host callbacks. Shapes are static and given above, so
-  you may specialise on them.
-- It must remain numerically stable for large-magnitude inputs.
-- To be accepted, the {int(100 * 0.95)}% lower bound of the measured speedup must exceed
-  {min_speedup:.2f}x. Changes smaller than that are indistinguishable from noise.
-"""
+    sections += [
+        "",
+        "## Your task",
+        "",
+        "Propose ONE rewrite of `candidate.py` that runs faster on this device while",
+        "computing the same result.",
+        "",
+        "Constraints:",
+        "- Return the COMPLETE new contents of `candidate.py`, not a diff or a fragment.",
+        "- It must define `candidate(...)` with exactly the same signature and semantics.",
+        "- Import only from `jax`, `jax.numpy` and the standard library. No new dependencies.",
+        "- It must be traceable by `jax.jit`: no Python control flow on array values, no",
+        "  `.item()`, no printing, no host callbacks. Shapes are static and given above, so",
+        "  you may specialise on them.",
+        "- It must remain numerically stable for large-magnitude inputs.",
+        "- To be accepted, the 95% lower bound of the measured speedup must exceed",
+        f"  {min_speedup:.2f}x. Changes smaller than that are indistinguishable from noise.",
+        "- If the code is already optimal, return it unchanged and say so in your analysis.",
+        "",
+    ]
+    return "\n".join(sections)
