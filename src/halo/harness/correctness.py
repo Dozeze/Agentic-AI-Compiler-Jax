@@ -63,11 +63,19 @@ def check(
         for i in range(cfg.n_random_cases)
     ]
 
+    # A task may raise its own floor. Reductions over many float32 terms cannot
+    # meet an elementwise tolerance that a pointwise operation meets easily: an
+    # output element that cancels to nearly zero still carries the accumulated
+    # error of the whole reduction. Every such override is stated in the task
+    # file with the measured error that justifies it.
+    default_rtol = getattr(task, "RTOL", cfg.rtol)
+    default_atol = getattr(task, "ATOL", cfg.atol)
+
     compiled = jit(candidate_fn)
     results: list[CorrectnessCase] = []
     for case in cases:
-        rtol = cfg.rtol if case.rtol is None else case.rtol
-        atol = cfg.atol if case.atol is None else case.atol
+        rtol = default_rtol if case.rtol is None else case.rtol
+        atol = default_atol if case.atol is None else case.atol
         expected = np.asarray(task.reference(*case.inputs), np.float64)
         try:
             raw = compiled(*to_device(case.inputs))
@@ -90,7 +98,7 @@ def check(
 
     return CorrectnessReport(
         passed=all(r.passed for r in results),
-        rtol=cfg.rtol,
-        atol=cfg.atol,
+        rtol=default_rtol,
+        atol=default_atol,
         cases=tuple(results),
     )

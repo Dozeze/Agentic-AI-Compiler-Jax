@@ -24,6 +24,38 @@ The softmax result is the expected one and is not a failure. XLA already fuses t
 standard formulation; the model correctly identified the kernel as memory-bound and
 proposed no change, and the harness declined to call a 1.8% difference a speedup.
 
+## The benchmark suite
+
+Ten tasks, half with real headroom and half controls, so an ablation can measure
+both whether compiler feedback helps *and* whether it causes false positives.
+Headroom is the measured speedup of a hand-written best-known implementation
+(`ceiling.py`) over the seed, on Apple M5 CPU / JAX 0.11.1 — re-measure with
+`halo ceilings`.
+
+| task | class | headroom | the seed's problem |
+|---|---|---|---|
+| `matmul_chain` | headroom | 11.3x | `(a@b)@c` materialises 1024x1024; `a@(b@c)` needs 16x16 |
+| `layernorm_loop` | headroom | 4.9x | Python loop over rows |
+| `pairwise_distances` | headroom | 4.6x | materialises an (N, M, D) difference tensor |
+| `batched_matmul_loop` | headroom | 2.6x | Python loop over the batch |
+| `naive_attention` | headroom | 1.65x | Python loop over heads |
+| `multi_head_projection` | **null** | 1.04x | looks like the attention loop; XLA already handles it |
+| `rmsnorm` | null | 1.01x | already vectorised |
+| `softmax` | null | 1.01x | XLA already fuses it |
+| `gelu` | null | 1.00x | pure elementwise chain |
+| `matmul` | null | 0.99x | a single dot into a tuned kernel |
+
+`multi_head_projection` is the one worth understanding. It is a Python loop over
+eight heads — structurally the same shape as the `naive_attention` seed, which
+yields 1.65x — but every iteration shares one left-hand side, and XLA already
+handles that. It is in the suite deliberately: a control that *looks* improvable
+tests whether an agent can tell the two apart, which a trivially-optimal control
+does not. On its first run the agent proposed exactly the rewrite that wins on
+attention, measured 1.038x, and was rejected.
+
+Classification lives in `tasks/ceilings.py`, never in `task.py`, because `task.py`
+goes into the prompt.
+
 ## Setup
 
 Requires [uv](https://docs.astral.sh/uv/). Python 3.12 is fetched automatically.
@@ -161,7 +193,7 @@ dividing by near-zero outputs reports a "178% error" on a result correct to 6e-0
 
 ## Adding a benchmark
 
-Create `src/halo/tasks/<name>/` with two files.
+Create `src/halo/tasks/<name>/` with three files.
 
 `task.py` is immutable and defines `make_inputs(rng)`, `reference(*inputs)` (NumPy
 float64), `correctness_cases(rng)` returning `Case` objects, and a `DESCRIPTION` shown
@@ -170,9 +202,23 @@ at the intended optimization invalidates the experiment.
 
 `candidate.py` defines `candidate(*inputs)` and is the only file the agent rewrites.
 
-A `Case` may override `atol`/`rtol` for inputs that are genuinely ill-conditioned in
-float32. Always say why in `note`: a silently loosened tolerance is how a broken
-candidate gets accepted.
+`ceiling.py` is the best implementation you know of, and is never shown to the agent.
+It is what makes the task's headroom a measured number rather than an assumption —
+including for controls, where it proves there is nothing to find. For a control, copy
+the seed. Then add the task to `CLASSIFICATION` and `MEASURED_HEADROOM` in
+`tasks/ceilings.py`.
+
+A `Case` may override `atol`/`rtol` for inputs that are ill-conditioned in float32, and
+a task may set module-level `ATOL`/`RTOL` to raise its floor for every case. Reductions
+need this: an output element that cancels toward zero still carries the accumulated
+error of the whole reduction, so a 512-term float32 dot product cannot meet a tolerance
+that an elementwise operation meets easily. Five tasks here set `ATOL` for that reason,
+each stating the measured error that justifies the value. Always say why — a silently
+loosened tolerance is how a broken candidate gets accepted.
+
+`uv run pytest` asserts that both the seed and the ceiling pass their own oracle, so a
+tolerance too tight to admit a correct rewrite fails loudly rather than showing up as a
+task with no headroom.
 
 ## Hardware
 

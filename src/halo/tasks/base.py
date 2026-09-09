@@ -16,6 +16,11 @@ A task module must provide::
     def make_inputs(rng) -> tuple[np.ndarray, ...]
     def reference(*inputs) -> np.ndarray            # float64 NumPy
     def correctness_cases(rng) -> list[Case]
+
+It may additionally set module-level ``ATOL`` / ``RTOL`` to raise the tolerance
+floor for the whole task, which reductions over many float32 terms need. State
+the measured error that justifies the value; an unexplained loose tolerance is
+how a broken candidate gets accepted.
 """
 
 from __future__ import annotations

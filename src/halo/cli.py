@@ -10,10 +10,11 @@ from halo import controller
 from halo.agent import fake
 from halo.agent.context import SYSTEM, render
 from halo.agent.single_shot import SingleShotAgent
-from halo.config import RunConfig
+from halo.config import RunConfig, TimingConfig
 from halo.controller import RunResult
+from halo.harness import runner
 from halo.store import RunStore, new_run_id
-from halo.tasks import base
+from halo.tasks import base, ceilings
 
 AGENTS = {
     "fast": lambda cfg: fake.ScriptedAgent(fake.FAST_ATTENTION, "fast"),
@@ -89,6 +90,35 @@ def format_summary(result: RunResult, cfg: RunConfig) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _ceilings(args: argparse.Namespace) -> int:
+    """Measure the best known implementation against the seed, per task.
+
+    Calibrates the suite: it says how much room each benchmark actually has, so an
+    agent's speedup can be read as a fraction of what was available.
+    """
+    cfg = RunConfig(
+        task="", timing=TimingConfig(warmup=5, rounds=args.rounds, bootstrap_samples=800)
+    )
+    names = [args.task] if args.task else base.available()
+    print(f"{'task':24s} {'class':9s} {'seed ms':>9s} {'best ms':>9s} {'headroom':>9s}")
+    for name in names:
+        spec = base.load_spec(name)
+        measurement = runner.measure(
+            spec, spec.directory / "candidate.py", ceilings.path(spec),
+            cfg.with_overrides(task=name),
+        )
+        if not measurement.ok:
+            print(f"{name:24s} ERROR {measurement.error.splitlines()[-1][:60]}")
+            continue
+        speedup = measurement.speedup
+        print(
+            f"{name:24s} {ceilings.CLASSIFICATION.get(name, '?'):9s} "
+            f"{measurement.baseline.median_ms:9.3f} {measurement.candidate.median_ms:9.3f} "
+            f"{speedup.ratio:8.2f}x  [{speedup.ci_low:.2f}, {speedup.ci_high:.2f}]"
+        )
+    return 0
+
+
 def _run(args: argparse.Namespace) -> int:
     cfg = RunConfig.from_toml(args.config) if args.config else RunConfig(task=args.task)
     cfg = cfg.with_overrides(task=args.task, steps=args.steps, agent=args.agent)
@@ -132,6 +162,13 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("--dry-run", action="store_true",
                             help="measure the baseline and print the prompt; no LLM call")
     run_parser.set_defaults(func=_run)
+
+    ceilings_parser = sub.add_parser(
+        "ceilings", help="measure each task's best known implementation vs its seed"
+    )
+    ceilings_parser.add_argument("--task", default=None, choices=base.available())
+    ceilings_parser.add_argument("--rounds", type=int, default=15)
+    ceilings_parser.set_defaults(func=_ceilings)
 
     tasks_parser = sub.add_parser("tasks", help="list available benchmark tasks")
     tasks_parser.set_defaults(
