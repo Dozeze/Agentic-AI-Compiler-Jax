@@ -95,6 +95,29 @@ Note the honest limitation: this is isolation, **not a sandbox**. The wall-clock
 timeout is enforced; a memory cap is not, because `RLIMIT_AS` interacts badly with
 XLA's virtual-address reservations on macOS. Do not point HALO at untrusted code.
 
+### What the agent is shown
+
+Not the raw IR — the optimized HLO alone is ~700 lines for a toy attention kernel.
+The agent gets each level of the lowering pipeline as an op histogram, so it can see
+what XLA fixed on its own and what survived to the end:
+
+| level | source | what it reveals |
+|---|---|---|
+| jaxpr | `jax.make_jaxpr` | the program as written; an unrolled Python loop shows up here as repeated primitives |
+| StableHLO | `lower().as_text()` | what JAX handed the compiler |
+| optimized HLO | `compile().as_text()` | what XLA built: fusions, surviving ops, flops, arithmetic intensity |
+| buffer report | `--xla_dump_to` | which tensors were actually materialised, **by shape** |
+
+The buffer report is the one that names names. `memory_analysis()` reports the seed
+attention's scratch as a single number; the report says
+`f32[4,256,256]x17` — seventeen live attention-score matrices, which is the
+per-head loop stated in one line. The accepted rewrite leaves only
+`f32[4,8,256,64]x4`: the three inputs and the output.
+
+Nested jaxprs are walked, so a `scan` body is counted rather than skipped. That
+matters because the streaming-softmax reformulation is a `scan`, and counting only
+the top level would report such a candidate as a two-operation program.
+
 ### Why the timings are trustworthy
 
 Three things, all easy to get wrong:

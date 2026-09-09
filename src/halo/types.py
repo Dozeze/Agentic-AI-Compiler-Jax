@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 
@@ -123,6 +123,86 @@ class HloSummary:
 
 
 @dataclass(frozen=True)
+class IRStats:
+    """Operation counts at one level of the lowering pipeline.
+
+    Comparing these levels is the point: the same program as 139 jaxpr equations,
+    then as StableHLO, then as optimized HLO, shows what the compiler managed to
+    do on its own - and therefore where a source rewrite still has leverage.
+    """
+
+    total_ops: int
+    op_counts: dict[str, int]
+
+    def top_ops(self, n: int = 10) -> list[tuple[str, int]]:
+        return sorted(self.op_counts.items(), key=lambda kv: -kv[1])[:n]
+
+    @classmethod
+    def from_dict(cls, d: dict) -> IRStats:
+        return cls(**d)
+
+
+@dataclass(frozen=True)
+class BufferEntry:
+    """One slot in XLA's buffer assignment. Several values may share a slot."""
+
+    size_bytes: int
+    n_values: int
+    shapes: tuple[str, ...]
+
+    @classmethod
+    def from_dict(cls, d: dict) -> BufferEntry:
+        return cls(
+            size_bytes=d["size_bytes"],
+            n_values=d["n_values"],
+            shapes=tuple(d["shapes"]),
+        )
+
+
+@dataclass(frozen=True)
+class BufferReport:
+    """What XLA actually materialised, by shape - not just how many bytes."""
+
+    total_bytes: int
+    entries: tuple[BufferEntry, ...] = ()
+    shape_counts: dict[str, int] = field(default_factory=dict)
+
+    def top_shapes(self, n: int = 6) -> list[tuple[str, int]]:
+        return list(self.shape_counts.items())[:n]
+
+    @classmethod
+    def from_dict(cls, d: dict) -> BufferReport:
+        return cls(
+            total_bytes=d["total_bytes"],
+            entries=tuple(BufferEntry.from_dict(e) for e in d.get("entries", ())),
+            shape_counts=d.get("shape_counts", {}),
+        )
+
+
+@dataclass(frozen=True)
+class ProgramSummary:
+    """Everything the compiler will tell us about one program, at every level.
+
+    Grouped rather than spread across :class:`Measurement` so that adding a level
+    does not add another pair of parallel fields.
+    """
+
+    jaxpr: IRStats | None = None
+    stablehlo: IRStats | None = None
+    hlo: HloSummary | None = None
+    buffers: BufferReport | None = None
+
+    @classmethod
+    def from_dict(cls, d: dict) -> ProgramSummary:
+        return cls(
+            jaxpr=_opt(IRStats, d.get("jaxpr")),
+            stablehlo=_opt(IRStats, d.get("stablehlo")),
+            hlo=_opt(HloSummary, d.get("hlo")),
+            buffers=_opt(BufferReport, d.get("buffers")),
+        )
+
+
+@dataclass(frozen=True)
 class TimingStats:
     samples_ms: tuple[float, ...]
     median_ms: float
@@ -178,8 +258,8 @@ class Measurement:
     speedup: SpeedupEstimate | None = None
     compile_s: float | None = None
     baseline_compile_s: float | None = None
-    hlo: HloSummary | None = None
-    baseline_hlo: HloSummary | None = None
+    candidate_program: ProgramSummary | None = None
+    baseline_program: ProgramSummary | None = None
 
     @classmethod
     def failure(cls, task: str, error: str) -> Measurement:
@@ -198,8 +278,8 @@ class Measurement:
             speedup=_opt(SpeedupEstimate, d.get("speedup")),
             compile_s=d.get("compile_s"),
             baseline_compile_s=d.get("baseline_compile_s"),
-            hlo=_opt(HloSummary, d.get("hlo")),
-            baseline_hlo=_opt(HloSummary, d.get("baseline_hlo")),
+            candidate_program=_opt(ProgramSummary, d.get("candidate_program")),
+            baseline_program=_opt(ProgramSummary, d.get("baseline_program")),
         )
 
 

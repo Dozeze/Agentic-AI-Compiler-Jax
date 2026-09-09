@@ -18,9 +18,9 @@ import traceback
 from pathlib import Path
 
 from halo.config import RunConfig
-from halo.harness import correctness, hlo, timing
+from halo.harness import buffers, correctness, hlo, ir, timing
 from halo.tasks import base
-from halo.types import DeviceInfo, Measurement, to_json
+from halo.types import DeviceInfo, Measurement, ProgramSummary, to_json
 
 
 def _device_info(jax) -> DeviceInfo:
@@ -34,16 +34,38 @@ def _device_info(jax) -> DeviceInfo:
     )
 
 
-def _compile(jax, fn, args):
-    """Compile and report how long it took.
+def _analyze(jax, fn, name, args, dump_dir):
+    """Compile one program and collect every level of the lowering pipeline.
 
-    Timed as lower + compile rather than "first call minus steady state", so the
-    number is the actual cost of obtaining an executable and contains no dispatch
-    or execution time.
+    ``fn.__name__`` is set first because XLA names its dump files after the jitted
+    function; without distinct names the baseline's and the candidate's buffer
+    reports are indistinguishable on disk.
+
+    Compile time stays lower + compile, excluding the analysis work, so it remains
+    the actual cost of obtaining an executable.
     """
+    fn.__name__ = name
+
+    jaxpr = ir.from_jaxpr(jax.make_jaxpr(fn)(*args))
+
     start = time.perf_counter()
-    compiled = jax.jit(fn).lower(*args).compile()
-    return compiled, time.perf_counter() - start
+    lowered = jax.jit(fn).lower(*args)
+    lower_s = time.perf_counter() - start
+
+    stablehlo = ir.from_stablehlo(lowered.as_text())
+
+    start = time.perf_counter()
+    compiled = lowered.compile()
+    compile_s = lower_s + (time.perf_counter() - start)
+
+    text = compiled.as_text()
+    summary = ProgramSummary(
+        jaxpr=jaxpr,
+        stablehlo=stablehlo,
+        hlo=hlo.summarize(compiled, text),
+        buffers=buffers.read(dump_dir, name) if dump_dir else None,
+    )
+    return compiled, compile_s, text, summary
 
 
 def run(request: dict) -> Measurement:
@@ -71,9 +93,14 @@ def run(request: dict) -> Measurement:
     # Compile before checking correctness. The correctness pass would otherwise
     # populate jit's cache and the candidate's compile time would read as 0.00s
     # while the baseline's did not - two numbers that are not comparable.
+    dump_dir = Path(request["dump_dir"]) if request.get("dump_dir") else None
     try:
-        baseline_compiled, baseline_compile_s = _compile(jax, baseline_fn, args)
-        candidate_compiled, candidate_compile_s = _compile(jax, candidate_fn, args)
+        baseline_compiled, baseline_compile_s, _, baseline_program = _analyze(
+            jax, baseline_fn, "baseline", args, dump_dir
+        )
+        candidate_compiled, candidate_compile_s, candidate_text, candidate_program = _analyze(
+            jax, candidate_fn, "candidate", args, dump_dir
+        )
     except Exception:
         return Measurement.failure(
             spec.name, "candidate failed to trace or compile:\n" + traceback.format_exc(limit=20)
@@ -91,6 +118,8 @@ def run(request: dict) -> Measurement:
             correctness=report,
             compile_s=candidate_compile_s,
             baseline_compile_s=baseline_compile_s,
+            candidate_program=candidate_program,
+            baseline_program=baseline_program,
         )
 
     baseline_stats, candidate_stats, speedup = timing.measure_ab(
@@ -101,7 +130,6 @@ def run(request: dict) -> Measurement:
         block=jax.block_until_ready,
     )
 
-    candidate_text = candidate_compiled.as_text()
     if (dump := request.get("hlo_dump")) is not None:
         Path(dump).write_text(candidate_text)
 
@@ -115,8 +143,8 @@ def run(request: dict) -> Measurement:
         speedup=speedup,
         compile_s=candidate_compile_s,
         baseline_compile_s=baseline_compile_s,
-        hlo=hlo.summarize(candidate_compiled, candidate_text),
-        baseline_hlo=hlo.summarize(baseline_compiled, baseline_compiled.as_text()),
+        candidate_program=candidate_program,
+        baseline_program=baseline_program,
     )
 
 

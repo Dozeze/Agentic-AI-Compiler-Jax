@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -30,6 +31,12 @@ def measure(
     with tempfile.TemporaryDirectory(prefix="halo-measure-") as tmp:
         request_path = Path(tmp) / "request.json"
         result_path = Path(tmp) / "measurement.json"
+        # XLA writes its buffer-assignment report only as a side effect of
+        # --xla_dump_to. Measured cost of enabling it: none.
+        dump_dir = Path(tmp) / "xla-dump"
+        dump_dir.mkdir()
+        env = dict(os.environ)
+        env["XLA_FLAGS"] = f"{env.get('XLA_FLAGS', '')} --xla_dump_to={dump_dir}".strip()
         request_path.write_text(
             json.dumps(
                 {
@@ -40,6 +47,7 @@ def measure(
                     "config": dataclasses.asdict(cfg),
                     "out": str(result_path),
                     "hlo_dump": str(hlo_dump) if hlo_dump else None,
+                    "dump_dir": str(dump_dir),
                 }
             )
         )
@@ -49,6 +57,7 @@ def measure(
                 capture_output=True,
                 text=True,
                 timeout=cfg.timeout_s,
+                env=env,
             )
         except subprocess.TimeoutExpired:
             return Measurement.failure(

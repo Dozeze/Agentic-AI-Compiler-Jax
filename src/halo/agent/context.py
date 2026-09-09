@@ -11,7 +11,7 @@ raw lines.
 from __future__ import annotations
 
 from halo.agent.protocol import Context
-from halo.types import HloSummary, Measurement
+from halo.types import BufferReport, HloSummary, Measurement, ProgramSummary
 
 SYSTEM = """\
 You are a performance engineer optimizing JAX code that is compiled by XLA.
@@ -39,28 +39,85 @@ rejected outright.
 """
 
 
-def _format_hlo(summary: HloSummary | None, label: str) -> str:
-    if summary is None:
-        return f"{label}: unavailable"
-    lines = [
-        f"{label}:",
-        f"  instructions      {summary.instruction_count}",
-        f"  fusions           {summary.fusion_count}",
-        f"  top ops           "
-        + ", ".join(f"{op}={n}" for op, n in summary.top_ops(10)),
-    ]
-    if summary.flops is not None:
-        lines.append(f"  flops             {summary.flops:,.0f}")
-    if summary.bytes_accessed is not None:
-        lines.append(f"  bytes accessed    {summary.bytes_accessed:,.0f}")
-    if (intensity := summary.arithmetic_intensity) is not None:
+def _format_ops(stats, limit: int = 8) -> str:
+    return ", ".join(f"{op}={n}" for op, n in stats.top_ops(limit))
+
+
+def _format_buffers(report: BufferReport) -> list[str]:
+    """What XLA actually materialised, by shape.
+
+    Scalars are dropped: a report is dominated by 4-byte constants that no rewrite
+    can remove, and they crowd out the shapes that matter.
+    """
+    shapes = [
+        f"{shape}x{count}"
+        for shape, count in report.shape_counts.items()
+        if not shape.endswith("[]")
+    ][:6]
+    lines = [f"     live buffers      {report.total_bytes:,} bytes total"]
+    if shapes:
+        lines.append(f"     by shape          {', '.join(shapes)}")
+    return lines
+
+
+def _format_program(program: ProgramSummary) -> str:
+    """The same program at every level, so the reader can see what XLA changed."""
+    lines: list[str] = []
+    if program.jaxpr is not None:
+        lines.append(f"  1. jaxpr, what you wrote          {program.jaxpr.total_ops:>4} ops")
+        lines.append(f"     {_format_ops(program.jaxpr)}")
+    if program.stablehlo is not None:
+        lines.append(f"  2. StableHLO, handed to XLA       {program.stablehlo.total_ops:>4} ops")
+
+    summary = program.hlo
+    if summary is not None:
         lines.append(
-            f"  arithmetic int.   {intensity:.2f} flop/byte "
-            f"({'compute' if intensity > 10 else 'memory'}-leaning)"
+            f"  3. optimized HLO, what XLA built  {summary.instruction_count:>4} instructions"
+            f" in {summary.fusion_count} fusion(s)"
         )
-    if summary.temp_bytes is not None:
-        lines.append(f"  scratch memory    {summary.temp_bytes:,} bytes")
-    return "\n".join(lines)
+        lines.append(f"     {', '.join(f'{op}={n}' for op, n in summary.top_ops(8))}")
+        if summary.flops is not None and summary.bytes_accessed is not None:
+            intensity = summary.arithmetic_intensity
+            lines.append(
+                f"     flops {summary.flops:,.0f} | bytes accessed "
+                f"{summary.bytes_accessed:,.0f}"
+                + (
+                    f" | {intensity:.2f} flop/byte "
+                    f"({'compute' if intensity > 10 else 'memory'}-leaning)"
+                    if intensity is not None
+                    else ""
+                )
+            )
+        if summary.temp_bytes is not None:
+            lines.append(f"     scratch memory    {summary.temp_bytes:,} bytes")
+
+    if program.buffers is not None:
+        lines.extend(_format_buffers(program.buffers))
+
+    return "\n".join(lines) if lines else "  unavailable"
+
+
+def _format_compiler_feedback(measurement: Measurement) -> str:
+    current = measurement.candidate_program
+    baseline = measurement.baseline_program
+    if current is None:
+        return "Compiler feedback unavailable."
+
+    blocks = [
+        "Your code passes through three levels before it runs. Comparing them shows "
+        "what XLA already fixed on its own, and what it could not - the operations "
+        "that survive to level 3 are the ones a source rewrite still has leverage over.",
+        "",
+        "### Current implementation",
+        "",
+        _format_program(current),
+    ]
+    if baseline is not None and baseline != current:
+        blocks += ["", "### Seed implementation, for comparison", "", _format_program(baseline)]
+    elif baseline is not None:
+        blocks += ["", "(The current implementation is still the seed; there is no second "
+                   "program to compare against yet.)"]
+    return "\n".join(blocks)
 
 
 def _format_measurement(measurement: Measurement) -> str:
@@ -133,9 +190,7 @@ written in NumPy float64; it is not the code you are optimizing and you cannot c
 
 ## Compiler feedback
 
-{_format_hlo(context.measurement.hlo, "Optimized HLO for the current implementation")}
-
-{_format_hlo(context.measurement.baseline_hlo, "Optimized HLO for the seed implementation")}
+{_format_compiler_feedback(context.measurement)}
 {_format_history(context)}
 
 ## Your task

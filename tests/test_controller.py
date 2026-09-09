@@ -124,3 +124,26 @@ def test_unchanged_source_does_not_clear_the_noise_threshold(tmp_path):
     result = controller.run(FAST, EchoAgent(), store)
     assert not result.improved
     assert result.attempts[1].decision.rule == "performance"
+
+
+@pytest.mark.slow
+def test_every_pipeline_level_reaches_the_measurement(tmp_path):
+    """The wiring most likely to break silently: the buffer report only exists as
+    a side effect of an XLA_FLAGS the runner sets on the subprocess, and a missing
+    report degrades to None rather than failing."""
+    store = RunStore(tmp_path, "levels")
+    result = controller.run(FAST, ScriptedAgent(FAST_ATTENTION, "fast"), store)
+    seed = result.attempts[0].measurement.baseline_program
+    best = result.best.measurement.candidate_program
+
+    for program in (seed, best):
+        assert program.jaxpr.total_ops > 0
+        assert program.stablehlo.total_ops > 0
+        assert program.hlo.instruction_count > 0
+        assert program.buffers is not None, "XLA dump not reaching the worker"
+
+    # The seed's Python head-loop leaves the per-head score matrices live; the
+    # batched rewrite leaves only the inputs and the output.
+    assert seed.buffers.shape_counts["f32[4,256,256]"] > 8
+    assert "f32[4,256,256]" not in best.buffers.shape_counts
+    assert best.buffers.total_bytes < seed.buffers.total_bytes
