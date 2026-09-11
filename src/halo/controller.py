@@ -61,6 +61,10 @@ def _diff(before: str, after: str) -> str:
 class RunResult:
     attempts: list[Attempt]
     best: Attempt
+    #: The best implementation measured against the seed, for the headline. Each
+    #: step's own measurement is against the version it replaced, which is what
+    #: the accept/reject decision needs; this is what the report needs.
+    overall: Measurement
 
     @property
     def improved(self) -> bool:
@@ -127,6 +131,7 @@ def run(
 
     store.write_config(cfg)
     attempts = [baseline if baseline is not None else baseline_attempt(cfg, spec, store)]
+    seed_path = baseline_path
     baseline_m = attempts[0].measurement
     store.write_env(
         {"device": baseline_m.device.fingerprint if baseline_m.device else None}
@@ -157,6 +162,12 @@ def run(
         candidate_path = directory / "candidate.py"
         candidate_path.write_text(proposal.source)
 
+        # Against the current best, not the seed. Interleaved timing only cancels
+        # noise between the two things that ran back to back, and the decision at
+        # step N is "is this better than what we have", which after the first
+        # accepted step is no longer the seed. Comparing to the seed instead would
+        # accept a step-2 candidate slower than step 1's, as long as it still beat
+        # the original, and the loop would walk backwards reporting progress.
         measurement = runner.measure(
             spec, baseline_path, candidate_path, cfg, hlo_dump=directory / "hlo.txt"
         )
@@ -192,5 +203,12 @@ def run(
         )
         if decision.accepted:
             best = attempt
+            baseline_path = candidate_path
 
-    return RunResult(attempts=attempts, best=best)
+    # Step 1's measurement is already against the seed. After a later accepted
+    # step, the best was measured against an intermediate, so take one more
+    # interleaved measurement for a headline number with a real interval.
+    overall = best.measurement
+    if best.index > 1:
+        overall = runner.measure(spec, seed_path, baseline_path, cfg)
+    return RunResult(attempts=attempts, best=best, overall=overall)

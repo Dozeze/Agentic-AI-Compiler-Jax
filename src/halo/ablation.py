@@ -61,20 +61,24 @@ def is_changed(before: str, after: str) -> bool:
 
 
 def _row(cell: Cell, result: controller.RunResult) -> dict:
-    attempt = result.attempts[-1]
-    speedup = attempt.measurement.speedup
-    usage = attempt.proposal.usage if attempt.proposal else None
+    """One row per cell. Speedup is the best implementation against the seed,
+    which for a one-step run is the single attempt and for a longer run is what
+    the loop ended with, not merely what it tried last."""
+    last = result.attempts[-1]
+    speedup = result.overall.speedup
+    proposals = [a.proposal for a in result.attempts[1:] if a.proposal]
     return {
         **cell.__dict__,
-        "accepted": attempt.decision.accepted,
-        "rule": attempt.decision.rule,
+        "accepted": result.improved,
+        "rule": result.best.decision.rule if result.improved else last.decision.rule,
         "speedup": speedup.ratio if speedup else None,
         "ci_low": speedup.ci_low if speedup else None,
-        "changed": attempt.proposal is not None
-        and is_changed(result.attempts[0].source, attempt.source),
-        "cost_usd": usage.cost_usd if usage else 0.0,
-        "input_tokens": usage.input_tokens if usage else 0,
-        "output_tokens": usage.output_tokens if usage else 0,
+        "changed": any(
+            is_changed(result.attempts[0].source, a.source) for a in result.attempts[1:]
+        ),
+        "cost_usd": sum(p.usage.cost_usd for p in proposals if p.usage),
+        "input_tokens": sum(p.usage.input_tokens for p in proposals if p.usage),
+        "output_tokens": sum(p.usage.output_tokens for p in proposals if p.usage),
         "error": None,
     }
 

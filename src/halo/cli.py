@@ -79,9 +79,9 @@ def format_summary(result: RunResult, cfg: RunConfig) -> str:
         f"Total LLM cost: ${total_cost:.6f}",
         "",
     ]
-    if result.improved and best.measurement.speedup:
+    if result.improved and result.overall.speedup:
         lines.append(
-            f"**Best: attempt {best.index}, {best.measurement.speedup.describe()} "
+            f"**Best: attempt {best.index}, {result.overall.speedup.describe()} "
             f"over the seed implementation.**"
         )
     else:

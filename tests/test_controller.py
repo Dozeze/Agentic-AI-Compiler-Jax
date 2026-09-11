@@ -147,3 +147,61 @@ def test_every_pipeline_level_reaches_the_measurement(tmp_path):
     assert seed.buffers.shape_counts["f32[4,256,256]"] > 8
     assert "f32[4,256,256]" not in best.buffers.shape_counts
     assert best.buffers.total_bytes < seed.buffers.total_bytes
+
+
+class Sequence:
+    """An agent that proposes a fixed sequence of sources, one per step."""
+
+    name = "sequence"
+
+    def __init__(self, *sources: str) -> None:
+        self._sources = iter(sources)
+
+    def propose(self, context):
+        from halo.types import Proposal
+        return Proposal(source=next(self._sources))
+
+
+def test_later_steps_are_judged_against_the_current_best_not_the_seed(tmp_path, monkeypatch):
+    """The walk-backwards bug. Step 1 gets 3x. Step 2 is 1.5x over the seed - a
+    clear win against the original, but half as fast as what we already have.
+    Judged against the seed it would be accepted and the run would end slower
+    than it was after step 1."""
+    stats = TimingStats(samples_ms=(1.0,), median_ms=1.0, iqr_ms=0.0, min_ms=1.0)
+    ok = CorrectnessReport(True, 1e-5, 1e-6, (CorrectnessCase("r", True, 0.0, 0.0),))
+    speed_vs_seed = {"seed": 1.0, "fast": 3.0, "medium": 1.5}
+    baselines_used: list[str] = []
+
+    def fake_measure(spec, baseline_path, candidate_path, cfg, **kw):
+        base = speed_vs_seed[Path(baseline_path).read_text().strip()]
+        cand = speed_vs_seed[Path(candidate_path).read_text().strip()]
+        baselines_used.append(Path(baseline_path).read_text().strip())
+        ratio = cand / base
+        return Measurement(
+            task=spec.name, ok=True, device=_device("cpu"), correctness=ok,
+            baseline=stats, candidate=stats,
+            speedup=SpeedupEstimate(ratio, ratio * 0.98, ratio * 1.02, 0.95, 6),
+        )
+
+    monkeypatch.setattr(controller.runner, "measure", fake_measure)
+    monkeypatch.setattr(
+        controller.base, "load_spec",
+        lambda name: type("Spec", (), {
+            "name": name, "seed_source": "seed",
+            "directory": tmp_path, "task_path": tmp_path / "task.py",
+            "load": lambda self: type("T", (), {"DESCRIPTION": "d"})(),
+        })(),
+    )
+    monkeypatch.setattr(controller.base, "reference_excerpt", lambda spec: "")
+    (tmp_path / "candidate.py").write_text("seed")
+
+    cfg = RunConfig(task="stub", steps=2)
+    result = controller.run(cfg, Sequence("fast", "medium"), RunStore(tmp_path, "r"))
+
+    assert result.attempts[1].decision.accepted
+    assert not result.attempts[2].decision.accepted, (
+        "1.5x over the seed is 0.5x over the current best and must be rejected"
+    )
+    assert result.best.index == 1
+    assert baselines_used[-1] == "fast", "step 2 must be measured against step 1's code"
+    assert result.overall.speedup.ratio == pytest.approx(3.0)

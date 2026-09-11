@@ -217,10 +217,12 @@ def _format_measurement(measurement: Measurement) -> str:
         )
     if measurement.baseline is not None:
         lines.append(
-            f"Seed runtime:    median {measurement.baseline.median_ms:.3f} ms"
+            f"Runtime of the version it replaced: median {measurement.baseline.median_ms:.3f} ms"
         )
     if measurement.speedup is not None:
-        lines.append(f"Current speedup over seed: {measurement.speedup.describe()}")
+        lines.append(
+            f"Speedup over the version it replaced: {measurement.speedup.describe()}"
+        )
     if measurement.compile_s is not None:
         lines.append(f"Compile time: {measurement.compile_s:.3f} s")
     return "\n".join(lines)
