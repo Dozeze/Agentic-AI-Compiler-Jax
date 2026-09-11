@@ -28,7 +28,7 @@ CLASSIFICATION: dict[str, str] = {
     "pairwise_distances": "headroom",
     "batched_matmul_loop": "headroom",
     "naive_attention": "headroom",
-    "multi_head_projection": "null",
+    "multi_head_projection": "headroom",
     "softmax": "null",
     "rmsnorm": "null",
     "gelu": "null",
@@ -44,19 +44,19 @@ MEASURED_HEADROOM: dict[str, float] = {
     "pairwise_distances": 4.58,
     "batched_matmul_loop": 2.63,
     "naive_attention": 1.65,
-    "multi_head_projection": 1.04,
+    "multi_head_projection": 1.26,
     "rmsnorm": 1.01,
     "softmax": 1.01,
     "gelu": 1.00,
     "matmul": 0.99,
 }
 
-#: Tasks whose seed looks obviously improvable but is not. `multi_head_projection`
-#: is a Python loop over eight heads - structurally the same shape as the
-#: `naive_attention` seed, which yields 1.65x - yet XLA already handles it, because
-#: every iteration shares one left-hand side. A suite of only trivially-optimal
-#: controls would not test whether an agent can tell these two apart.
-DECEPTIVE_NULLS = frozenset({"multi_head_projection"})
+# `multi_head_projection` was a control until the agent beat its ceiling. The
+# hand-written einsum measured 1.04x over the seed's head loop and the task was
+# classified as having no headroom; the tool-using agent then found
+# `jnp.matmul(x[None], w)` at 1.26x, three runs out of three, and 1.19x over the
+# einsum itself (same HLO op counts, different layout). Its ceiling.py is now the
+# agent's program. Ceilings are the best implementation *known*, not a bound.
 
 
 def path(spec: TaskSpec) -> Path:

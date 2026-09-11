@@ -22,7 +22,7 @@ PASS = CorrectnessReport(True, 1e-5, 1e-6, (CorrectnessCase("r", True, 0.0, 0.0)
 FAIL = CorrectnessReport(False, 1e-5, 1e-6, (CorrectnessCase("r", False, 1.0, 1.0),))
 
 #: Speed of each source relative to the seed; "wrong" fails correctness.
-SPEED = {"seed": 1.0, "fast": 3.0, "faster": 4.0, "medium": 1.5, "same": 1.0}
+SPEED = {"seed": 1.0, "fast": 3.0, "faster": 4.0, "medium": 1.5, "same": 1.0, "slow": 0.8}
 
 
 @pytest.fixture

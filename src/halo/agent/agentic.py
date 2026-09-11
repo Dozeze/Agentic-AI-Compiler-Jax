@@ -63,17 +63,21 @@ class AgenticAgent:
             # is executed, and the discarded ones stay in the transcript for the
             # record but are never shown back to the model as its own history.
             call, discarded = turn.calls[:1], turn.calls[1:]
-            transcript.append(
-                {
-                    "role": "model",
-                    "text": turn.text,
-                    "calls": [
-                        {"name": c.name, "args": c.args, "signature": c.signature}
-                        for c in call
-                    ],
-                    "discarded": [{"name": c.name, "args": c.args} for c in discarded],
-                }
-            )
+            if call or turn.text:
+                # An empty turn (no text, no call - a truncated or filtered
+                # response) is not appended: the API rejects a message with no
+                # parts on the next request.
+                transcript.append(
+                    {
+                        "role": "model",
+                        "text": turn.text,
+                        "calls": [
+                            {"name": c.name, "args": c.args, "signature": c.signature}
+                            for c in call
+                        ],
+                        "discarded": [{"name": c.name, "args": c.args} for c in discarded],
+                    }
+                )
             if not call:
                 # Text without a call is a turn spent on nothing. Say so once;
                 # a model that keeps talking instead of acting is stopped.

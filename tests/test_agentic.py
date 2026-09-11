@@ -80,3 +80,11 @@ def test_only_the_first_call_of_a_turn_runs(tmp_path, stubbed):
     assert "2 further call(s)" in shown[-1]["results"][0]["response"]["note"]
     transcript = json.loads((store.root / "transcript.json").read_text())
     assert [c["name"] for c in transcript[1]["discarded"]] == ["evaluate", "finish"]
+
+
+def test_an_empty_turn_is_not_sent_back_to_the_model(tmp_path, stubbed):
+    """A truncated or filtered response has no parts; echoing it back is a 400."""
+    model = ScriptedModel(turn(), turn(("finish", {"summary": "ok"})))
+    controller.run(RunConfig(task="stub"), AgenticAgent(model, "code"), RunStore(tmp_path, "r"))
+    roles = [t["role"] for t in model.seen[1]]
+    assert roles == ["user", "user"], "the empty model turn must be absent, the nudge present"

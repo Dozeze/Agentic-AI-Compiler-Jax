@@ -17,8 +17,11 @@ original, and the loop would walk backwards reporting progress.
 
 from __future__ import annotations
 
+import ast
 import difflib
+import shutil
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from halo.agent.context import feedback_for
 from halo.config import RunConfig
@@ -65,6 +68,24 @@ def diff(before: str, after: str) -> str:
             n=3,
         )
     ) or "(no textual change)"
+
+
+def same_program(a: str, b: str) -> bool:
+    """Are two sources the same program, ignoring formatting and comments?
+
+    Compared as syntax trees. A rewrite that moves a blank line has proposed
+    nothing; measuring it would spend an evaluation on the noise floor, and
+    counting it as a change would hide the most interesting thing a sweep can
+    find: a condition under which the agent declines to act.
+    """
+    try:
+        return ast.dump(ast.parse(a)) == ast.dump(ast.parse(b))
+    except SyntaxError:
+        return a.strip() == b.strip()
+
+
+#: The raw text the worker leaves next to an attempt, for ``inspect``.
+ARTIFACTS = ("jaxpr.txt", "stablehlo.txt", "hlo.txt")
 
 
 def baseline_attempt(cfg: RunConfig, spec, store: RunStore) -> Attempt:
@@ -117,12 +138,17 @@ INSPECTABLE = ("source", "diff", "feedback", "jaxpr", "stablehlo", "hlo", "buffe
 
 class Session:
     def __init__(
-        self, cfg: RunConfig, store: RunStore, baseline: Attempt | None = None
+        self,
+        cfg: RunConfig,
+        store: RunStore,
+        baseline: Attempt | None = None,
+        baseline_artifacts: Path | None = None,
     ) -> None:
         """``baseline`` may be a measurement of the seed taken earlier for the same
-        task on the same machine, which halves the cost of a sweep. It only feeds
-        the agent's context; every accept/reject decision still rests on a fresh
-        interleaved measurement."""
+        task on the same machine, which halves the cost of a sweep; its artifacts
+        directory comes along so the seed's HLO can still be inspected. It only
+        feeds the agent's context; every accept/reject decision still rests on a
+        fresh interleaved measurement."""
         self.cfg = cfg
         self.store = store
         self.spec = base.load_spec(cfg.task)
@@ -136,6 +162,10 @@ class Session:
         self._fingerprint = device.fingerprint if device else None
         store.write_env({"device": self._fingerprint})
         store.save_attempt(first)
+        if baseline_artifacts is not None:
+            for name in ARTIFACTS:
+                if (baseline_artifacts / name).exists():
+                    shutil.copy(baseline_artifacts / name, store.attempt_dir(0) / name)
 
         self.attempts: list[Attempt] = [first]
         self.best: Attempt = first
@@ -218,6 +248,10 @@ class Session:
         else:
             self._rejected_in_a_row += 1
         return attempt
+
+    def duplicate_of(self, source: str) -> Attempt | None:
+        """The earlier attempt ``source`` is the same program as, if any."""
+        return next((a for a in self.attempts if same_program(a.source, source)), None)
 
     def record_failure(self, error: str) -> Attempt:
         """The agent produced nothing usable. That is data, not a crash."""

@@ -113,8 +113,8 @@ def dispatch(session: Session, name: str, args: dict) -> dict:
         return handler(session, **args)
     except TypeError as exc:  # wrong or missing arguments
         return {"error": f"bad arguments for {name}: {exc}"}
-    except ValueError as exc:
-        return {"error": str(exc)}
+    except ValueError as exc:  # nothing was measured
+        return {"error": str(exc), "budget_remaining": session.remaining()}
 
 
 def _evaluate(
@@ -126,6 +126,14 @@ def _evaluate(
 ) -> dict:
     if parent is not None and not 0 <= parent < len(session.attempts):
         raise ValueError(f"no attempt {parent} to build on")
+    # Formatting is not a hypothesis. The same program measured twice would spend
+    # an evaluation on the noise floor, so it gets the earlier verdict instead.
+    if (earlier := session.duplicate_of(source)) is not None:
+        raise ValueError(
+            f"this is the same program as attempt {earlier.index} "
+            f"({earlier.decision.rule}: {earlier.decision.reason}); not measured again. "
+            "Comments and formatting do not change what XLA compiles."
+        )
     attempt = session.evaluate(
         source,
         proposal=Proposal(

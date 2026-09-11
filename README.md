@@ -7,9 +7,11 @@ rewrite, measures it again, and accepts it only if it is both **correct** and
 
 KTH DD2430 Group 19 · Project 1 (Ericsson, *Agentic AI Compiler*).
 
-Current scope is the MVP: **one** improvement step. The loop is written as a loop, so
-going autonomous means raising the step count and adding a stopping rule, not
-restructuring anything.
+Two kinds of agent drive the same loop. The **single-shot** agent answers once per
+step and the controller measures it. The **agentic** agent drives the loop itself
+through tools — evaluate, check, inspect, finish — deciding what to try next, whether
+to build on an earlier attempt, and when to stop. In both cases the harness, not the
+model, decides what is accepted.
 
 ## Status
 
@@ -39,19 +41,20 @@ Headroom is the measured speedup of a hand-written best-known implementation
 | `pairwise_distances` | headroom | 4.6x | materialises an (N, M, D) difference tensor |
 | `batched_matmul_loop` | headroom | 2.6x | Python loop over the batch |
 | `naive_attention` | headroom | 1.65x | Python loop over heads |
-| `multi_head_projection` | **null** | 1.04x | looks like the attention loop; XLA already handles it |
+| `multi_head_projection` | headroom | 1.26x | Python loop over heads; the ceiling is the agent's own find |
 | `rmsnorm` | null | 1.01x | already vectorised |
 | `softmax` | null | 1.01x | XLA already fuses it |
 | `gelu` | null | 1.00x | pure elementwise chain |
 | `matmul` | null | 0.99x | a single dot into a tuned kernel |
 
 `multi_head_projection` is the one worth understanding. It is a Python loop over
-eight heads — structurally the same shape as the `naive_attention` seed, which
-yields 1.65x — but every iteration shares one left-hand side, and XLA already
-handles that. It is in the suite deliberately: a control that *looks* improvable
-tests whether an agent can tell the two apart, which a trivially-optimal control
-does not. On its first run the agent proposed exactly the rewrite that wins on
-attention, measured 1.038x, and was rejected.
+eight heads — structurally the same shape as the `naive_attention` seed — and the
+hand-written einsum ceiling measured only 1.04x, so it was classified as a control:
+a task that *looks* improvable but is not. Then the tool-using agent found
+`jnp.matmul(x[None], w)` at **1.26x over the seed and 1.19x over the einsum**, three
+runs out of three (same HLO op counts; the einsum's index order costs an output
+transpose). The ceiling is now the agent's program. A ceiling is the best
+implementation *known*, not a bound, and the suite is scored against it knowing that.
 
 Classification lives in `tasks/ceilings.py`, never in `task.py`, because `task.py`
 goes into the prompt.
@@ -138,6 +141,32 @@ It did produce two candidates that failed to compile out of 50 (`a @ b` where
 it caught a correctness failure under `full`. That is the safety net doing its job,
 and it is why the acceptance gate is worth its complexity.
 
+### Single-shot vs agentic
+
+Same model, same `algorithmic` framing, at most three measurements per cell; 10 tasks
+x 3 replicates (`results/agentic-vs-single-shot-n3.md`):
+
+```bash
+uv run halo ablate --conditions algorithmic,agentic/algorithmic --replicates 3 --steps 3
+```
+
+| | single-shot | agentic |
+|---|---|---|
+| improvable tasks accepted | 17/18 | **18/18** |
+| mean % of ceiling | 85% | **100%** |
+| false positives on controls | 0/12 | 0/12 |
+| measurements per cell | 3.0 | **1.3** |
+| runs ended by the model's own `finish` | – | 28/30 |
+
+The agentic loop captures more of the available speedup with less than half the
+measurements, because it stops when it is done: on the controls it evaluates once,
+reads the rejection, and finishes. And on `multi_head_projection` it beat the
+hand-written ceiling — the einsum measured 1.04x over the seed; the agent's
+`jnp.matmul(x[None], w)` measures 1.26x, three runs out of three, and is now the
+ceiling. On this suite the loop's advantage is stopping, not searching: every task has
+one well-known rewrite. The block- and model-level tasks are where searching should
+start to matter.
+
 ## Setup
 
 Requires [uv](https://docs.astral.sh/uv/). Python 3.12 is fetched automatically.
@@ -162,8 +191,17 @@ Credentials stay in `~/.config/gcloud`. **Never put a key in this repo — it is
 
 ## Running
 
+The agentic loop, the model driving through tools until it finishes or the budget
+runs out:
+
 ```bash
-uv run halo run --task naive_attention --agent vertex --steps 1
+uv run halo run --task pairwise_distances --agent agentic
+```
+
+The single-shot loop, one proposal per step:
+
+```bash
+uv run halo run --task naive_attention --agent single-shot --steps 3
 ```
 
 No LLM, no network, no cost — a scripted agent with a known-good rewrite:
@@ -180,24 +218,58 @@ uv run halo run --task naive_attention --dry-run
 
 Other agents: `unstable` (a faster but numerically broken rewrite, to exercise the
 correctness gate) and `echo` (proposes no change — the control condition that measures
-the harness noise floor). `uv run halo tasks` lists the benchmarks.
+the harness noise floor). `uv run halo tasks` lists the benchmarks. `--model` picks the
+Gemini model (`gemini-2.5-flash-lite` by default for development; use
+`gemini-2.5-flash` for reported sweeps); `--evaluations` and `--patience` size an
+agentic run's budget.
 
-Every run writes `runs/<timestamp>-<task>/` containing `config.json`, `env.json`, and
-per attempt the exact `candidate.py` measured, `measurement.json`, `decision.json`,
-the optimized `hlo.txt`, and the prompt and raw response. The report's tables come
-from these files.
+Every run writes `runs/<timestamp>-<task>/` containing `config.json`, `env.json`,
+`result.json` (best attempt, lineage, stop reason, cost), and per attempt the exact
+`candidate.py` measured, `measurement.json`, `decision.json`, and the raw `jaxpr.txt`,
+`stablehlo.txt` and `hlo.txt`. A single-shot run also keeps each prompt and raw
+response; an agentic run keeps the whole tool conversation in `transcript.json`. The
+report's tables come from these files.
 
 ## How it works
 
 ```
-controller ──> agent      (pure function: Context -> Proposal)
-     │
-     └───────> harness    (subprocess: compile, verify, benchmark, extract HLO)
+single-shot agent  ──propose──>  ┐
+                                 ├──>  session  (ledger, budget, the only path to accept)
+agentic agent  ──tool calls──>   ┘        │
+                                          └──>  harness  (subprocess: compile, verify,
+                                                          benchmark, extract every IR level)
 ```
 
-The agent never benchmarks anything itself. The controller owns every side effect,
-which makes each step loggable and replayable, and makes a scripted agent a drop-in
-substitute for a model in tests.
+Neither agent benchmarks anything itself. The session owns every side effect and
+every decision, which makes each step loggable and replayable, and makes a scripted
+agent a drop-in substitute for a model in tests. Each candidate is judged against the
+*current best*, not the seed — comparing to the seed would accept a later candidate
+slower than an earlier one and the loop would walk backwards reporting progress.
+
+### The agentic loop
+
+The model gets four tools and a budget:
+
+| tool | what the session does |
+|---|---|
+| `evaluate(source, hypothesis, parent)` | compile, check against the oracle, time against the current best in interleaved rounds, rule on it. The only way to be accepted. |
+| `check(source)` | correctness only, no timing. Cheap; never counts toward patience. |
+| `inspect(attempt, what)` | the raw jaxpr / StableHLO / optimized HLO / buffer assignment of any earlier attempt, or its source or diff. Context is *pulled* when the model wants it. |
+| `finish(summary)` | stop. The result is the best attempt the harness verified, whatever the summary says. |
+
+The budget belongs to the harness: a maximum number of evaluations, tool calls and
+dollars, and a patience of consecutive rejections. The model is told what remains
+after every call but never asked whether it agrees. `parent` makes the ledger a tree:
+building on a rejected attempt is a branch, not a lost result, and every candidate is
+still judged against the verified best.
+
+One tool call is executed per turn. `gemini-2.5-flash-lite` will otherwise emit six
+evaluations and a `finish` in a single response — a whole plan guessed without seeing
+a single result. The first call runs; the rest are recorded and the model is told.
+
+Live, on Apple M5: `pairwise_distances` reached 4.62x (the measured ceiling is 4.58x)
+in two model calls for $0.0007; on the `softmax` control the agent spent one
+evaluation, read the rejection, and finished — $0.0006.
 
 ### Why the harness is a subprocess
 
@@ -327,6 +399,6 @@ uv run pytest -m "not slow"
 
 ## Not built yet
 
-Multi-step loops, parallel candidate exploration, tool-calling agents, Pallas/Triton
-kernels, multi-provider comparison, RAG over JAX docs. The interfaces leave room for
-each.
+Block- and model-level benchmarks (embedding, cross-entropy, GQA, scan hoisting, a
+small transformer forward pass), per-op profiling, GPU measurements and Pallas
+kernels. See the roadmap in the project plan.

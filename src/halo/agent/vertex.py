@@ -14,11 +14,28 @@ import os
 import time
 
 from google import genai
-from google.genai import types
+from google.genai import errors, types
 
 from halo.agent.llm import LLMResponse, OptimizationProposal, ToolCall, Turn, estimate_cost
 from halo.config import LLMConfig
 from halo.types import Usage
+
+
+#: Vertex answers a burst of calls with 429 RESOURCE_EXHAUSTED; a sweep is a
+#: burst. Retried with backoff; anything else raises and becomes a failed cell.
+RETRY_STATUS = frozenset({429, 500, 503})
+RETRY_DELAYS_S = (2, 5, 15, 30, 60)
+
+
+def _with_retry(call):
+    for delay in RETRY_DELAYS_S:
+        try:
+            return call()
+        except errors.APIError as exc:
+            if exc.code not in RETRY_STATUS:
+                raise
+            time.sleep(delay)
+    return call()
 
 
 class VertexGemini:
@@ -37,7 +54,7 @@ class VertexGemini:
 
     def complete(self, system: str, user: str) -> LLMResponse:
         start = time.perf_counter()
-        response = self.client.models.generate_content(
+        response = _with_retry(lambda: self.client.models.generate_content(
             model=self.cfg.model,
             contents=user,
             config=types.GenerateContentConfig(
@@ -53,7 +70,7 @@ class VertexGemini:
                     disable=True
                 ),
             ),
-        )
+        ))
         usage = self._usage(response, time.perf_counter() - start)
 
         parsed = response.parsed
@@ -63,7 +80,7 @@ class VertexGemini:
 
     def converse(self, system: str, transcript: list[dict], tools: list[dict]) -> Turn:
         start = time.perf_counter()
-        response = self.client.models.generate_content(
+        response = _with_retry(lambda: self.client.models.generate_content(
             model=self.cfg.model,
             contents=[_to_content(entry) for entry in transcript],
             config=types.GenerateContentConfig(
@@ -92,7 +109,7 @@ class VertexGemini:
                     function_calling_config=types.FunctionCallingConfig(mode="ANY")
                 ),
             ),
-        )
+        ))
         usage = self._usage(response, time.perf_counter() - start)
 
         calls, texts = [], []

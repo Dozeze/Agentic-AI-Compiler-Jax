@@ -15,7 +15,6 @@ scored separately, by how often something was wrongly accepted.
 
 from __future__ import annotations
 
-import ast
 import json
 import traceback
 from dataclasses import dataclass
@@ -25,6 +24,7 @@ from typing import Iterator
 from halo import controller
 from halo.agent.context import LEVELS
 from halo.config import RunConfig
+from halo.session import same_program
 from halo.store import RunStore
 from halo.tasks import base, ceilings
 from halo.types import Attempt
@@ -61,17 +61,8 @@ def _condition_order(condition: str) -> tuple[int, int]:
 
 
 def is_changed(before: str, after: str) -> bool:
-    """Did the proposal alter the program, rather than only its formatting?
-
-    Compared as syntax trees. A model that returns the seed with one blank line
-    moved has proposed nothing, and counting that as a change would hide the most
-    interesting thing an ablation can find: a condition under which the agent
-    declines to act.
-    """
-    try:
-        return ast.dump(ast.parse(before)) != ast.dump(ast.parse(after))
-    except SyntaxError:
-        return before.strip() != after.strip()
+    """Did the proposal alter the program, rather than only its formatting?"""
+    return not same_program(before, after)
 
 
 def _row(cell: Cell, result: controller.RunResult) -> dict:
@@ -121,7 +112,7 @@ def sweep(
     ``out`` are skipped, so an interrupted sweep continues where it stopped."""
     rows = read(out)
     done = {(r["task"], r["condition"], r["replicate"]) for r in rows}
-    baselines: dict[str, Attempt] = {}
+    baselines: dict[str, tuple[Attempt, Path]] = {}
 
     todo = [c for c in cells(tasks, conditions, replicates)
             if (c.task, c.condition, c.replicate) not in done]
@@ -133,14 +124,18 @@ def sweep(
         if cell.task not in baselines:
             spec = base.load_spec(cell.task)
             store = RunStore(runs_dir, f"baseline-{cell.task}")
-            baselines[cell.task] = controller.baseline_attempt(run_cfg, spec, store)
+            baselines[cell.task] = (
+                controller.baseline_attempt(run_cfg, spec, store), store.attempt_dir(0)
+            )
 
         store = RunStore(
             runs_dir, f"{cell.task}-{cell.condition.replace('/', '-')}-r{cell.replicate}"
         )
         try:
+            baseline, artifacts = baselines[cell.task]
             result = controller.run(
-                run_cfg, make_agent(run_cfg), store, baseline=baselines[cell.task]
+                run_cfg, make_agent(run_cfg), store,
+                baseline=baseline, baseline_artifacts=artifacts,
             )
             row = _row(cell, result)
         except Exception:  # noqa: BLE001 - one bad cell must not end the sweep
@@ -176,6 +171,19 @@ def fraction_of_ceiling(task: str, speedup: float | None, accepted: bool) -> flo
     if not accepted or speedup is None:
         return 0.0
     return max(0.0, min(1.0, (speedup - 1.0) / (ceiling - 1.0)))
+
+
+def _stop_class(row: dict) -> str:
+    reason = row.get("stop_reason", "")
+    if reason.startswith("agent finished"):
+        return "finished"
+    if reason.startswith("agent stopped"):
+        return "stopped calling tools"
+    if "consecutive" in reason:
+        return "patience"
+    if "budget" in reason:
+        return "budget"
+    return "steps completed"
 
 
 def report(rows: list[dict]) -> str:
@@ -246,6 +254,19 @@ def report(rows: list[dict]) -> str:
                 f"{sum(r['accepted'] for r in subset)}/{len(subset)}" if subset else "-"
             )
         lines.append(f"| `{task}` | " + " | ".join(cells_) + " |")
+
+    # Why each run ended, per condition. For an agentic condition this is the
+    # stop decision itself: whether the model finished on its own, ran out of
+    # patience, or spent the budget.
+    reasons = sorted({_stop_class(r) for r in rows if not r["error"]})
+    if any(r.get("stop_reason", "").startswith("agent") for r in rows):
+        lines += ["", "## How runs ended", "",
+                  "| condition | " + " | ".join(reasons) + " |",
+                  "|---|" + "---|" * len(reasons)]
+        for condition in conditions:
+            subset = [r for r in rows if r["condition"] == condition and not r["error"]]
+            counts = [sum(_stop_class(r) == reason for r in subset) for reason in reasons]
+            lines.append(f"| {condition} | " + " | ".join(str(c) for c in counts) + " |")
 
     errors = [r for r in rows if r["error"]]
     if errors:

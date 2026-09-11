@@ -10,6 +10,8 @@ candidate, so the two cannot diverge on what counts as an improvement.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from halo.agent.protocol import Agent, AttemptSummary, Context, ToolAgent
 from halo.config import RunConfig
 from halo.harness import runner  # noqa: F401 - patched by tests
@@ -56,6 +58,8 @@ def single_shot(session: Session, agent: Agent) -> None:
             continue
         if proposal.usage is not None:
             session.charge(proposal.usage)
+        # An unchanged proposal is measured anyway: that is the echo control,
+        # and what it measures is the noise floor the threshold has to clear.
         session.evaluate(proposal.source, proposal=proposal)
     session.stop(f"{session.cfg.steps} step(s) completed")
 
@@ -65,8 +69,9 @@ def run(
     agent: Agent | ToolAgent,
     store: RunStore,
     baseline: Attempt | None = None,
+    baseline_artifacts: Path | None = None,
 ) -> RunResult:
-    session = Session(cfg, store, baseline)
+    session = Session(cfg, store, baseline, baseline_artifacts)
     if isinstance(agent, ToolAgent):
         agent.run(session)
     else:

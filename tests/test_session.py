@@ -89,7 +89,7 @@ def test_patience_counts_rejections_but_checks_do_not(tmp_path, stubbed):
         evaluate("same"),
         ("check", {"source": "wrong"}),
         ("check", {"source": "fast"}),
-        evaluate("same"),
+        evaluate("slow"),
         evaluate("fast"),  # never reached
     )
     agent.run(s)
@@ -103,7 +103,7 @@ def test_patience_counts_rejections_but_checks_do_not(tmp_path, stubbed):
 def test_an_accepted_evaluation_resets_patience(tmp_path, stubbed):
     s = make_session(tmp_path, patience=2)
     ScriptedToolAgent(
-        evaluate("same"), evaluate("fast"), evaluate("same"), evaluate("faster")
+        evaluate("same"), evaluate("fast"), evaluate("slow"), evaluate("faster")
     ).run(s)
     assert s.best.index == 4
     assert s.exhausted is None
@@ -168,3 +168,36 @@ def test_the_run_leaves_a_result_file_with_the_lineage(tmp_path, stubbed):
     assert result["best"] == 2
     assert [a["parent"] for a in result["attempts"]] == [None, 0, 0]
     assert result["tool_calls"] == 2
+
+
+# --- duplicates -------------------------------------------------------------------
+
+def test_the_same_program_is_not_measured_twice(tmp_path, stubbed):
+    """Formatting is not a hypothesis. A reformatted seed, or a rewrite already
+    tried, gets the earlier verdict back and costs no evaluation. (The single-shot
+    driver deliberately still measures an unchanged proposal: that is the echo
+    control, and it measures the noise floor.)"""
+    s = make_session(tmp_path)
+    agent = ScriptedToolAgent(
+        evaluate("seed  # a comment\n"),
+        evaluate("fast"),
+        evaluate("fast\n\n"),
+    )
+    agent.run(s)
+    assert s.evaluations == 1
+    assert "same program as attempt 0" in agent.results[0]["error"]
+    assert "same program as attempt 1" in agent.results[2]["error"]
+    assert len(stubbed) == 2  # the baseline and one real measurement
+
+
+def test_a_cached_baseline_brings_its_artifacts_along(tmp_path, stubbed):
+    from halo.session import baseline_attempt
+    from halo.tasks import base
+
+    first_store = RunStore(tmp_path, "first")
+    baseline = baseline_attempt(RunConfig(task="stub"), base.load_spec("stub"), first_store)
+    (first_store.attempt_dir(0) / "hlo.txt").write_text("HloModule stub")
+
+    s = Session(RunConfig(task="stub"), RunStore(tmp_path, "second"),
+                baseline, first_store.attempt_dir(0))
+    assert s.inspect(0, "hlo") == "HloModule stub"
