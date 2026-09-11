@@ -201,3 +201,29 @@ def test_a_cached_baseline_brings_its_artifacts_along(tmp_path, stubbed):
     s = Session(RunConfig(task="stub"), RunStore(tmp_path, "second"),
                 baseline, first_store.attempt_dir(0))
     assert s.inspect(0, "hlo") == "HloModule stub"
+
+
+# --- lookup ----------------------------------------------------------------------
+
+def test_lookup_reads_the_installed_api():
+    result = tools.lookup("jnp.take_along_axis")
+    assert result["name"] == "jax.numpy.take_along_axis"
+    assert result["signature"].startswith("take_along_axis(arr")
+    assert "indices" in result["doc"]
+
+
+def test_lookup_suggests_near_misses_and_stays_inside_jax():
+    with pytest.raises(ValueError, match="similar names"):
+        tools.lookup("jax.lax.conv_dilated")
+    with pytest.raises(ValueError, match="not under jax"):
+        tools.lookup("os.system")
+    with pytest.raises(ValueError, match="no attribute"):
+        tools.lookup("jax.lib.stride_tricks")
+
+
+def test_a_candidate_that_does_not_trace_is_not_an_evaluation(tmp_path, stubbed):
+    s = make_session(tmp_path, max_evaluations=1, patience=3)
+    agent = ScriptedToolAgent(evaluate("broken"), evaluate("broken2"), evaluate("fast"))
+    agent.run(s)
+    assert s.evaluations == 1 and len(s.attempts) == 4
+    assert s.best.index == 3, "two trace failures must not have spent the single evaluation"

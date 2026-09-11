@@ -23,7 +23,7 @@ class ScriptedModel:
 
     def converse(self, system, transcript, tools):
         self.seen.append([dict(t) for t in transcript])
-        assert {t["name"] for t in tools} == {"evaluate", "check", "inspect", "finish"}
+        assert {t["name"] for t in tools} == {"evaluate", "check", "inspect", "lookup", "finish"}
         return next(self._turns)
 
 
@@ -51,12 +51,25 @@ def test_results_go_back_to_the_model_and_the_transcript_is_saved(tmp_path, stub
 
 
 def test_a_model_that_stops_calling_tools_is_stopped(tmp_path, stubbed):
-    model = ScriptedModel(turn(text="I think..."), turn(text="...still thinking"))
+    model = ScriptedModel(*[turn(text="I think...") for _ in range(4)])
     result = controller.run(
         RunConfig(task="stub"), AgenticAgent(model, "code"), RunStore(tmp_path, "r")
     )
-    assert result.stop_reason == "agent stopped calling tools"
+    assert result.stop_reason.startswith("agent stopped calling tools")
     assert "Call a tool" in model.seen[1][-1]["text"]
+    assert len(model.seen) == 4
+
+
+def test_a_malformed_call_is_named_and_retried(tmp_path, stubbed):
+    from halo.agent.llm import Turn
+
+    model = ScriptedModel(
+        Turn(calls=(), text="", usage=USAGE, finish_reason="FinishReason.MALFORMED_FUNCTION_CALL"),
+        turn(("finish", {"summary": "ok"})),
+    )
+    result = controller.run(RunConfig(task="stub"), AgenticAgent(model, "code"), RunStore(tmp_path, "r"))
+    assert result.stop_reason == "agent finished: ok"
+    assert "could not be parsed" in model.seen[1][-1]["text"]
 
 
 def test_only_the_first_call_of_a_turn_runs(tmp_path, stubbed):

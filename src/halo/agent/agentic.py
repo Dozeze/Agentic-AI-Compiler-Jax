@@ -27,10 +27,18 @@ You work through tools, and the harness is the referee.
   rewrite before spending an evaluation on it.
 - inspect: the raw jaxpr, StableHLO, optimized HLO or buffer assignment of any
   earlier attempt, or its source or diff, on request.
+- lookup: the signature and docstring of a jax function in the installed version.
+  Cheap. For checking a call you have already decided to make, so a wrong keyword
+  or a misremembered module path does not waste a turn. It is not for browsing:
+  a library function lowers to the same XLA operations as the code you write, so
+  swapping one for another is not a hypothesis. The speedups here come from
+  computing less, not from calling something different.
 - finish: stop. The reported result is the best attempt the harness verified.
 
 A candidate is accepted when it is correct on the withheld cases and the 95% lower
-bound of its speedup over the *current best* clears the threshold. A rejected
+bound of its speedup over the *current best* clears the threshold. A candidate
+that fails to trace or compile costs a tool call and counts toward patience, but
+not toward the evaluation budget: only measurements do. A rejected
 attempt is not lost: build on any earlier attempt by passing its index as `parent`.
 
 Spend evaluations on hypotheses, not on variations. Two rewrites that differ only in
@@ -38,6 +46,21 @@ style will measure the same. Stop when you have no further hypothesis worth an
 evaluation; on a program with nothing to gain, one evaluation of your best idea and
 then finish is the right behaviour, not a failure.
 """
+
+
+#: Consecutive turns without a usable tool call before the run is stopped.
+MAX_IDLE_TURNS = 4
+
+
+def _nudge(finish_reason: str) -> str:
+    if "MALFORMED" in finish_reason.upper():
+        return (
+            "Your last function call could not be parsed. Call one tool with valid "
+            "arguments; keep the source argument a plain string."
+        )
+    if "MAX_TOKENS" in finish_reason.upper():
+        return "Your last response was cut off. Make a shorter call."
+    return "Call a tool, or call finish to stop."
 
 
 def system_prompt(level: str) -> str:
@@ -71,6 +94,7 @@ class AgenticAgent:
                     {
                         "role": "model",
                         "text": turn.text,
+                        "finish_reason": turn.finish_reason,
                         "calls": [
                             {"name": c.name, "args": c.args, "signature": c.signature}
                             for c in call
@@ -79,15 +103,16 @@ class AgenticAgent:
                     }
                 )
             if not call:
-                # Text without a call is a turn spent on nothing. Say so once;
-                # a model that keeps talking instead of acting is stopped.
+                # A turn without a call is a turn spent on nothing: text instead
+                # of action, or an empty response because the call the model
+                # tried to make did not parse (Gemini reports that as a finish
+                # reason and returns no parts). Say what happened and ask again;
+                # a model that keeps doing it is stopped.
                 idle_turns += 1
-                if idle_turns >= 2:
-                    session.stop("agent stopped calling tools")
+                if idle_turns >= MAX_IDLE_TURNS:
+                    session.stop(f"agent stopped calling tools ({turn.finish_reason})")
                     break
-                transcript.append(
-                    {"role": "user", "text": "Call a tool, or call finish to stop."}
-                )
+                transcript.append({"role": "user", "text": _nudge(turn.finish_reason)})
                 continue
             idle_turns = 0
 

@@ -71,16 +71,23 @@ def _row(cell: Cell, result: controller.RunResult) -> dict:
     the loop ended with, not merely what it tried last."""
     last = result.attempts[-1]
     speedup = result.overall.speedup
+    if result.improved:
+        rule = result.best.decision.rule
+    elif len(result.attempts) == 1:
+        rule = "no_attempt"  # every proposal was the seed again, or none was made
+    else:
+        rule = last.decision.rule
     return {
         **cell.__dict__,
         "accepted": result.improved,
-        "rule": result.best.decision.rule if result.improved else last.decision.rule,
+        "rule": rule,
         "speedup": speedup.ratio if speedup else None,
         "ci_low": speedup.ci_low if speedup else None,
         "changed": any(
             is_changed(result.attempts[0].source, a.source) for a in result.attempts[1:]
         ),
-        "evaluations": len(result.attempts) - 1,
+        "attempts": len(result.attempts) - 1,
+        "evaluations": result.evaluations,
         "tool_calls": result.tool_calls,
         "checks": result.checks,
         "stop_reason": result.stop_reason,
@@ -93,7 +100,7 @@ def _row(cell: Cell, result: controller.RunResult) -> dict:
 
 def _error_row(cell: Cell) -> dict:
     return {**cell.__dict__, "accepted": False, "rule": "error", "speedup": None,
-            "ci_low": None, "changed": False, "evaluations": 0, "tool_calls": 0,
+            "ci_low": None, "changed": False, "attempts": 0, "evaluations": 0, "tool_calls": 0,
             "checks": 0, "stop_reason": "error", "cost_usd": 0.0, "input_tokens": 0,
             "output_tokens": 0, "error": traceback.format_exc(limit=5)}
 
@@ -226,7 +233,9 @@ def report(rows: list[dict]) -> str:
     lines += ["", "## Per task, mean % of ceiling reached", "",
               "| task | ceiling | " + " | ".join(conditions) + " |",
               "|---|---|" + "---|" * len(conditions)]
-    for task in ceilings.by_classification("headroom"):
+    swept = {r["task"] for r in rows}
+    for task in sorted(swept & set(ceilings.by_classification("headroom")),
+                       key=lambda t: (ceilings.tier(t), t)):
         cells_ = []
         for condition in conditions:
             subset = [r for r in rows if r["task"] == task
@@ -238,14 +247,14 @@ def report(rows: list[dict]) -> str:
                          for r in subset]
             cells_.append(f"{100 * sum(fractions) / len(fractions):.0f}%")
         lines.append(
-            f"| `{task}` | {ceilings.MEASURED_HEADROOM[task]:.2f}x | "
+            f"| `{task}` ({ceilings.tier(task)}) | {ceilings.MEASURED_HEADROOM[task]:.2f}x | "
             + " | ".join(cells_) + " |"
         )
 
     lines += ["", "## Controls, times a proposal was wrongly accepted", "",
               "| task | " + " | ".join(conditions) + " |",
               "|---|" + "---|" * len(conditions)]
-    for task in ceilings.by_classification("null"):
+    for task in sorted(swept & set(ceilings.by_classification("null"))):
         cells_ = []
         for condition in conditions:
             subset = [r for r in rows if r["task"] == task

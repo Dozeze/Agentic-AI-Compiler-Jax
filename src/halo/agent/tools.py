@@ -1,12 +1,18 @@
 """The tools a model may call, and what each one does to the session.
 
-Four tools, each a thin door onto something the harness already does. There is
-deliberately no "run Python" tool: an agent that can execute arbitrary code can
-also time itself, and a self-reported speedup is exactly the number this project
-refuses to trust.
+Five tools. Four are thin doors onto something the harness already does; the
+fifth, ``lookup``, reads a signature and docstring out of the installed JAX,
+because the block-level sweep showed the model's failures were API errors, not
+idea errors - the right rewrite with the wrong keyword, three evaluations in a
+row. There is deliberately no "run Python" tool: an agent that can execute
+arbitrary code can also time itself, and a self-reported speedup is exactly the
+number this project refuses to trust.
 """
 
 from __future__ import annotations
+
+import importlib
+import inspect
 
 from halo.agent.context import feedback_for
 from halo.session import INSPECTABLE, Session
@@ -80,6 +86,28 @@ TOOLS: list[dict] = [
                 },
             },
             "required": ["attempt", "what"],
+        },
+    },
+    {
+        "name": "lookup",
+        "description": (
+            "The signature and docstring of a JAX function in the installed version, "
+            "e.g. 'jax.lax.conv_general_dilated' or 'jnp.take_along_axis'. Cheap. Use it "
+            "before evaluating a call you are not certain of."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Dotted name under jax, jax.numpy (jnp), jax.lax or jax.nn.",
+                },
+                "max_lines": {
+                    "type": "integer",
+                    "description": "Docstring lines to return (default 40, max 200).",
+                },
+            },
+            "required": ["name"],
         },
     },
     {
@@ -178,6 +206,52 @@ def _inspect(session: Session, attempt: int, what: str, max_lines: int = 120) ->
     }
 
 
+_ALIASES = {"jnp": "jax.numpy", "lax": "jax.lax", "nn": "jax.nn"}
+
+
+def lookup(name: str, max_lines: int = 40) -> dict:
+    """Signature and docstring from the installed JAX, or a suggestion.
+
+    Restricted to the ``jax`` package: this is a reference for the API the
+    candidate will be compiled against, not a general Python introspector.
+    """
+    head, _, rest = name.partition(".")
+    name = _ALIASES.get(head, head) + ("." + rest if rest else "")
+    if name != "jax" and not name.startswith("jax."):
+        raise ValueError(f"{name!r} is not under jax; candidates may only use jax")
+    parts = name.split(".")
+    obj = importlib.import_module("jax")
+    for i, part in enumerate(parts[1:], 1):
+        try:
+            obj = getattr(obj, part)
+        except AttributeError:
+            try:
+                obj = importlib.import_module(".".join(parts[: i + 1]))
+            except ImportError:
+                prefix = ".".join(parts[:i])
+                near = [
+                    a for a in dir(obj) if not a.startswith("_") and part.lower()[:3] in a.lower()
+                ][:12]
+                raise ValueError(
+                    f"{prefix} has no attribute {part!r}"
+                    + (f"; similar names: {', '.join(near)}" if near else "")
+                )
+    try:
+        signature = str(inspect.signature(obj))
+    except (TypeError, ValueError):
+        signature = "(signature unavailable)"
+    doc = inspect.getdoc(obj) or "(no docstring)"
+    lines = doc.splitlines()
+    max_lines = max(1, min(int(max_lines), 200))
+    if len(lines) > max_lines:
+        doc = "\n".join(lines[:max_lines]) + f"\n... ({len(lines) - max_lines} more lines)"
+    return {"name": name, "signature": f"{parts[-1]}{signature}", "doc": doc}
+
+
+def _lookup(session: Session, name: str, max_lines: int = 40) -> dict:
+    return lookup(name, max_lines)
+
+
 def _finish(session: Session, summary: str) -> dict:
     session.finish(summary)
     return {"stopped": True, "best_attempt": session.best.index}
@@ -187,5 +261,6 @@ _HANDLERS = {
     "evaluate": _evaluate,
     "check": _check,
     "inspect": _inspect,
+    "lookup": _lookup,
     "finish": _finish,
 }

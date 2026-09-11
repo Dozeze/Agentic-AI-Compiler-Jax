@@ -41,6 +41,8 @@ def stubbed(tmp_path, monkeypatch):
         calls.append({"baseline": base, "candidate": cand, **kw})
         if cand == "wrong":
             return Measurement(task=spec.name, ok=True, device=DEVICE, correctness=FAIL)
+        if cand.startswith("broken"):
+            return Measurement.failure(spec.name, "candidate failed to trace or compile")
         if kw.get("correctness_only"):
             return Measurement(task=spec.name, ok=True, device=DEVICE, correctness=PASS)
         ratio = SPEED[cand] / SPEED[base]

@@ -20,11 +20,11 @@ Semantics: out = a @ b @ c, the ordinary matrix product, which is associative.
 """
 
 
-#: Raised from the default 1e-6: two chained 1024-term float32 reductions, and a
-#: valid reassociation of the product legitimately differs by more than one reach a worst measured
-#: absolute error of 6.3e-04 here, for both the seed and the best known
-#: implementation. Output elements that cancel toward zero still carry the
-#: accumulated error of the whole reduction.
+#: Raised from the default 1e-6: two chained 1024-term float32 reductions reach a
+#: worst measured absolute error of 6.3e-04 here, for both the seed and the best
+#: known implementation, and a valid reassociation of the product legitimately
+#: differs from the seed by that much. Output elements that cancel toward zero
+#: still carry the accumulated error of the whole reduction.
 ATOL = 1e-2
 
 def make_inputs(rng: np.random.Generator) -> tuple[np.ndarray, ...]:

@@ -28,24 +28,39 @@ proposed no change, and the harness declined to call a 1.8% difference a speedup
 
 ## The benchmark suite
 
-Ten tasks, half with real headroom and half controls, so an ablation can measure
-both whether compiler feedback helps *and* whether it causes false positives.
-Headroom is the measured speedup of a hand-written best-known implementation
-(`ceiling.py`) over the seed, on Apple M5 CPU / JAX 0.11.1 — re-measure with
-`halo ceilings`.
+Seventeen tasks in two tiers — single **operations** and the **blocks** an AI model is
+built from — with real headroom or as controls, so an ablation can measure both
+whether the agent finds speedups *and* whether it invents them. Headroom is the
+measured speedup of the best known implementation (`ceiling.py`) over the seed, on
+Apple M5 CPU / JAX 0.11.1 — re-measure with `halo ceilings`. A task is only added
+after its ceiling is measured; below ~1.3x it becomes a control.
 
-| task | class | headroom | the seed's problem |
-|---|---|---|---|
-| `matmul_chain` | headroom | 11.3x | `(a@b)@c` materialises 1024x1024; `a@(b@c)` needs 16x16 |
-| `layernorm_loop` | headroom | 4.9x | Python loop over rows |
-| `pairwise_distances` | headroom | 4.6x | materialises an (N, M, D) difference tensor |
-| `batched_matmul_loop` | headroom | 2.6x | Python loop over the batch |
-| `naive_attention` | headroom | 1.65x | Python loop over heads |
-| `multi_head_projection` | headroom | 1.26x | Python loop over heads; the ceiling is the agent's own find |
-| `rmsnorm` | null | 1.01x | already vectorised |
-| `softmax` | null | 1.01x | XLA already fuses it |
-| `gelu` | null | 1.00x | pure elementwise chain |
-| `matmul` | null | 0.99x | a single dot into a tuned kernel |
+| task | tier | class | headroom | the seed's problem |
+|---|---|---|---|---|
+| `matmul_chain` | op | headroom | 11.3x | `(a@b)@c` materialises 1024x1024; `a@(b@c)` needs 16x16 |
+| `layernorm_loop` | op | headroom | 4.9x | Python loop over rows |
+| `pairwise_distances` | op | headroom | 4.6x | materialises an (N, M, D) difference tensor |
+| `batched_matmul_loop` | op | headroom | 2.6x | Python loop over the batch |
+| `naive_attention` | op | headroom | 1.65x | Python loop over heads |
+| `multi_head_projection` | op | headroom | 1.26x | Python loop over heads; the ceiling is the agent's own find |
+| `rmsnorm` | op | null | 1.01x | already vectorised |
+| `softmax` | op | null | 1.01x | XLA already fuses it |
+| `gelu` | op | null | 1.00x | pure elementwise chain |
+| `matmul` | op | null | 0.99x | a single dot into a tuned kernel |
+| `embedding_onehot` | block | headroom | 189x | `one_hot(ids) @ table`: a (1024, 8192) matmul for a gather |
+| `top_k_argsort` | block | headroom | 16.9x | a full sort of 16k columns to take 8 |
+| `gqa_decode` | block | headroom | 6.3x | `jnp.repeat` of the KV cache to match the query heads |
+| `conv_im2col` | block | headroom | 2.3x | explicit (N, H, W, 9, C) patches, then a matmul |
+| `cross_entropy_onehot` | block | headroom | 2.3x | `one_hot(labels) * log_softmax` over the vocabulary |
+| `rnn_scan_hoist` | block | headroom | 1.45x | the input projection recomputed inside `lax.scan` |
+| `mlp_gelu_block` | block | null | 1.00x | matmul, GELU, matmul: XLA already fuses it |
+
+Two block tasks were reformulated by their ceilings. Grouped-query attention over a
+256-token *prefill* measured only 1.10x — repeating K/V costs O(T·D) against O(T²·D)
+of scores, invisible at that length — so the task is the *decode* step (one query
+against a 2048-entry cache), where the repeat is the same order as the work and the
+ceiling is 6.3x. And `mlp_gelu_block` is a control on purpose: a block that looks
+like it should have room but XLA already handles.
 
 `multi_head_projection` is the one worth understanding. It is a Python loop over
 eight heads — structurally the same shape as the `naive_attention` seed — and the
@@ -110,7 +125,7 @@ different algorithm* (the agent's job, which nothing in the compiler's output an
 — and lists the moves no rule-based compiler can make: algebraic identities,
 reassociation, streaming reformulation, exploiting structure.
 
-Same data, same tasks, same model. 10 tasks x 5 replicates (`results/framing-n5.md`):
+Same data, same tasks, same model. The 10 op-level tasks x 5 replicates (`results/framing-n5.md`):
 
 | context | improvable: accepted | % of ceiling | proposed a change | false positives |
 |---|---|---|---|---|
@@ -143,7 +158,7 @@ and it is why the acceptance gate is worth its complexity.
 
 ### Single-shot vs agentic
 
-Same model, same `algorithmic` framing, at most three measurements per cell; 10 tasks
+Same model, same `algorithmic` framing, at most three measurements per cell; the 10 op-level tasks
 x 3 replicates (`results/agentic-vs-single-shot-n3.md`):
 
 ```bash

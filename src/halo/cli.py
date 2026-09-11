@@ -133,7 +133,7 @@ def _ceilings(args: argparse.Namespace) -> int:
         task="", timing=TimingConfig(warmup=5, rounds=args.rounds, bootstrap_samples=800)
     )
     names = [args.task] if args.task else base.available()
-    print(f"{'task':24s} {'class':9s} {'seed ms':>9s} {'best ms':>9s} {'headroom':>9s}")
+    print(f"{'task':24s} {'tier':6s} {'class':9s} {'seed ms':>9s} {'best ms':>9s} {'headroom':>9s}")
     for name in names:
         spec = base.load_spec(name)
         measurement = runner.measure(
@@ -145,9 +145,19 @@ def _ceilings(args: argparse.Namespace) -> int:
             continue
         speedup = measurement.speedup
         print(
-            f"{name:24s} {ceilings.CLASSIFICATION.get(name, '?'):9s} "
+            f"{name:24s} {ceilings.tier(name):6s} {ceilings.CLASSIFICATION.get(name, '?'):9s} "
             f"{measurement.baseline.median_ms:9.3f} {measurement.candidate.median_ms:9.3f} "
             f"{speedup.ratio:8.2f}x  [{speedup.ci_low:.2f}, {speedup.ci_high:.2f}]"
+        )
+    return 0
+
+
+def _tasks(args: argparse.Namespace) -> int:
+    print(f"{'task':24s} {'tier':6s} {'class':9s} {'ceiling':>8s}")
+    for name in base.available():
+        print(
+            f"{name:24s} {ceilings.tier(name):6s} {ceilings.CLASSIFICATION.get(name, '?'):9s} "
+            f"{ceilings.MEASURED_HEADROOM.get(name, float('nan')):7.2f}x"
         )
     return 0
 
@@ -246,9 +256,7 @@ def main(argv: list[str] | None = None) -> int:
     ceilings_parser.set_defaults(func=_ceilings)
 
     tasks_parser = sub.add_parser("tasks", help="list available benchmark tasks")
-    tasks_parser.set_defaults(
-        func=lambda args: (print("\n".join(base.available())), 0)[1]
-    )
+    tasks_parser.set_defaults(func=_tasks)
 
     args = parser.parse_args(argv)
     return args.func(args)

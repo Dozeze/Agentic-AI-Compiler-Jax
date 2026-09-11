@@ -35,6 +35,7 @@ def test_task_is_classified(name):
     assert name in ceilings.CLASSIFICATION
     assert ceilings.CLASSIFICATION[name] in {"headroom", "null"}
     assert name in ceilings.MEASURED_HEADROOM
+    assert ceilings.tier(name) in {"op", "block", "model"}
 
 
 def test_suite_has_power_in_both_directions():

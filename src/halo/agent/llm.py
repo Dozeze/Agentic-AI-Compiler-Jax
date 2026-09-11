@@ -81,6 +81,9 @@ class Turn:
     calls: tuple[ToolCall, ...]
     text: str
     usage: Usage
+    #: The provider's own reason the turn ended (STOP, MAX_TOKENS,
+    #: MALFORMED_FUNCTION_CALL, ...). Diagnostic; carried into the transcript.
+    finish_reason: str = ""
 
 
 class ToolClient(Protocol):

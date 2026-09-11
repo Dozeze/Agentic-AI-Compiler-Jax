@@ -127,6 +127,10 @@ class RunResult:
         return self.best.index > 0
 
     @property
+    def evaluations(self) -> int:
+        return sum(1 for a in self.attempts[1:] if a.measurement.ok)
+
+    @property
     def cost_usd(self) -> float:
         return sum(u.cost_usd for u in self.usages)
 
@@ -179,7 +183,10 @@ class Session:
 
     @property
     def evaluations(self) -> int:
-        return len(self.attempts) - 1
+        """Attempts that reached the harness: measured, or failed correctness.
+        A candidate that never traced was never evaluated; it cost a tool call and
+        a unit of patience, not one of the measurements the budget counts."""
+        return sum(1 for a in self.attempts[1:] if a.measurement.ok)
 
     @property
     def cost_usd(self) -> float:

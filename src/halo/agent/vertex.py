@@ -24,7 +24,7 @@ from halo.types import Usage
 #: Vertex answers a burst of calls with 429 RESOURCE_EXHAUSTED; a sweep is a
 #: burst. Retried with backoff; anything else raises and becomes a failed cell.
 RETRY_STATUS = frozenset({429, 500, 503})
-RETRY_DELAYS_S = (2, 5, 15, 30, 60)
+RETRY_DELAYS_S = (5, 15, 30, 60, 120, 120)
 
 
 def _with_retry(call):
@@ -114,6 +114,7 @@ class VertexGemini:
 
         calls, texts = [], []
         candidate = response.candidates[0] if response.candidates else None
+        finish_reason = str(getattr(candidate, "finish_reason", "") or "")
         for part in (candidate.content.parts if candidate and candidate.content else []) or []:
             if part.function_call is not None:
                 signature = getattr(part, "thought_signature", None)
@@ -128,7 +129,9 @@ class VertexGemini:
                 )
             elif part.text and not getattr(part, "thought", False):
                 texts.append(part.text)
-        return Turn(calls=tuple(calls), text="\n".join(texts), usage=usage)
+        return Turn(
+            calls=tuple(calls), text="\n".join(texts), usage=usage, finish_reason=finish_reason
+        )
 
     def _usage(self, response, latency: float) -> Usage:
         meta = response.usage_metadata
