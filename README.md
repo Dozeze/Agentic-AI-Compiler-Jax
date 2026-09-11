@@ -56,6 +56,14 @@ attention, measured 1.038x, and was rejected.
 Classification lives in `tasks/ceilings.py`, never in `task.py`, because `task.py`
 goes into the prompt.
 
+One task is deliberately absent. The streaming-softmax attention behind
+FlashAttention — the brief's headline example of what a compiler cannot do — was
+measured before being added and is **slower than the naive form on this CPU at every
+size**, reaching parity only at a 256 MiB score matrix
+(`results/streaming-attention-cpu.md`). It is a GPU optimisation; on CPU it would
+have been a control mislabelled as improvable. It is the first ceiling to re-measure
+on the CUDA machines.
+
 ## The ablation
 
 The experiment the suite exists for: hold the model, the tasks and the acceptance
