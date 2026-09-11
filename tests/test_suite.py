@@ -8,11 +8,10 @@ numerically correct, and enough of both classes for a comparison to mean anythin
 from __future__ import annotations
 
 import jax
-import jax.numpy as jnp
 import pytest
 
 from halo.config import CorrectnessConfig
-from halo.harness import correctness
+from halo.harness import correctness, worker
 from halo.tasks import base, ceilings
 
 TASKS = base.available()
@@ -71,6 +70,6 @@ def test_implementation_matches_its_oracle(name, impl):
     fn = base.load_module(spec.directory / f"{impl}.py", f"{impl}_{name}").candidate
     report = correctness.check(
         fn, spec.load(), CorrectnessConfig(), jit=jax.jit,
-        to_device=lambda arrays: tuple(jnp.asarray(a) for a in arrays),
+        to_device=lambda inputs: worker.to_device(jax, inputs),
     )
     assert report.passed, f"{name}/{impl}: {report.summary()}"

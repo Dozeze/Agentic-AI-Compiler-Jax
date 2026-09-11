@@ -42,6 +42,8 @@ CLASSIFICATION: dict[str, str] = {
     "cross_entropy_onehot": "headroom",
     "rnn_scan_hoist": "headroom",
     "mlp_gelu_block": "null",
+    # a model
+    "tiny_gpt_loss": "headroom",
 }
 
 #: Where each task sits on the way from single operations to whole models. The
@@ -56,6 +58,7 @@ TIER: dict[str, str] = {
         "embedding_onehot", "top_k_argsort", "gqa_decode", "conv_im2col",
         "cross_entropy_onehot", "rnn_scan_hoist", "mlp_gelu_block",
     )},
+    "tiny_gpt_loss": "model",
 }
 
 REFERENCE_DEVICE = "Apple M5, CPU backend, JAX 0.11.1"
@@ -79,7 +82,14 @@ MEASURED_HEADROOM: dict[str, float] = {
     "cross_entropy_onehot": 2.31,
     "rnn_scan_hoist": 1.45,
     "mlp_gelu_block": 1.00,
+    "tiny_gpt_loss": 1.83,
 }
+
+# `tiny_gpt_loss` composes three of the block anti-patterns in one function, and
+# its ceiling decomposes: the embedding gather alone is 1.51x, the direct
+# cross-entropy alone 1.16x, both 1.75x, all three with batched grouped attention
+# 1.83x. Reaching the ceiling takes more than one rewrite, which is what the
+# model tier is for.
 
 # `multi_head_projection` was a control until the agent beat its ceiling. The
 # hand-written einsum measured 1.04x over the seed's head loop and the task was

@@ -28,8 +28,8 @@ proposed no change, and the harness declined to call a 1.8% difference a speedup
 
 ## The benchmark suite
 
-Seventeen tasks in two tiers — single **operations** and the **blocks** an AI model is
-built from — with real headroom or as controls, so an ablation can measure both
+Eighteen tasks in three tiers — single **operations**, the **blocks** an AI model is
+built from, and a **model** that composes them — with real headroom or as controls, so an ablation can measure both
 whether the agent finds speedups *and* whether it invents them. Headroom is the
 measured speedup of the best known implementation (`ceiling.py`) over the seed, on
 Apple M5 CPU / JAX 0.11.1 — re-measure with `halo ceilings`. A task is only added
@@ -54,6 +54,7 @@ after its ceiling is measured; below ~1.3x it becomes a control.
 | `cross_entropy_onehot` | block | headroom | 2.3x | `one_hot(labels) * log_softmax` over the vocabulary |
 | `rnn_scan_hoist` | block | headroom | 1.45x | the input projection recomputed inside `lax.scan` |
 | `mlp_gelu_block` | block | null | 1.00x | matmul, GELU, matmul: XLA already fuses it |
+| `tiny_gpt_loss` | model | headroom | 1.83x | a 2-layer GPT forward + loss composing three of the above: one-hot embedding (1.51x alone), one-hot cross-entropy (1.16x), per-head attention loop with repeated K/V (1.04x) |
 
 Two block tasks were reformulated by their ceilings. Grouped-query attention over a
 256-token *prefill* measured only 1.10x — repeating K/V costs O(T·D) against O(T²·D)
