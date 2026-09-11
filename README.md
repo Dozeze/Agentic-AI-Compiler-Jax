@@ -179,8 +179,30 @@ reads the rejection, and finishes. And on `multi_head_projection` it beat the
 hand-written ceiling — the einsum measured 1.04x over the seed; the agent's
 `jnp.matmul(x[None], w)` measures 1.26x, three runs out of three, and is now the
 ceiling. On this suite the loop's advantage is stopping, not searching: every task has
-one well-known rewrite. The block- and model-level tasks are where searching should
-start to matter.
+one well-known rewrite.
+
+### The block tier, and the model as the ceiling
+
+The seven block tasks are the first place the suite is hard enough to separate
+*models* (`results/blocks-n3.md`), same harness, same budget:
+
+| | flash-lite single-shot | flash-lite agentic | flash single-shot | flash agentic |
+|---|---|---|---|---|
+| improvable tasks accepted | 6/18 | 7/18 | **18/18** | 17/18 |
+| mean % of ceiling | 33% | 33% | **99%** | 89% |
+| false positives on control | 0/3 | 0/3 | 0/3 | 0/3 |
+| measurements per cell | 3.0 | 0.6 | 2.7 | **1.1** |
+| cost | $0.035 | $0.063 | $0.81 | $0.32 |
+
+flash-lite's failures were API errors, not idea errors: the right rewrite with a
+wrong keyword, wrong einsum labels, a module that does not exist — every one caught
+by the harness, none accepted. `gemini-2.5-flash` makes the same rewrites and they
+trace. With flash, the agentic loop captures the same speedup as single-shot at
+40% of the cost, and on the control it twice read the seed and finished without
+measuring anything. A `lookup` tool that reads signatures from the installed JAX
+fixed the API errors — and, framed carelessly, sent flash-lite browsing for a
+"more optimized" library function instead of removing the one-hot. A tool changes
+what a model searches for, not only what it can do.
 
 ## Setup
 
