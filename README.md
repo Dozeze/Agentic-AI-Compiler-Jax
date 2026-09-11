@@ -258,7 +258,8 @@ correctness gate) and `echo` (proposes no change — the control condition that 
 the harness noise floor). `uv run halo tasks` lists the benchmarks. `--model` picks the
 Gemini model (`gemini-2.5-flash-lite` by default for development; use
 `gemini-2.5-flash` for reported sweeps); `--evaluations` and `--patience` size an
-agentic run's budget.
+agentic run's budget. `uv run halo report` regenerates `results/README.md` — every
+table, from the row files — so no number in a write-up is quoted from memory.
 
 Every run writes `runs/<timestamp>-<task>/` containing `config.json`, `env.json`,
 `result.json` (best attempt, lineage, stop reason, cost), and per attempt the exact
@@ -392,18 +393,24 @@ to the agent. Keep the docstring neutral — this file goes into the prompt, so 
 at the intended optimization invalidates the experiment.
 
 `candidate.py` defines `candidate(*inputs)` and is the only file the agent rewrites.
+Inputs may be arrays or pytrees of arrays — a dict of weights, nested as needed — so
+a model-level task reads `candidate(params, x)` the way JAX models are written; the
+harness moves the leaves to the device and passes the structure through.
 
 `ceiling.py` is the best implementation you know of, and is never shown to the agent.
 It is what makes the task's headroom a measured number rather than an assumption —
 including for controls, where it proves there is nothing to find. For a control, copy
-the seed. Then add the task to `CLASSIFICATION` and `MEASURED_HEADROOM` in
-`tasks/ceilings.py`.
+the seed. Measure it with `halo ceilings --task <name>` *before* deciding what the
+task is — two block tasks here were reshaped by that measurement — then add it to
+`CLASSIFICATION`, `TIER` and `MEASURED_HEADROOM` in `tasks/ceilings.py`. Tasks can
+also live outside the package: `HALO_TASKS_ROOT` points the loader (and the
+measurement subprocess) at another directory.
 
 A `Case` may override `atol`/`rtol` for inputs that are ill-conditioned in float32, and
 a task may set module-level `ATOL`/`RTOL` to raise its floor for every case. Reductions
 need this: an output element that cancels toward zero still carries the accumulated
 error of the whole reduction, so a 512-term float32 dot product cannot meet a tolerance
-that an elementwise operation meets easily. Five tasks here set `ATOL` for that reason,
+that an elementwise operation meets easily. Ten tasks here set `ATOL` for that reason,
 each stating the measured error that justifies the value. Always say why — a silently
 loosened tolerance is how a broken candidate gets accepted.
 

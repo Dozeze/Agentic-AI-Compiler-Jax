@@ -34,6 +34,12 @@ def _device_info(jax) -> DeviceInfo:
     )
 
 
+def to_device(jax, inputs: tuple) -> tuple:
+    """Every array leaf onto the device; dicts, tuples and nesting kept as they
+    are, so a task's ``candidate(params, x)`` sees the pytree it was written for."""
+    return tuple(jax.tree.map(jax.device_put, list(inputs)))
+
+
 def _analyze(jax, fn, name, args, dump_dir, artifacts):
     """Compile one program and collect every level of the lowering pipeline.
 
@@ -93,9 +99,7 @@ def run(request: dict) -> Measurement:
     import numpy as np
 
     device = _device_info(jax)
-    to_device = lambda arrays: tuple(jax.device_put(a) for a in arrays)
-
-    args = to_device(task.make_inputs(np.random.default_rng(cfg.seed)))
+    args = to_device(jax, task.make_inputs(np.random.default_rng(cfg.seed)))
     jax.block_until_ready(args)
 
     # Compile before checking correctness. The correctness pass would otherwise
@@ -119,7 +123,8 @@ def run(request: dict) -> Measurement:
         )
 
     report = correctness.check(
-        candidate_fn, task, cfg.correctness, jit=jax.jit, to_device=to_device
+        candidate_fn, task, cfg.correctness, jit=jax.jit,
+        to_device=lambda inputs: to_device(jax, inputs),
     )
     if correctness_only or not report.passed:
         # Do not spend minutes benchmarking something that computes the wrong

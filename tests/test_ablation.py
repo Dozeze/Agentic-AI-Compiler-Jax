@@ -234,3 +234,16 @@ def test_report_keeps_agentic_conditions_after_the_single_shot_levels():
     lines = [l for l in text.splitlines() if l.startswith("| ") and "|---" not in l]
     order = [l.split("|")[1].strip() for l in lines[1:4]]
     assert order == ["code", "algorithmic", "agentic/algorithmic"]
+
+
+# --- the results index ---------------------------------------------------------
+
+def test_the_index_regenerates_every_row_file_and_the_suite(tmp_path):
+    (tmp_path / "a.jsonl").write_text(json.dumps(
+        {**row("matmul_chain", "algorithmic", True, 11.0), "model": "m"}) + "\n")
+    (tmp_path / "a.md").write_text("narrative")
+    text = ablation.index(tmp_path)
+    assert "## `a.jsonl`" in text and "model(s): m" in text and "Narrative: `a.md`" in text
+    assert "### Effect of condition" in text, "sub-reports sit one level below the file heading"
+    for name in ceilings.CLASSIFICATION:
+        assert f"`{name}`" in text

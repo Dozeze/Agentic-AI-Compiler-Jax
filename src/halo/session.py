@@ -121,6 +121,7 @@ class RunResult:
     usages: list[Usage] = field(default_factory=list)
     tool_calls: int = 0
     checks: int = 0
+    model: str = ""
 
     @property
     def improved(self) -> bool:
@@ -334,6 +335,7 @@ class Session:
             usages=self.usages,
             tool_calls=self.tool_calls,
             checks=self.checks,
+            model=self.cfg.llm.model,
         )
         self.store.write_result(result)
         return result

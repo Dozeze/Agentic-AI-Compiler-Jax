@@ -152,6 +152,18 @@ def _ceilings(args: argparse.Namespace) -> int:
     return 0
 
 
+def _report(args: argparse.Namespace) -> int:
+    """Regenerate every results table from the rows on disk."""
+    if args.rows:
+        print(ablation.report(ablation.read(Path(args.rows))))
+        return 0
+    results = Path(args.results_dir)
+    text = ablation.index(results)
+    (results / "README.md").write_text(text)
+    print(text)
+    return 0
+
+
 def _tasks(args: argparse.Namespace) -> int:
     print(f"{'task':24s} {'tier':6s} {'class':9s} {'ceiling':>8s}")
     for name in base.available():
@@ -254,6 +266,14 @@ def main(argv: list[str] | None = None) -> int:
     ceilings_parser.add_argument("--task", default=None, choices=base.available())
     ceilings_parser.add_argument("--rounds", type=int, default=15)
     ceilings_parser.set_defaults(func=_ceilings)
+
+    report_parser = sub.add_parser(
+        "report", help="regenerate results/README.md from the .jsonl rows in results/"
+    )
+    report_parser.add_argument("--results-dir", default="results")
+    report_parser.add_argument("--rows", default=None,
+                               help="print the report for one .jsonl file instead")
+    report_parser.set_defaults(func=_report)
 
     tasks_parser = sub.add_parser("tasks", help="list available benchmark tasks")
     tasks_parser.set_defaults(func=_tasks)

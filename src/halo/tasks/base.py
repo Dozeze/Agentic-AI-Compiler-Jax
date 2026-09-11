@@ -13,9 +13,15 @@ A task module must provide::
 
     NAME: str
     DESCRIPTION: str                       # shown to the agent
-    def make_inputs(rng) -> tuple[np.ndarray, ...]
+    def make_inputs(rng) -> tuple[Input, ...]
     def reference(*inputs) -> np.ndarray            # float64 NumPy
     def correctness_cases(rng) -> list[Case]
+
+where each ``Input`` is a NumPy array or a pytree of them - a dict or tuple of
+arrays, nested as deep as needed - so a model-level task can be written as
+``candidate(params, x)`` with ``params`` a dict of weights, the way JAX models
+are written. The harness moves every leaf to the device and otherwise passes the
+structure through untouched.
 
 It may additionally set module-level ``ATOL`` / ``RTOL`` to raise the tolerance
 floor for the whole task, which reductions over many float32 terms need. State
@@ -28,12 +34,16 @@ from __future__ import annotations
 import ast
 import hashlib
 import importlib.util
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 
-TASKS_ROOT = Path(__file__).parent
+#: Where tasks live. ``HALO_TASKS_ROOT`` points it elsewhere - a private task
+#: collection, or a temporary directory in a test - and the measurement subprocess
+#: inherits it through the environment.
+TASKS_ROOT = Path(os.environ.get("HALO_TASKS_ROOT", Path(__file__).parent))
 
 
 def load_module(path: Path, name: str) -> ModuleType:
