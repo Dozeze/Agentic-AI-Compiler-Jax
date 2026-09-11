@@ -21,12 +21,16 @@ def measure(
     candidate_path: Path,
     cfg: RunConfig,
     *,
-    hlo_dump: Path | None = None,
+    artifacts: Path | None = None,
+    correctness_only: bool = False,
 ) -> Measurement:
     """Measure ``candidate_path`` against ``baseline_path`` in a fresh process.
 
     A crash, a hang or an out-of-memory kill in the candidate comes back as a
-    failed measurement rather than taking down the controller.
+    failed measurement rather than taking down the controller. ``artifacts``
+    receives the candidate's raw jaxpr, StableHLO and optimized HLO.
+    ``correctness_only`` skips the timing: it is the cheap check an agent uses to
+    debug a rewrite before spending a full evaluation on it.
     """
     with tempfile.TemporaryDirectory(prefix="halo-measure-") as tmp:
         request_path = Path(tmp) / "request.json"
@@ -46,8 +50,9 @@ def measure(
                     "candidate_path": str(candidate_path),
                     "config": dataclasses.asdict(cfg),
                     "out": str(result_path),
-                    "hlo_dump": str(hlo_dump) if hlo_dump else None,
+                    "artifacts": str(artifacts) if artifacts else None,
                     "dump_dir": str(dump_dir),
+                    "mode": "correctness" if correctness_only else "measure",
                 }
             )
         )

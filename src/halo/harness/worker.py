@@ -34,7 +34,7 @@ def _device_info(jax) -> DeviceInfo:
     )
 
 
-def _analyze(jax, fn, name, args, dump_dir):
+def _analyze(jax, fn, name, args, dump_dir, artifacts):
     """Compile one program and collect every level of the lowering pipeline.
 
     ``fn.__name__`` is set first because XLA names its dump files after the jitted
@@ -42,17 +42,20 @@ def _analyze(jax, fn, name, args, dump_dir):
     reports are indistinguishable on disk.
 
     Compile time stays lower + compile, excluding the analysis work, so it remains
-    the actual cost of obtaining an executable.
+    the actual cost of obtaining an executable. If ``artifacts`` is given, the raw
+    text of every level is written there so an agent can ask to see it later.
     """
     fn.__name__ = name
 
-    jaxpr = ir.from_jaxpr(jax.make_jaxpr(fn)(*args))
+    closed = jax.make_jaxpr(fn)(*args)
+    jaxpr = ir.from_jaxpr(closed)
 
     start = time.perf_counter()
     lowered = jax.jit(fn).lower(*args)
     lower_s = time.perf_counter() - start
 
-    stablehlo = ir.from_stablehlo(lowered.as_text())
+    stablehlo_text = lowered.as_text()
+    stablehlo = ir.from_stablehlo(stablehlo_text)
 
     start = time.perf_counter()
     compiled = lowered.compile()
@@ -65,7 +68,12 @@ def _analyze(jax, fn, name, args, dump_dir):
         hlo=hlo.summarize(compiled, text),
         buffers=buffers.read(dump_dir, name) if dump_dir else None,
     )
-    return compiled, compile_s, text, summary
+    if artifacts is not None:
+        artifacts.mkdir(parents=True, exist_ok=True)
+        (artifacts / "jaxpr.txt").write_text(str(closed))
+        (artifacts / "stablehlo.txt").write_text(stablehlo_text)
+        (artifacts / "hlo.txt").write_text(text)
+    return compiled, compile_s, summary
 
 
 def run(request: dict) -> Measurement:
@@ -94,13 +102,17 @@ def run(request: dict) -> Measurement:
     # populate jit's cache and the candidate's compile time would read as 0.00s
     # while the baseline's did not - two numbers that are not comparable.
     dump_dir = Path(request["dump_dir"]) if request.get("dump_dir") else None
+    artifacts = Path(request["artifacts"]) if request.get("artifacts") else None
+    correctness_only = request.get("mode") == "correctness"
     try:
-        baseline_compiled, baseline_compile_s, _, baseline_program = _analyze(
-            jax, baseline_fn, "baseline", args, dump_dir
+        candidate_compiled, candidate_compile_s, candidate_program = _analyze(
+            jax, candidate_fn, "candidate", args, dump_dir, artifacts
         )
-        candidate_compiled, candidate_compile_s, candidate_text, candidate_program = _analyze(
-            jax, candidate_fn, "candidate", args, dump_dir
-        )
+        baseline_compile_s = baseline_program = None
+        if not correctness_only:
+            baseline_compiled, baseline_compile_s, baseline_program = _analyze(
+                jax, baseline_fn, "baseline", args, dump_dir, None
+            )
     except Exception:
         return Measurement.failure(
             spec.name, "candidate failed to trace or compile:\n" + traceback.format_exc(limit=20)
@@ -109,8 +121,9 @@ def run(request: dict) -> Measurement:
     report = correctness.check(
         candidate_fn, task, cfg.correctness, jit=jax.jit, to_device=to_device
     )
-    if not report.passed:
-        # Do not spend minutes benchmarking something that computes the wrong answer.
+    if correctness_only or not report.passed:
+        # Do not spend minutes benchmarking something that computes the wrong
+        # answer - or something the agent only asked to have checked.
         return Measurement(
             task=spec.name,
             ok=True,
@@ -129,9 +142,6 @@ def run(request: dict) -> Measurement:
         cfg.timing,
         block=jax.block_until_ready,
     )
-
-    if (dump := request.get("hlo_dump")) is not None:
-        Path(dump).write_text(candidate_text)
 
     return Measurement(
         task=spec.name,

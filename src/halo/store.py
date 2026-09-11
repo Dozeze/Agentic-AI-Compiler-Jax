@@ -16,9 +16,13 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from halo.config import RunConfig
 from halo.types import Attempt, to_json
+
+if TYPE_CHECKING:
+    from halo.session import RunResult
 
 
 def _git_commit() -> str | None:
@@ -87,6 +91,31 @@ class RunStore:
         if raw_response is not None:
             (directory / "response.txt").write_text(raw_response)
         return directory
+
+    def write_transcript(self, turns: list[dict]) -> None:
+        """A tool-using agent's whole conversation: every call and every result."""
+        (self.root / "transcript.json").write_text(json.dumps(turns, indent=2))
+
+    def write_result(self, result: RunResult) -> None:
+        (self.root / "result.json").write_text(
+            to_json(
+                {
+                    "best": result.best.index,
+                    "improved": result.improved,
+                    "overall": result.overall,
+                    "stop_reason": result.stop_reason,
+                    "cost_usd": result.cost_usd,
+                    "usages": result.usages,
+                    "tool_calls": result.tool_calls,
+                    "checks": result.checks,
+                    "attempts": [
+                        {"index": a.index, "parent": a.parent,
+                         "accepted": a.decision.accepted, "rule": a.decision.rule}
+                        for a in result.attempts
+                    ],
+                }
+            )
+        )
 
     def write_summary(self, text: str) -> None:
         (self.root / "summary.md").write_text(text)

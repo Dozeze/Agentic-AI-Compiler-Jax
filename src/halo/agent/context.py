@@ -228,6 +228,22 @@ def _format_measurement(measurement: Measurement) -> str:
     return "\n".join(lines)
 
 
+def feedback_for(measurement: Measurement, level: str) -> str:
+    """The measurement and compiler feedback ``level`` admits, as one block.
+
+    ``code`` admits nothing measured; ``timing`` the runtimes; ``hlo`` and above
+    what XLA produced. Both the prompt and the tool results are built from this,
+    so an agent is shown the same thing whichever way it is driven.
+    """
+    if level == "code":
+        return ""
+    blocks = ["## Measurement", "", _format_measurement(measurement)]
+    if level in ("hlo", "full", "algorithmic"):
+        blocks += ["", "## Compiler feedback", "",
+                   _format_compiler_feedback(measurement, level)]
+    return "\n".join(blocks)
+
+
 def _format_history(context: Context) -> str:
     if not context.history:
         return ""
@@ -246,12 +262,15 @@ def _format_history(context: Context) -> str:
     return "\n".join(blocks)
 
 
-def render(context: Context, *, min_speedup: float, level: str = "full") -> str:
+def render(
+    context: Context, *, min_speedup: float, level: str = "full", tools: bool = False
+) -> str:
     """Build the prompt, including only the sections ``level`` admits.
 
     ``code`` is the control: the function and its semantics, nothing measured.
     ``timing`` adds runtimes, ``hlo`` adds what XLA produced, ``full`` adds the
-    levels above it and the buffer report.
+    levels above it and the buffer report. With ``tools`` the closing instructions
+    address an agent that will act through tool calls rather than answer once.
     """
     if level not in LEVELS:
         raise ValueError(f"unknown context level {level!r}; choose from {LEVELS}")
@@ -274,34 +293,46 @@ def render(context: Context, *, min_speedup: float, level: str = "full") -> str:
         f"```python\n{context.current_source}\n```",
     ]
 
-    if level != "code":
-        sections += ["", "## Measurement", "", _format_measurement(context.measurement)]
-    if level in ("hlo", "full", "algorithmic"):
-        sections += ["", "## Compiler feedback", "",
-                     _format_compiler_feedback(context.measurement, level)]
+    feedback = feedback_for(context.measurement, level)
+    if feedback:
+        sections += ["", feedback]
 
     history = _format_history(context)
     if history:
         sections.append(history)
 
-    sections += [
-        "",
-        "## Your task",
-        "",
-        "Propose ONE rewrite of `candidate.py` that runs faster on this device while",
-        "computing the same result.",
-        "",
-        "Constraints:",
-        "- Return the COMPLETE new contents of `candidate.py`, not a diff or a fragment.",
-        "- It must define `candidate(...)` with exactly the same signature and semantics.",
-        "- Import only from `jax`, `jax.numpy` and the standard library. No new dependencies.",
-        "- It must be traceable by `jax.jit`: no Python control flow on array values, no",
-        "  `.item()`, no printing, no host callbacks. Shapes are static and given above, so",
-        "  you may specialise on them.",
-        "- It must remain numerically stable for large-magnitude inputs.",
-        "- To be accepted, the 95% lower bound of the measured speedup must exceed",
-        f"  {min_speedup:.2f}x. Changes smaller than that are indistinguishable from noise.",
-        "- If the code is already optimal, return it unchanged and say so in your analysis.",
-        "",
-    ]
+    if tools:
+        sections += ["", "## Your task", "", TOOL_TASK, "", CONSTRAINTS, ""]
+    else:
+        sections += [
+            "",
+            "## Your task",
+            "",
+            "Propose ONE rewrite of `candidate.py` that runs faster on this device while",
+            "computing the same result.",
+            "",
+            CONSTRAINTS,
+            "- To be accepted, the 95% lower bound of the measured speedup must exceed",
+            f"  {min_speedup:.2f}x. Changes smaller than that are indistinguishable from noise.",
+            "- If the code is already optimal, return it unchanged and say so in your analysis.",
+            "",
+        ]
     return "\n".join(sections)
+
+
+CONSTRAINTS = """\
+Constraints on any candidate:
+- Give the COMPLETE new contents of `candidate.py`, not a diff or a fragment.
+- It must define `candidate(...)` with exactly the same signature and semantics.
+- Import only from `jax`, `jax.numpy` and the standard library. No new dependencies.
+- It must be traceable by `jax.jit`: no Python control flow on array values, no
+  `.item()`, no printing, no host callbacks. Shapes are static and given above, so
+  you may specialise on them.
+- It must remain numerically stable for large-magnitude inputs."""
+
+
+TOOL_TASK = """\
+Make `candidate.py` run faster on this device while computing the same result.
+Work through the tools: evaluate a rewrite, read what the harness says, and either
+build on it or try something else. Call `finish` when you have no further
+hypothesis worth an evaluation."""

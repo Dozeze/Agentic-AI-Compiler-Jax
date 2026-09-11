@@ -17,8 +17,19 @@ T = TypeVar("T")
 
 
 def to_json(obj: Any, *, indent: int | None = 2) -> str:
-    """Serialise any dataclass in this module (tuples become JSON arrays)."""
-    return json.dumps(dataclasses.asdict(obj), indent=indent, default=str)
+    """Serialise a dataclass, or a dict/list containing them (tuples become
+    JSON arrays)."""
+    return json.dumps(_plain(obj), indent=indent, default=str)
+
+
+def _plain(obj: Any) -> Any:
+    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+        return dataclasses.asdict(obj)
+    if isinstance(obj, dict):
+        return {k: _plain(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_plain(v) for v in obj]
+    return obj
 
 
 def _convert(annotation: Any, value: Any) -> Any:

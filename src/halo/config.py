@@ -36,6 +36,22 @@ class AcceptConfig:
 
 
 @dataclass(frozen=True)
+class BudgetConfig:
+    """What a tool-using agent may spend before the harness stops it.
+
+    ``max_evaluations`` is the comparable quantity across agents: a single-shot
+    run with ``steps=k`` and an agentic run with ``max_evaluations=k`` have taken
+    the same number of measurements. ``patience`` ends a run after that many
+    consecutive rejected evaluations; correctness-only checks never count.
+    """
+
+    max_evaluations: int = 6
+    max_tool_calls: int = 24
+    max_cost_usd: float = 0.25
+    patience: int = 3
+
+
+@dataclass(frozen=True)
 class LLMConfig:
     provider: str = "vertex"
     model: str = "gemini-2.5-flash-lite"
@@ -48,8 +64,12 @@ class LLMConfig:
 @dataclass(frozen=True)
 class RunConfig:
     task: str
+    #: Measurements a single-shot agent gets; a tool-using agent is bounded by
+    #: ``budget`` instead.
     steps: int = 1
-    agent: str = "vertex"
+    #: ``single-shot`` (one proposal per step, the controller drives) or
+    #: ``agentic`` (the model drives through tools); or a scripted agent.
+    agent: str = "single-shot"
     #: What the agent is shown and how the job is framed. See halo.agent.context.
     #: Defaults to `algorithmic` on the evidence in results/framing-n5.md: same
     #: data as `full`, 64% -> 95% of the available speedup, no extra false positives.
@@ -59,6 +79,7 @@ class RunConfig:
     timing: TimingConfig = field(default_factory=TimingConfig)
     correctness: CorrectnessConfig = field(default_factory=CorrectnessConfig)
     accept: AcceptConfig = field(default_factory=AcceptConfig)
+    budget: BudgetConfig = field(default_factory=BudgetConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
 
     @classmethod

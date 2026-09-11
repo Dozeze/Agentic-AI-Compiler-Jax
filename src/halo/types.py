@@ -243,10 +243,16 @@ class Decision:
 
 @dataclass(frozen=True)
 class Attempt:
-    """Attempt 0 is the baseline itself; later attempts carry a proposal."""
+    """Attempt 0 is the baseline itself; later attempts carry a proposal.
+
+    ``parent`` is the attempt this one was derived from. With a controller-driven
+    agent it is always the best at the time; a tool-using agent may branch from
+    any earlier attempt, which makes the ledger a tree rather than a chain.
+    """
 
     index: int
     source: str
     measurement: Measurement
     decision: Decision
     proposal: Proposal | None = None
+    parent: int | None = None

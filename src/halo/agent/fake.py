@@ -8,7 +8,9 @@ implementations from the first commit.
 
 from __future__ import annotations
 
+from halo.agent import tools
 from halo.agent.protocol import Context
+from halo.session import Session
 from halo.types import Proposal
 
 #: Batches the per-head Python loop into two einsums. Genuinely faster.
@@ -72,3 +74,23 @@ class EchoAgent:
             analysis="no change proposed",
             hypothesis="control condition: measures the harness noise floor",
         )
+
+
+class ScriptedToolAgent:
+    """Drives a session with a fixed list of ``(tool, args)`` calls, no model.
+
+    Exercises the tool loop's referee logic - budget, patience, lineage, finish -
+    without a network. Stops early if the session runs out of budget, exactly as
+    the real agent must.
+    """
+
+    def __init__(self, *calls: tuple[str, dict], name: str = "scripted-tools") -> None:
+        self.name = name
+        self._calls = calls
+        self.results: list[dict] = []
+
+    def run(self, session: Session) -> None:
+        for name, args in self._calls:
+            if session.exhausted is not None:
+                break
+            self.results.append(tools.dispatch(session, name, args))

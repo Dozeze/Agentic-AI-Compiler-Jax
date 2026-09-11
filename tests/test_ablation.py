@@ -215,3 +215,22 @@ def test_report_covers_every_context_level():
     text = ablation.report(rows)
     for level in ctx.LEVELS:
         assert f"| {level} |" in text, f"{level} missing from the report"
+
+
+# --- conditions name an agent as well as a level ---------------------------------
+
+def test_a_bare_level_is_the_single_shot_agent():
+    assert ablation.parse_condition("algorithmic") == ("single-shot", "algorithmic")
+    assert ablation.parse_condition("agentic/code") == ("agentic", "code")
+
+
+def test_report_keeps_agentic_conditions_after_the_single_shot_levels():
+    rows = [
+        row("matmul_chain", "agentic/algorithmic", True, 5.0),
+        row("matmul_chain", "code", True, 5.0),
+        row("matmul_chain", "algorithmic", True, 5.0),
+    ]
+    text = ablation.report(rows)
+    lines = [l for l in text.splitlines() if l.startswith("| ") and "|---" not in l]
+    order = [l.split("|")[1].strip() for l in lines[1:4]]
+    assert order == ["code", "algorithmic", "agentic/algorithmic"]

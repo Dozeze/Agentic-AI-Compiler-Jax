@@ -1,8 +1,10 @@
-"""Sweep task x context-level x replicate, and score the result.
+"""Sweep task x condition x replicate, and score the result.
 
-The experiment the project exists to run: hold the model, the tasks and the
-acceptance policy fixed, vary only how much the agent is told, and see whether
-compiler feedback changes what it produces.
+The experiments the project exists to run: hold the model, the tasks and the
+acceptance policy fixed, vary only how much the agent is told - or whether it
+answers once or drives the loop itself - and see what changes. A condition is a
+context level (``algorithmic``) for the single-shot agent, or ``agent/level``
+(``agentic/algorithmic``) to name the agent as well.
 
 Two things make the scoring meaningful. Raw speedup is not comparable across
 tasks, so improvable tasks are scored as the *fraction of the known ceiling*
@@ -46,6 +48,18 @@ def cells(tasks: list[str], conditions: list[str], replicates: int) -> Iterator[
                 yield Cell(task, condition, replicate)
 
 
+def parse_condition(condition: str) -> tuple[str, str]:
+    """``"algorithmic"`` -> ``("single-shot", "algorithmic")``;
+    ``"agentic/code"`` -> ``("agentic", "code")``."""
+    agent, _, level = condition.rpartition("/")
+    return (agent or "single-shot"), level
+
+
+def _condition_order(condition: str) -> tuple[int, int]:
+    agent, level = parse_condition(condition)
+    return (agent != "single-shot", LEVELS.index(level) if level in LEVELS else len(LEVELS))
+
+
 def is_changed(before: str, after: str) -> bool:
     """Did the proposal alter the program, rather than only its formatting?
 
@@ -66,7 +80,6 @@ def _row(cell: Cell, result: controller.RunResult) -> dict:
     the loop ended with, not merely what it tried last."""
     last = result.attempts[-1]
     speedup = result.overall.speedup
-    proposals = [a.proposal for a in result.attempts[1:] if a.proposal]
     return {
         **cell.__dict__,
         "accepted": result.improved,
@@ -76,11 +89,22 @@ def _row(cell: Cell, result: controller.RunResult) -> dict:
         "changed": any(
             is_changed(result.attempts[0].source, a.source) for a in result.attempts[1:]
         ),
-        "cost_usd": sum(p.usage.cost_usd for p in proposals if p.usage),
-        "input_tokens": sum(p.usage.input_tokens for p in proposals if p.usage),
-        "output_tokens": sum(p.usage.output_tokens for p in proposals if p.usage),
+        "evaluations": len(result.attempts) - 1,
+        "tool_calls": result.tool_calls,
+        "checks": result.checks,
+        "stop_reason": result.stop_reason,
+        "cost_usd": result.cost_usd,
+        "input_tokens": sum(u.input_tokens for u in result.usages),
+        "output_tokens": sum(u.output_tokens for u in result.usages),
         "error": None,
     }
+
+
+def _error_row(cell: Cell) -> dict:
+    return {**cell.__dict__, "accepted": False, "rule": "error", "speedup": None,
+            "ci_low": None, "changed": False, "evaluations": 0, "tool_calls": 0,
+            "checks": 0, "stop_reason": "error", "cost_usd": 0.0, "input_tokens": 0,
+            "output_tokens": 0, "error": traceback.format_exc(limit=5)}
 
 
 def sweep(
@@ -104,23 +128,23 @@ def sweep(
     log(f"{len(todo)} cells to run, {len(done)} already done")
 
     for index, cell in enumerate(todo, 1):
-        run_cfg = cfg.with_overrides(task=cell.task, context=cell.condition)
+        agent, level = parse_condition(cell.condition)
+        run_cfg = cfg.with_overrides(task=cell.task, context=level, agent=agent)
         if cell.task not in baselines:
             spec = base.load_spec(cell.task)
             store = RunStore(runs_dir, f"baseline-{cell.task}")
             baselines[cell.task] = controller.baseline_attempt(run_cfg, spec, store)
 
-        store = RunStore(runs_dir, f"{cell.task}-{cell.condition}-r{cell.replicate}")
+        store = RunStore(
+            runs_dir, f"{cell.task}-{cell.condition.replace('/', '-')}-r{cell.replicate}"
+        )
         try:
             result = controller.run(
                 run_cfg, make_agent(run_cfg), store, baseline=baselines[cell.task]
             )
             row = _row(cell, result)
         except Exception:  # noqa: BLE001 - one bad cell must not end the sweep
-            row = {**cell.__dict__, "accepted": False, "rule": "error",
-                   "speedup": None, "ci_low": None, "changed": False,
-                   "cost_usd": 0.0, "input_tokens": 0, "output_tokens": 0,
-                   "error": traceback.format_exc(limit=5)}
+            row = _error_row(cell)
 
         with out.open("a") as fh:
             fh.write(json.dumps(row) + "\n")
@@ -155,19 +179,18 @@ def fraction_of_ceiling(task: str, speedup: float | None, accepted: bool) -> flo
 
 
 def report(rows: list[dict]) -> str:
-    # Ordered by LEVELS rather than a copy of it, so a new level cannot be
-    # silently dropped from the report that is supposed to evaluate it.
-    present = {r["condition"] for r in rows}
-    conditions = [c for c in LEVELS if c in present]
+    # Every condition present is reported, ordered by agent then by LEVELS, so a
+    # new level or agent cannot be silently dropped from its own evaluation.
+    conditions = sorted({r["condition"] for r in rows}, key=_condition_order)
     improvable = set(ceilings.by_classification("headroom"))
     controls = set(ceilings.by_classification("null"))
 
     lines = [
-        "## Effect of context level",
+        "## Effect of condition",
         "",
-        "| context | improvable: accepted | mean % of ceiling | proposed a change | "
-        "controls: false positives | cost |",
-        "|---|---|---|---|---|---|",
+        "| condition | improvable: accepted | mean % of ceiling | proposed a change | "
+        "controls: false positives | evaluations/cell | cost |",
+        "|---|---|---|---|---|---|---|",
     ]
     for condition in conditions:
         subset = [r for r in rows if r["condition"] == condition and not r["error"]]
@@ -183,9 +206,13 @@ def report(rows: list[dict]) -> str:
         captured = f"{100 * sum(fractions) / len(fractions):.0f}%" if fractions else "-"
         false_positives = f"{sum(r['accepted'] for r in null)}/{len(null)}" if null else "-"
         changed = f"{sum(r['changed'] for r in good)}/{len(good)}" if good else "-"
+        evaluations = (
+            f"{sum(r.get('evaluations', 1) for r in subset) / len(subset):.1f}"
+            if subset else "-"
+        )
         lines.append(
             f"| {condition} | {accepted} | {captured} | {changed} | "
-            f"{false_positives} | ${cost:.4f} |"
+            f"{false_positives} | {evaluations} | ${cost:.4f} |"
         )
 
     lines += ["", "## Per task, mean % of ceiling reached", "",

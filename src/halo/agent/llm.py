@@ -63,3 +63,32 @@ class LLMResponse:
 
 class LLMClient(Protocol):
     def complete(self, system: str, user: str) -> LLMResponse: ...
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    name: str
+    args: dict
+    #: Opaque reasoning state some providers attach to a call and expect back on
+    #: the next turn. Carried verbatim; never inspected.
+    signature: str | None = None
+
+
+@dataclass(frozen=True)
+class Turn:
+    """One model turn in a tool conversation."""
+
+    calls: tuple[ToolCall, ...]
+    text: str
+    usage: Usage
+
+
+class ToolClient(Protocol):
+    """A provider that can hold a tool-calling conversation.
+
+    ``transcript`` is a list of plain dicts so it can be written to disk as-is:
+    ``{"role": "user", "text"}``, ``{"role": "model", "text", "calls"}`` and
+    ``{"role": "tool", "results": [{"name", "response"}]}``.
+    """
+
+    def converse(self, system: str, transcript: list[dict], tools: list[dict]) -> Turn: ...
