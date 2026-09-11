@@ -82,14 +82,15 @@ MEASURED_HEADROOM: dict[str, float] = {
     "cross_entropy_onehot": 2.31,
     "rnn_scan_hoist": 1.45,
     "mlp_gelu_block": 1.00,
-    "tiny_gpt_loss": 1.83,
+    "tiny_gpt_loss": 1.93,
 }
 
 # `tiny_gpt_loss` composes three of the block anti-patterns in one function, and
 # its ceiling decomposes: the embedding gather alone is 1.51x, the direct
-# cross-entropy alone 1.16x, both 1.75x, all three with batched grouped attention
-# 1.83x. Reaching the ceiling takes more than one rewrite, which is what the
-# model tier is for.
+# cross-entropy alone 1.16x, both 1.75x, all three with batched attention 1.93x.
+# The attention in its ceiling.py is the agent's: the hand-written grouped 5-d
+# einsum measured 1.83x, the agent's plain batched matmul over (b, heads) beats
+# it by 1.058x. Second ceiling the system has raised.
 
 # `multi_head_projection` was a control until the agent beat its ceiling. The
 # hand-written einsum measured 1.04x over the seed's head loop and the task was

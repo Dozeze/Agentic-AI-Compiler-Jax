@@ -15,22 +15,24 @@ def gelu(u):
 
 
 def attention(a, p):
+    # All heads in one batched matmul over (b, heads). Found by the agent
+    # (runs/flash/ablation/tiny_gpt_loss-algorithmic-r0, attempt 2): at this
+    # size the repeated k/v are cheap and plain `@` on (b, h, t, hd) beats the
+    # hand-written grouped 5-d einsum, which costs layout transposes - 1.058x
+    # [1.051, 1.064] over it, on Apple M5.
     b, t, d = a.shape
     head_dim = d // Q_HEADS
     group = Q_HEADS // KV_HEADS
-    # Query heads grouped under their kv head: (b, kv, group, t, hd); k and v are
-    # never repeated, every head is one batched matmul.
-    q = (a @ p["wq"]).reshape(b, t, KV_HEADS, group, head_dim).transpose(0, 2, 3, 1, 4)
-    k = (a @ p["wk"]).reshape(b, t, KV_HEADS, head_dim).transpose(0, 2, 1, 3)
-    v = (a @ p["wv"]).reshape(b, t, KV_HEADS, head_dim).transpose(0, 2, 1, 3)
-    scores = jnp.einsum("bgrqd,bgkd->bgrqk", q, k) / jnp.sqrt(jnp.float32(head_dim))
+    q = (a @ p["wq"]).reshape(b, t, Q_HEADS, head_dim).transpose(0, 2, 1, 3)
+    k = jnp.repeat((a @ p["wk"]).reshape(b, t, KV_HEADS, head_dim), group, axis=2)
+    v = jnp.repeat((a @ p["wv"]).reshape(b, t, KV_HEADS, head_dim), group, axis=2)
+    scores = q @ k.transpose(0, 2, 3, 1) / jnp.sqrt(jnp.float32(head_dim))
     mask = jnp.tril(jnp.ones((t, t), dtype=bool))
-    scores = jnp.where(mask, scores, -jnp.inf)
+    scores = jnp.where(mask[None, None], scores, -jnp.inf)
     scores = scores - jnp.max(scores, axis=-1, keepdims=True)
     w = jnp.exp(scores)
     w = w / jnp.sum(w, axis=-1, keepdims=True)
-    out = jnp.einsum("bgrqk,bgkd->bgrqd", w, v)  # (b, kv, group, t, hd)
-    out = out.transpose(0, 3, 1, 2, 4).reshape(b, t, d)
+    out = (w @ v.transpose(0, 2, 1, 3)).transpose(0, 2, 1, 3).reshape(b, t, d)
     return out @ p["wo"]
 
 

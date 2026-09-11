@@ -54,7 +54,7 @@ after its ceiling is measured; below ~1.3x it becomes a control.
 | `cross_entropy_onehot` | block | headroom | 2.3x | `one_hot(labels) * log_softmax` over the vocabulary |
 | `rnn_scan_hoist` | block | headroom | 1.45x | the input projection recomputed inside `lax.scan` |
 | `mlp_gelu_block` | block | null | 1.00x | matmul, GELU, matmul: XLA already fuses it |
-| `tiny_gpt_loss` | model | headroom | 1.83x | a 2-layer GPT forward + loss composing three of the above: one-hot embedding (1.51x alone), one-hot cross-entropy (1.16x), per-head attention loop with repeated K/V (1.04x) |
+| `tiny_gpt_loss` | model | headroom | 1.93x | a 2-layer GPT forward + loss composing three of the above: one-hot embedding (1.51x alone), one-hot cross-entropy (1.16x), per-head attention loop; the attention in the ceiling is the agent's |
 
 Two block tasks were reformulated by their ceilings. Grouped-query attention over a
 256-token *prefill* measured only 1.10x — repeating K/V costs O(T·D) against O(T²·D)
