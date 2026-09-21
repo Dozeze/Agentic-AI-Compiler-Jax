@@ -7,25 +7,26 @@ client = anthropic.Anthropic()
 
 messages = []
 
-# Prompts
+
+# Initialize parameters and PROMPTS
+
+exit = False
+iteration = 0
+num_iterations = 10 # Only edit this one if we want more iterations
 
 # Version 1 - only for a .py-file
+
 default_prompt_v1 = (
 "You are an agent for our system. Your purpose is to write faster code in a JAX environment. "
 "Edit an unoptimized .py file. You have ONE function for testing that reports its performance. "
-"The environment is GPU-based with jax[cuda12], so use parallelization where advantageous."
+f"The environment is GPU-based with jax[cuda12], so use parallelization where advantageous. You will have {num_iterations}"
+" number of iterations to complete this"
 )
 
 
-
-# Initialize parameters
-exit = False
-iteration = 0
-num_iterations = 10
-
-
 # Initialize agent
-agent_controller = Controller("Agent 47", default_prompt_v1)
+agent_name = "Version 1"
+agent_controller = Controller(agent_name, default_prompt_v1)
 agent_controller.initHist("Code goes here")
 
 
@@ -58,3 +59,7 @@ while (not exit):
     #Prints and counts
     print(f"Iteration: {iteration} completed. ")
     iteration += 1
+
+# 5 #TODO save the history for this agent and its prompt
+
+# 6 Make a graph on how the average execution time VS iterations
