@@ -1,30 +1,61 @@
-class Agent:
-    def __init__(self, generate):
-        self.generate = generate
+import anthropic
+from controller import Controller
 
-    def getPrompt(self):
-        return "You are given JAX code. Please optimize it."
+# Read controller.md to see how it works!
 
-    def build_prompt(self, information):
-        return f"""
-        {self.getPrompt()}
-        You are going to optimize JAX code for execution with XLA.
+client = anthropic.Anthropic()
 
-        CURRENT CODE:
-        {information["current_code"]}
+messages = []
 
-        CURRENT RUNTIME:
-        {information["current_runtime"]} seconds
+# Prompts
 
-        PREVIOUS ATTEMPTS:
-        {information["history"]}
+# Version 1 - only for a .py-file
+default_prompt_v1 = (
+"You are an agent for our system. Your purpose is to write faster code in a JAX environment. "
+"Edit an unoptimized .py file. You have ONE function for testing that reports its performance. "
+"The environment is GPU-based with jax[cuda12], so use parallelization where advantageous."
+)
 
-        Generate a faster, syntactically correct JAX implementation.
-        Keep the same function name, arguments, and results.
-        Return only Python code, including any required imports.
-        """.strip()
 
-    def propose_code_by_agent(self, info):
-        prompt = self.build_prompt(info)
-        response = self.generate(prompt)
-        return response.strip()
+
+# Initialize parameters
+exit = False
+iteration = 0
+num_iterations = 10
+
+
+# Initialize agent
+agent_controller = Controller("Agent 47", default_prompt_v1)
+agent_controller.initHist("Code goes here")
+
+
+# Agent does rest
+while (not exit):
+
+    # Iteration count
+    if (iteration == 0):
+        user_input = [default_prompt_v1]
+
+    elif (iteration == (num_iterations + 1)): # Exits after num_iterations iterations
+        exit = True
+        break
+    else:
+
+        pass
+
+    # 1. Give agent controller #TODO
+    # 1.1 Provide history
+
+    # 2. Give agent tools #TODO
+    # 2.1 
+
+    # 3. Edit the python file
+
+    # 4. Save this version to the controller
+    agent_controller.updateHist("New code")
+
+
+
+
+    print(f"Iteration: {iteration} completed. ")
+    iteration += 1
