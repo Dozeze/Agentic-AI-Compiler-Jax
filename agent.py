@@ -33,14 +33,10 @@ agent_controller.initHist("Code goes here")
 while (not exit):
 
     # Iteration count
-    if (iteration == 0):
-        user_input = [default_prompt_v1]
-
-    elif (iteration == (num_iterations + 1)): # Exits after num_iterations iterations
+    if (iteration == (num_iterations + 1)): # Exits after num_iterations iterations
         exit = True
         break
     else:
-
         pass
 
     # 1. Give agent controller #TODO
@@ -51,11 +47,14 @@ while (not exit):
 
     # 3. Edit the python file
 
+    # 3.1 Make the agent run the edit-function s.t. it edits the .py file
+
+    # 3.2 Copy the .py file
+
     # 4. Save this version to the controller
     agent_controller.updateHist("New code")
 
 
-
-
+    #Prints and counts
     print(f"Iteration: {iteration} completed. ")
     iteration += 1
