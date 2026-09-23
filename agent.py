@@ -1,4 +1,7 @@
 import anthropic
+import jax
+import jax.numpy as jnp
+
 from controller import Controller
 
 # Read controller.md to see how it works!
@@ -10,7 +13,6 @@ messages = []
 
 # Initialize parameters and PROMPTS
 
-exit = False
 iteration = 0
 num_iterations = 10 # Only edit this one if we want more iterations
 
@@ -26,19 +28,25 @@ f"The environment is GPU-based with jax[cuda12], so use parallelization where ad
 
 # Initialize agent
 agent_name = "Version 1"
-agent_controller = Controller(agent_name, default_prompt_v1)
-agent_controller.initHist("Code goes here")
+initial_code = """
+import jax.numpy as jnp
+
+def bad_func(x, y):
+    return x + y
+"""
+namespace = {}
+exec(initial_code, namespace)
+reference_func = jax.jit(namespace["bad_func"])
+X_test = jnp.arange(32, dtype=jnp.float32)
+Y_test = jnp.ones(32, dtype=jnp.float32)
+args = (X_test, Y_test)
+
+agent_controller = Controller(agent_name, default_prompt_v1, reference_func, args, function_name="bad_func", max_iterations=num_iterations)
+agent_controller.initHist(initial_code)
 
 
 # Agent does rest
-while (not exit):
-
-    # Iteration count
-    if (iteration == (num_iterations + 1)): # Exits after num_iterations iterations
-        exit = True
-        break
-    else:
-        pass
+while iteration < num_iterations:
 
     # 1. Give agent controller #TODO
     # 1.1 Provide history
@@ -53,7 +61,9 @@ while (not exit):
     # 3.2 Copy the .py file
 
     # 4. Save this version to the controller
-    agent_controller.updateHist("New code")
+    # Use the original code until the Claude proposal step is implemented.
+    new_code = initial_code
+    agent_controller.updateHist(new_code)
 
 
     #Prints and counts

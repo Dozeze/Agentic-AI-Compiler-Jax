@@ -7,7 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "anthropic[vertex]>=1.3.0",
     "claude-agent-sdk>=0.2.151",
-    "jax[cuda13]>=0.11.1",
+    "jax==0.4.38", # change this to jax[cuda13] if u have cuda 
     "python-dotenv>=1.2.3",
 ]
 
