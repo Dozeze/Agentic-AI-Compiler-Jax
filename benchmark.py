@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 
 
-def timeit_version_1(function, args, num_runs=30, num_tests=5):
+def timeit_version_1(function, args, num_runs=30_000, num_tests=10):
     """Return the mean runtime per call across several timing batches."""
     if num_runs <= 0:
         raise ValueError("num_runs must be positive.")
@@ -29,7 +29,7 @@ def timeit_version_1(function, args, num_runs=30, num_tests=5):
         f"Average execution time: {mean_runtime * 1e6:.2f} µs "
         f"(std: {std_runtime * 1e6:.2f} µs)"
     )
-    return mean_runtime
+    return mean_runtime, std_runtime
 
 
 def evaluate(code, reference_func, args, num_runs=30, num_tests=5, function_name="kernel"):
@@ -58,5 +58,5 @@ def evaluate(code, reference_func, args, num_runs=30, num_tests=5, function_name
     if not correct:
         return True, None, False, None
 
-    runtime = timeit_version_1(candidate, args, num_runs=num_runs, num_tests=num_tests)
-    return True, None, True, runtime
+    runtime_mean, runtime_std = timeit_version_1(candidate, args, num_runs=num_runs, num_tests=num_tests)
+    return True, None, True, runtime_mean, runtime_std
