@@ -3,8 +3,10 @@ from copy import deepcopy
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
-
 import benchmark
+import anthropic
+
+client = anthropic.Anthropic()
 
 
 class Controller:
@@ -65,13 +67,38 @@ class Controller:
 
         self.history.append({"iteration": self.iteration, "code": new_code, "runtime_mean": runtime_mean, "runtime_std": runtime_std, "syntax_correct": syntax_correct, "output_correct": output_correct, "accepted": accepted, "changes": changes, "error": error})
         return accepted
-
+    
+    #def provideTools(self):
+    #    """Return the tools that the controller exposes to the agent."""
+    #    return [{"name": "get_history", "description": 
+    #             "Get all optimization attempts and their results.", "input_schema": {"type": "object", "properties": {}}}]
+    
     def provideTools(self):
-        """Return the tools that the controller exposes to the agent."""
-        return [{"name": "get_history", "description": 
-                 "Get all optimization attempts and their results.", "input_schema": {"type": "object", "properties": {}}}]
-
-
+        tools = [{
+                "name": "get_history",
+                "description": (
+                    "Get all optimization attempts and their results. "
+                    "Returns a list of dictionaries, one per completed iteration. "
+                    "Each dictionary contains the following keys: "
+                    "'iteration' (int): iteration number; "
+                    "'code' (string): code attempted; "
+                    "'runtime_mean' (number): mean execution time; "
+                    "'runtime_std' (number): standard deviation of execution time; "
+                    "'syntax_correct' (boolean): whether the code is syntactically valid; "
+                    "'output_correct' (boolean): whether the output matches the reference; "
+                    "'accepted' (boolean): whether this attempt became the current best; "
+                    "'changes' (string): description of changes from the previous best code; "
+                    "'error' (string or null): error encountered during evaluation."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": False
+                }
+            }]
+        
+        return tools
 
     def current_runtime(self, new_code):
         """Check syntax and output correctness, then return the measured runtime."""
@@ -90,8 +117,8 @@ class Controller:
 
 
     def provide_hist(self):
-        """copy history"""
-        return deepcopy(self.history)
+        """Return the history of all completed iterations."""
+        return {"history": deepcopy(self.history)}
 
 
     def provide_prompt(self):
@@ -103,6 +130,10 @@ class Controller:
 
     def import_info(self):
         """ Imports the running function """
+        
+        with open("algorithm.py", "r") as f:
+            code = f.read()
+        return code
 
     def agent_loop(self):
         """ Performs the agent loop with anthropic LLM """
@@ -157,8 +188,6 @@ class Controller:
         run_time_mean = jnp.array(execution_hist_mean)
         run_time_std = jnp.array(execution_hist_mean)
         run_iterations = jnp.arange(0, len(run_time_mean))
-
-
 
         plt.plot(run_iterations, run_time_mean, label = "Runtime VS agent iteration")
         plt.fill_between(

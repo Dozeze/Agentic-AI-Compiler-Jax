@@ -2,11 +2,11 @@ import anthropic
 import jax
 import jax.numpy as jnp
 
-from controller import Controller
+from controller import *
 
 # Read controller.md to see how it works!
 
-client = anthropic.Anthropic()
+#client = anthropic.Anthropic()
 
 
 # Initialize parameters and PROMPTS
@@ -39,8 +39,11 @@ X_test = jnp.arange(32, dtype=jnp.float32)
 Y_test = jnp.ones(32, dtype=jnp.float32)
 args = (X_test, Y_test)
 
-agent_controller = Controller(agent_name, default_prompt_v1, reference_func, args, initial_code, function_name="bad_func", max_iterations=num_iterations)
-agent_controller.initHist(initial_code)
 
+
+#3 lines of code to run a agent
+agent_controller = Controller(agent_name, default_prompt_v1, reference_func, 
+                              args, initial_code, function_name="bad_func", 
+                              max_iterations=num_iterations)
 agent_controller.agent_loop()
 agent_controller.graph_it()
