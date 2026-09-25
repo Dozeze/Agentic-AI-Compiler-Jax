@@ -4,6 +4,10 @@ import jax.numpy as jnp
 
 from controller import *
 
+client = anthropic.Anthropic()
+
+
+
 # Read controller.md to see how it works!
 
 #client = anthropic.Anthropic()
@@ -41,9 +45,23 @@ args = (X_test, Y_test)
 
 
 
-#3 lines of code to run a agent
+#
 agent_controller = Controller(agent_name, default_prompt_v1, reference_func, 
-                              args, initial_code, function_name="bad_func", 
+                              args, initial_code, client, function_name="bad_func", 
                               max_iterations=num_iterations)
-agent_controller.agent_loop()
+agent_controller.agent_loop() # JUST A LOOP FOR TESTING! NOT THE ACTUAL LOOP. THE LOOP SHOULD NOT BE INSIDE
+# THE CONTROLLER.
 agent_controller.graph_it()
+
+
+
+
+# TODO - Create an agent
+
+# Agent should: - Get controller in order to USE function HOWEVER it wants
+# Then based on this, it should be able to test strategies to make the code better
+# In the controller, we should also implement a max_iter, which is the max number of times
+# it can run tests on the hardware.
+
+# Then we should have ANOTHER loop for the agent, and the number of loops, N, is the number of
+# times we ask the agent to improve the code. 

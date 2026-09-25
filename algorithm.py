@@ -26,6 +26,7 @@ def loss(x, y, f, c):
     return loss_val
 
 # Algorithm to run:
+
 c = 100
 
 for it in range(max_iter):

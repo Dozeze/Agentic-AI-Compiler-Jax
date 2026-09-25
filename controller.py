@@ -4,13 +4,11 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import benchmark
-import anthropic
-
-client = anthropic.Anthropic()
+import json
 
 
 class Controller:
-    def __init__(self, agent: str, prompt, reference_func, args, initial_code, function_name="kernel", max_iterations=10):
+    def __init__(self, agent: str, prompt, reference_func, args, initial_code, client, function_name="kernel", max_iterations=10):
         """Store the agent, prompt, benchmark data, and optimization state."""
         self.agent = agent
         self.init_prompt = prompt
@@ -33,7 +31,13 @@ class Controller:
         self.iteration = 0
 
         #kolla om kod är syntaxically korrekt och om den överstämmer med det avsedda outputen
-        syntax_correct, error, output_correct, runtime_mean, runtime_std = self.current_runtime(original_code)
+        result = self.current_runtime(original_code)
+        syntax_correct = result["syntax_correct"]
+        error = result["error"]
+        output_correct = result["output_correct"]
+        runtime_mean = result["runtime_mean"]
+        runtime_std = result["runtime_std"]
+
         accepted = syntax_correct and output_correct
 
         if accepted: #om ok
@@ -54,10 +58,23 @@ class Controller:
             Updates history AFTER an iteration is completed.    
         """       
         self.iteration += 1
-        syntax_correct, error, output_correct, runtime_mean, runtime_std = self.current_runtime(new_code)
-        changes = self.changesPython(self.best_code, new_code)
-        accepted = syntax_correct and output_correct and self.best_runtime is not None and runtime_mean < self.best_runtime
+        result = self.current_runtime(new_code)
 
+        syntax_correct = result["syntax_correct"]
+        error = result["error"]
+        output_correct = result["output_correct"]
+        runtime_mean = result["runtime_mean"]
+        runtime_std = result["runtime_std"]
+
+        changes = self.changesPython(self.best_code, new_code)
+        accepted = (
+            syntax_correct
+            and output_correct
+            and (
+                self.best_runtime is None
+                or runtime_mean < self.best_runtime
+            )
+        )
         if accepted:
             self.best_code = new_code
             self.best_runtime = runtime_mean
@@ -74,31 +91,57 @@ class Controller:
     #             "Get all optimization attempts and their results.", "input_schema": {"type": "object", "properties": {}}}]
     
     def provideTools(self):
-        tools = [{
+        return [
+            {
                 "name": "get_history",
                 "description": (
-                    "Get all optimization attempts and their results. "
-                    "Returns a list of dictionaries, one per completed iteration. "
-                    "Each dictionary contains the following keys: "
-                    "'iteration' (int): iteration number; "
-                    "'code' (string): code attempted; "
-                    "'runtime_mean' (number): mean execution time; "
-                    "'runtime_std' (number): standard deviation of execution time; "
-                    "'syntax_correct' (boolean): whether the code is syntactically valid; "
-                    "'output_correct' (boolean): whether the output matches the reference; "
-                    "'accepted' (boolean): whether this attempt became the current best; "
-                    "'changes' (string): description of changes from the previous best code; "
-                    "'error' (string or null): error encountered during evaluation."
+                    "Get the complete optimization history. "
+                    "Use this to see previous candidate implementations, "
+                    "their correctness, runtime, and whether they were accepted."
                 ),
                 "input_schema": {
                     "type": "object",
                     "properties": {},
                     "required": [],
-                    "additionalProperties": False
-                }
-            }]
-        
-        return tools
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "get_current_code",
+                "description": (
+                    "Get the current best JAX implementation being optimized."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "benchmark_code",
+                "description": (
+                    "Benchmark a candidate JAX implementation. "
+                    "The candidate is checked for syntax and output correctness "
+                    "before being benchmarked. This does not automatically make "
+                    "the candidate the current best implementation."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "code": {
+                            "type": "string",
+                            "description": (
+                                "Complete Python source code containing the "
+                                "candidate JAX function."
+                            ),
+                        }
+                    },
+                    "required": ["code"],
+                    "additionalProperties": False,
+                },
+            },
+        ]
 
     def current_runtime(self, new_code):
         """Check syntax and output correctness, then return the measured runtime."""
@@ -115,16 +158,16 @@ class Controller:
         result = "\n".join(changes)
         return result if result else "No changes"
 
-
     def provide_hist(self):
-        """Return the history of all completed iterations."""
-        return {"history": deepcopy(self.history)}
+        """Return the history of all completed iterations to the agent"""
+        return deepcopy(self.history)
 
 
     def provide_prompt(self):
         """ Provides all prompts to agent """
 
         #TODO Should also return the prompt of each iteration -> work as memory (future)
+        #TODO ^- already inside provide_hist
 
         return self.init_prompt
 
@@ -134,6 +177,12 @@ class Controller:
         with open("algorithm.py", "r") as f:
             code = f.read()
         return code
+
+    def get_current_code(self):
+        return self.best_code
+
+    def benchmark_code(self, code):
+        return self.current_runtime(code)
 
     def agent_loop(self):
         """ Performs the agent loop with anthropic LLM """
@@ -147,20 +196,12 @@ class Controller:
 
         while iteration <= self.max_iterations:
 
-
-            #1. Have the agent look at the code with initial_code
-
-            to_agent_1 = self.initial_code
-
-            #2. Give the agent instructions
-
-            to_agent_2 = self.provide_prompt()
-
-            #3. Give agent tools
-
-            to_agent_3 = self.provideTools()
-
-            #4. Make it change the code
+            # 1. get_history()
+            # 2. get_current_code()
+            # 3. propose code
+            # 4. benchmark_code(code)
+            # 5. LLM sees result
+            # 6. 
 
             to_agent_4 = 1 #TODO
 
@@ -186,17 +227,17 @@ class Controller:
             execution_hist_std.append(self.history[i]["runtime_std"])
 
         run_time_mean = jnp.array(execution_hist_mean)
-        run_time_std = jnp.array(execution_hist_mean)
+        run_time_std = jnp.array(execution_hist_std)
         run_iterations = jnp.arange(0, len(run_time_mean))
 
         plt.plot(run_iterations, run_time_mean, label = "Runtime VS agent iteration")
         plt.fill_between(
             run_iterations,
-            run_time_mean - 0.5 * run_time_std,
-            run_time_mean + 0.5 * run_time_std,
+            run_time_mean - run_time_std,
+            run_time_mean +  run_time_std,
             alpha=0.5,
             label=r"$\pm 1$ 0.5 * standard deviation"
         )
-        plt.grid
+        plt.grid()
         plt.legend()
         plt.show()
