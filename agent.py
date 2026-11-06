@@ -1,7 +1,9 @@
-
+"""Run the agentic optimization loop on a trusted JAX workload."""
 import argparse
 import inspect
+import json
 import os
+import sys
 from pathlib import Path
 
 import anthropic
@@ -9,7 +11,12 @@ import jax
 import jax.numpy as jnp
 from dotenv import load_dotenv
 
+from contracts import Budgets, ConfigError, ModelSettings, config_hash, resolve_run_config, to_dict
 from controller import Controller, read_python_source
+from environment import BACKENDS, BackendUnavailable, collect_environment, select_backend
+
+REPO = Path(__file__).resolve().parent
+MANIFEST_SCHEMA = "manifest/v1"
 
 # Read controller.md to see how it works!
 #client = anthropic.Anthropic()
@@ -17,8 +24,10 @@ from controller import Controller, read_python_source
 
 # Initialize parameters and PROMPTS
 
-DEFAULT_MODEL = "claude-haiku-4-5-20251001"
-DEFAULT_ITERATIONS = 10 # Only edit this one if we want more iterations
+DEFAULT_MODEL = ModelSettings().model_id
+# Default number of candidate evaluations. Changed from 10 to 3 to match the AIC-1.1 §7
+# development ceiling (team decision P4); the value lives in contracts.Budgets.
+DEFAULT_ITERATIONS = Budgets().max_candidates
 
 
 # Version 1 - only for a .py-file
@@ -99,24 +108,74 @@ def bad_func(x, y):
     )
 
 
-def main(argv=None):
-    load_dotenv(Path(".env.local"))
+def atomic_write_json(path, obj):
+    """Write strict JSON (no NaN/inf) atomically: write a temporary file, then replace."""
+    path = Path(path)
+    temporary_path = path.with_suffix(path.suffix + ".tmp")
+    temporary_path.write_text(json.dumps(obj, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+    temporary_path.replace(path)
+
+
+def _build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--iterations", type=int, default=DEFAULT_ITERATIONS)
-    parser.add_argument("--model", default=os.getenv("CLAUDE_MODEL", DEFAULT_MODEL))
+    parser.add_argument("--iterations", type=int, default=None,
+                        help=f"maximum candidate evaluations (budgets.max_candidates; default {DEFAULT_ITERATIONS})")
+    parser.add_argument("--model", default=None,
+                        help=f"model id (default: $CLAUDE_MODEL, else the config value, else {DEFAULT_MODEL})")
     parser.add_argument("--source", type=Path, help="trusted Python workload file to optimize")
-    parser.add_argument("--function", default="bad_func", help="function name in --source")
+    parser.add_argument("--function", default=None, help="function name in --source (default: bad_func)")
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("runs/latest"),
-        help="directory for per-iteration JSON artifacts",
+        default=None,
+        help="directory for per-iteration JSON artifacts (default: runs/latest)",
     )
     parser.add_argument("--plot", action="store_true", help="show the runtime history plot")
     parser.add_argument("--require-gpu", action="store_true", help="fail if JAX cannot use a GPU")
+    parser.add_argument("--backend", choices=BACKENDS, default=None,
+                        help="JAX backend to select before any JAX computation; never falls back silently. "
+                             "Without it, JAX chooses (legacy) and the run is marked non-scientific")
+    parser.add_argument("--config", type=Path, default=None,
+                        help="JSON RunConfig v1 file; precedence is CLI > file > defaults")
+    return parser
+
+
+def _cli_overrides(args):
+    """Map explicit CLI values onto RunConfig keys. None means 'not given'."""
+    return {
+        "backend": args.backend,
+        "budgets.max_candidates": args.iterations,
+        # CLAUDE_MODEL keeps its legacy precedence: below --model, above the config file.
+        "model.model_id": args.model or os.getenv("CLAUDE_MODEL") or None,
+        "source_path": str(args.source) if args.source is not None else None,
+        "function_name": args.function,
+        "output_dir": str(args.output_dir) if args.output_dir is not None else None,
+    }
+
+
+def main(argv=None):
+    load_dotenv(Path(".env.local"))
+    parser = _build_parser()
     args = parser.parse_args(argv)
 
-    devices = jax.devices()
+    try:
+        cfg = resolve_run_config(_cli_overrides(args), args.config)
+    except ConfigError as error:
+        parser.error(str(error))
+
+    if args.require_gpu and cfg.backend in ("cpu", "tpu"):
+        parser.error(f"--require-gpu conflicts with backend {cfg.backend!r}")
+
+    # Select the backend BEFORE any JAX computation: building the controller execs the workload file,
+    # and JAX 0.4.38 silently ignores a selection made after its backends are initialised.
+    if cfg.backend is not None:
+        try:
+            devices = select_backend(cfg.backend)
+        except BackendUnavailable as error:
+            print(f"error: {error}", file=sys.stderr)
+            sys.exit(2)
+    else:
+        devices = jax.devices()
     if args.require_gpu and not any(device.platform == "gpu" for device in devices):
         parser.error(f"--require-gpu was requested, but JAX only sees: {devices}")
     print(f"JAX devices: {devices}")
@@ -124,17 +183,36 @@ def main(argv=None):
     if not os.getenv("ANTHROPIC_API_KEY"):
         raise RuntimeError("ANTHROPIC_API_KEY is missing; put it in .env.local or the environment")
 
+    # Record the run before any LLM call.
+    output_dir = Path(cfg.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    manifest = {
+        "schema_version": MANIFEST_SCHEMA,
+        "run_config_sha256": config_hash(cfg),
+        "argv": list(sys.argv[1:] if argv is None else argv),
+        "backend_requested": cfg.backend,
+        "scientific": cfg.backend is not None,
+        "reason": None if cfg.backend is not None else "backend not explicitly selected",
+        "environment": collect_environment(REPO, devices),
+    }
+    atomic_write_json(output_dir / "run_config.json", to_dict(cfg))
+    atomic_write_json(output_dir / "manifest.json", manifest)
+
     client = anthropic.Anthropic()
     controller = build_controller(
         client,
-        max_iterations=args.iterations,
-        source_path=args.source,
-        function_name=args.function,
-        output_dir=args.output_dir,
+        max_iterations=cfg.budgets.max_candidates,
+        source_path=Path(cfg.source_path) if cfg.source_path is not None else None,
+        function_name=cfg.function_name,
+        output_dir=output_dir,
     )
-    # agent_controller.agent_loop() # JUST A LOOP FOR TESTING! NOT THE ACTUAL LOOP. THE LOOP SHOULD NOT BE INSIDE
-    # THE CONTROLLER.
-    history = controller.agent_loop(model=args.model)
+    if cfg.budgets.max_candidates == 0:
+        # A zero candidate budget is valid and means: no provider request at all.
+        history = controller.provide_hist()
+    else:
+        # agent_controller.agent_loop() # JUST A LOOP FOR TESTING! NOT THE ACTUAL LOOP. THE LOOP SHOULD NOT BE INSIDE
+        # THE CONTROLLER.
+        history = controller.agent_loop(model=cfg.model.model_id, max_tokens=cfg.model.max_tokens)
 
     print(f"Completed {len(history) - 1} candidate evaluations.")
     print(f"Best runtime: {controller.best_runtime}")

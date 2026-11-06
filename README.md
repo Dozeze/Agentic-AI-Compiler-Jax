@@ -66,3 +66,26 @@ och sparas i JSON.
 - Spara kandidater som riktiga `.py`-filer och kunna välja en vinnare att skriva tillbaka.
 - Kontrollera korrekthet med fler testfall och göra tidsmätningarna mindre känsliga för brus.
 - Lägga till HLO-inspektion och senare HLO-ändringar.
+
+## Backend selection and run configuration (AIC-002)
+
+- `--backend {cpu,cuda,rocm,tpu}` selects the JAX backend before any JAX computation and exits with code 2
+  (one error line, no traceback) if it is unavailable; it never falls back silently. Without `--backend`, JAX
+  chooses itself (legacy behaviour) and the run is recorded as non-scientific.
+- `--config PATH` reads a JSON `RunConfig v1` file (see `contracts.py`). Precedence: CLI > config file > defaults.
+  Unknown keys and wrong types are rejected.
+- **`--iterations` now defaults to 3** (was 10), the AIC-1.1 §7 development ceiling (team decision P4).
+- Every run writes `run_config.json` (resolved configuration) and `manifest.json` (config hash, argv, versions,
+  devices, lock-file hash, git commit and dirty flag; only allowlisted environment variables) into the output
+  directory, after backend selection and before any LLM call.
+
+```bash
+uv run --locked python agent.py --backend cpu --source workloads/example.py --function bad_func --iterations 1
+```
+
+## Tests
+
+```bash
+uv sync --locked
+uv run --locked pytest -q        # offline: no API key and no network needed
+```

@@ -50,3 +50,22 @@ after `agent.py` to this command.
 Each evaluation writes `iteration_0000.json`, `iteration_0001.json`, and so on,
 plus a cumulative `history.json`. The JSON records include the complete candidate
 source, unified source diff, runtime mean/std, correctness, and accept/reject decision.
+
+## Backend and run configuration
+
+Select the JAX backend explicitly; the run stops with exit code 2 if it is unavailable instead of silently
+falling back to CPU:
+
+```bash
+uv run --locked python agent.py --backend cpu --source workloads/example.py --function bad_func --iterations 1
+uv run --locked --extra cuda12 python agent.py --backend cuda --require-gpu --iterations 1   # inside WSL2 on the NV host
+```
+
+`--config run.json` loads a JSON `RunConfig v1` (fields in `contracts.py`), for example:
+
+```json
+{"backend": "cpu", "budgets": {"max_candidates": 2}, "model": {"model_id": "claude-haiku-4-5-20251001"}}
+```
+
+Precedence is CLI > config file > defaults. `--iterations` defaults to 3 (changed from 10 to match the
+AIC-1.1 §7 development ceiling). Each run directory also contains `run_config.json` and `manifest.json`.

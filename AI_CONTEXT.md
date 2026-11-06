@@ -49,12 +49,12 @@ scratch scripts — **never import them from tests**.
   environment. Setup: `docs/WSL2_CUDA_SETUP.md` (written in AIC-031).
 - CPU tests: `uv sync --locked && uv run --locked pytest -q` (no API key, no network).
 - GPU (inside WSL2): `uv sync --locked --extra cuda12 && uv run --locked --extra cuda12 pytest -q`.
-- Legacy run (needs a key in `.env.local`): `uv run --locked python agent.py --source workloads/example.py --function bad_func --iterations 1`
+- Run (needs a key in `.env.local`): `uv run --locked python agent.py --backend cpu --source workloads/example.py --function bad_func --iterations 1` (`--config run.json` for a RunConfig v1 file)
 
 ## 5. Status (update every push)
 | Milestone | Tasks | Owner | Status |
 |---|---|---|---|
-| M1 Foundations & target | AIC-001, 031, 002, 003 | Harry | in progress on `harry/batch-01`: AIC-001 done locally (offline pytest suite, fake Anthropic client, CI); AIC-031 Mac part done (`environment.py`, `scripts/probe_target.py`, `evidence/targets/mac-cpu.json`, `docs/TARGET_DECISION.md` **DRAFT**) — NV-host probe (phase B) pending |
+| M1 Foundations & target | AIC-001, 031, 002, 003 | Harry | in progress on `harry/batch-01`: AIC-001 done locally (offline pytest suite, fake Anthropic client, CI); AIC-031 Mac part done (`environment.py`, `scripts/probe_target.py`, `evidence/targets/mac-cpu.json`, `docs/TARGET_DECISION.md` **DRAFT**) — NV-host probe (phase B) pending; AIC-002 done locally (`contracts.py` RunConfig v1, `--backend`/`--config`, `run_config.json` + `manifest.json`) |
 | M2 Reliable, isolated evaluation | AIC-004 … 009 | AIC-004: Harry; rest TBD | not started |
 | M3 – M8 | AIC-010 … 033 | TBD | not started |
 
@@ -73,14 +73,14 @@ Course deadlines (fixed by KTH, not by AIC-1.1): report draft **2026-11-20 17:00
 - P1 `docs/IMPLEMENTATION_PLAN.md`, the 33-task backlog, `CODEBASE_AUDIT.md`, `CODEX_WORKFLOW.md` do not exist yet; the team creates and maintains them from now on. Batch 01 creates `docs/IMPLEMENTATION_PROGRESS.md` (its first entry is the batch-01 report).
 - P2 Who is the "owner" who approves milestones? [whole team]
 - P3 Keep WSL2, or dual-boot Ubuntu on the NV host? [WSL2; revisit only if a hard requirement fails]
-- P4 `--iterations` default 10 → 3 per AIC-1.1 §7? [3]
+- P4 `--iterations` default 10 → 3 per AIC-1.1 §7? [3; implemented in AIC-002 as `Budgets.max_candidates = 3` — set it back to 10 if the team disagrees]
 - P5 Softmax large-offset edge case: 200 or 1e4? Must be fixed **before any search**. [200: still catches a non-stabilised softmax; offsets ≥ 1000 reject the valid `exp(x - logsumexp(x))` rewrite at rtol 1e-5]
 - P6 New flat module `environment.py` (backend selection + env capture)? [yes; added by AIC-031 — merge into `contracts.py` if the team objects, interface unchanged]
 - P7 What must be done by the 2026-11-20 report draft? [unset]
 - P8 LLM provider and money cap (no live calls without a cap, AIC-1.1 §7). [Anthropic; cap unset → live disabled]
 - P9 What to do with `claude-experiment` results (Sergio). [reference only]
 - P10 Move root scratch scripts into `scratch/`? [leave them; AIC-001 isolates them with `testpaths = ["tests"]`]
-- P11 Record the hostname in run manifests? [yes; hash it if anyone objects]
+- P11 Record the hostname in run manifests? [yes (`environment.platform.node`); hash it if anyone objects]
 
 ## 7. Rules for code changes
 - One branch per person/batch; never push straight to `main`. One task per commit/PR; message starts with the task ID (`AIC-001: ...`).
@@ -103,6 +103,15 @@ JAX 0.4.38:
 - Use `environment.select_backend(name)` with `cpu|cuda|rocm|tpu` (never `gpu`); it raises `BackendUnavailable`
   and verifies the actual device platform. Tests that select a backend must run in a subprocess.
 - On macOS `os.sched_getaffinity` does not exist: recorded under `unavailable`, never guessed.
+
+Run configuration (AIC-002):
+- `agent.main()` order matters: resolve config → select backend → `--require-gpu` check → key check → write
+  `run_config.json` + `manifest.json` → build controller (execs the workload) → loop. Building the controller first
+  would initialise JAX and make the backend selection silently ineffective.
+- `bool` is a subclass of `int`: `contracts._coerce` rejects it (and floats) for int fields.
+- Budgets are recorded, not enforced (AIC-013/015); only `max_candidates` (= `--iterations`) changes behaviour.
+  `max_candidates = 0` makes no provider request.
+- `CLAUDE_MODEL` sits between `--model` and the config file in precedence.
 - Pallas on CPU: interpret mode only (`ValueError` otherwise) — not native-kernel evidence.
 - Current `benchmark.evaluate` accepts a candidate that is faster only by noise (same code: 4.80 / 4.00 / 4.03 µs) — fixed by AIC-005/006, not before.
 - Current `benchmark.evaluate` treats reference `inf` == candidate `inf` as correct — fixed by AIC-004.
@@ -123,6 +132,7 @@ WSL2 + CUDA (NVIDIA CUDA-on-WSL guide; to be confirmed on the host):
 - Mac CPU and WSL2 GPU results are different measurement populations — never compare them.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-06 Harry — AIC-002: `contracts.py` (RunConfig v1, strict parsing, CLI > file > defaults, sha256 hash); `agent.py --backend/--config`, writes `run_config.json` + `manifest.json` before any LLM call; `--iterations` default 10 → 3.
 - 2026-11-06 Harry — AIC-031 (Mac part): `environment.py` backend selection + environment capture; `scripts/probe_target.py` (`target_probe/v1`); `evidence/targets/mac-cpu.json`; `docs/WSL2_CUDA_SETUP.md`; `docs/TARGET_DECISION.md` (DRAFT).
 - 2026-11-06 Harry — AIC-001: pytest dev dependency, offline test suite (`tests/`), fake Anthropic client, GitHub Actions CI; `.env`/`.env.save` untracked, `.env.example` added; `.DS_Store` git-ignored.
 - 2026-11-06 Harry — created this file; process documents recorded as not yet existing; English-only rule; branch `harry/batch-01`; NV host is Windows (WSL2 path); personal plans in `docs/plans/` are git-ignored.
