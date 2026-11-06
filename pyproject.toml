@@ -15,3 +15,16 @@ dependencies = [
 [project.optional-dependencies]
 # JAX 0.4.38 supports CUDA 12 wheels on Linux. Keep the CPU setup as default.
 cuda12 = ["jax[cuda12]==0.4.38; sys_platform == 'linux'"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]          # only tests/ is collected; root scripts are never collected
+addopts = "-ra -p no:anyio"    # the anyio plugin emits PytestRemovedIn10Warning on pytest 9.2; it is unused
+markers = [
+  "slow: takes longer than 10 seconds",
+  "needs_gpu: needs a real GPU; skipped otherwise",
+]

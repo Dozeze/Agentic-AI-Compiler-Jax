@@ -12,3 +12,17 @@ wheels/
 env.local
 runs/
 env.local
+
+# Personal implementation plans (local only, not shared)
+docs/plans/
+
+# Secrets: only the template is tracked
+.env
+.env.*
+!.env.example
+
+# Large raw profiler traces
+evidence/**/*.gz
+
+# macOS Finder metadata
+.DS_Store
