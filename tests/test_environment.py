@@ -9,6 +9,8 @@ import sys
 
 import pytest
 
+from backends import gpu_env
+
 PRELUDE = "import json, sys; sys.path.insert(0, {repo!r}); from environment import *\n"
 
 
@@ -80,10 +82,19 @@ def test_environment_required_keys(repo_root, clean_env):
 
 
 @pytest.mark.needs_gpu
-def test_cuda_on_host(repo_root, clean_env):
-    env = {k: v for k, v in clean_env.items() if k != "JAX_PLATFORMS"}
-    result = _run(repo_root, env, SELECT.format(name="cuda"))
-    if not result["ok"]:
-        pytest.skip(f"no CUDA here: {result['error_type']}")
+def test_cuda_on_host(repo_root):
+    # conftest has already skipped this test unless CUDA is available, so a failure here is real.
+    result = _run(repo_root, gpu_env(), SELECT.format(name="cuda"))
+    assert result["ok"], result
     print(f"CUDA device platforms: {result['platforms']}")
     assert result["platforms"]
+
+
+@pytest.mark.parametrize("platforms, expected", [
+    (["cpu"], False), (["gpu"], True), (["cuda"], True), (["rocm"], True), (["cpu", "cuda"], True), ([], False),
+])
+def test_has_gpu_accepts_every_gpu_platform_name(platforms, expected):
+    from types import SimpleNamespace
+
+    from environment import has_gpu
+    assert has_gpu([SimpleNamespace(platform=p) for p in platforms]) is expected

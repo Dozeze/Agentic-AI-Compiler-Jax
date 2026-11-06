@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 from contracts import Budgets, ConfigError, ModelSettings, config_hash, resolve_run_config, to_dict
 from controller import Controller, read_python_source
-from environment import BACKENDS, BackendUnavailable, collect_environment, select_backend
+from environment import BACKENDS, BackendUnavailable, collect_environment, has_gpu, select_backend
 
 REPO = Path(__file__).resolve().parent
 MANIFEST_SCHEMA = "manifest/v1"
@@ -176,7 +176,7 @@ def main(argv=None):
             sys.exit(2)
     else:
         devices = jax.devices()
-    if args.require_gpu and not any(device.platform == "gpu" for device in devices):
+    if args.require_gpu and not has_gpu(devices):
         parser.error(f"--require-gpu was requested, but JAX only sees: {devices}")
     print(f"JAX devices: {devices}")
 

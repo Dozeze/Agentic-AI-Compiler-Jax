@@ -26,5 +26,5 @@ testpaths = ["tests"]          # only tests/ is collected; root scripts are neve
 addopts = "-ra -p no:anyio"    # the anyio plugin emits PytestRemovedIn10Warning on pytest 9.2; it is unused
 markers = [
   "slow: takes longer than 10 seconds",
-  "needs_gpu: needs a real GPU; skipped otherwise",
+  "needs_gpu: needs CUDA; skipped without it, an error with --require-gpu",
 ]

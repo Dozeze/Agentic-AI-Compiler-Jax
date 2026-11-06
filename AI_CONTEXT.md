@@ -48,13 +48,14 @@ scratch scripts — **never import them from tests**.
   Windows GPU support; WSL2 is "experimental" in the JAX docs). All official measurements run there, in one fixed
   environment. Setup: `docs/WSL2_CUDA_SETUP.md` (written in AIC-031).
 - CPU tests: `uv sync --locked && uv run --locked pytest -q` (no API key, no network).
-- GPU (inside WSL2): `uv sync --locked --extra cuda12 && uv run --locked --extra cuda12 pytest -q`.
+- GPU (inside WSL2): `uv sync --locked --extra cuda12 && uv run --locked --extra cuda12 pytest -q --require-gpu`
+  (`--require-gpu` turns the `needs_gpu` skip into a setup error, non-zero exit, when CUDA is broken).
 - Run (needs a key in `.env.local`): `uv run --locked python agent.py --backend cpu --source workloads/example.py --function bad_func --iterations 1` (`--config run.json` for a RunConfig v1 file)
 
 ## 5. Status (update every push)
 | Milestone | Tasks | Owner | Status |
 |---|---|---|---|
-| M1 Foundations & target | AIC-001, 031, 002, 003 | Harry | batch 01 AWAITING_ACCEPTANCE on `harry/batch-01` (report: `docs/IMPLEMENTATION_PROGRESS.md`): AIC-001 done locally (offline pytest suite, fake Anthropic client, CI); AIC-031 Mac part done (`environment.py`, `scripts/probe_target.py`, `evidence/targets/mac-cpu.json`, `docs/TARGET_DECISION.md` **DRAFT**) — NV-host probe (phase B) pending; AIC-002 done locally (`contracts.py` RunConfig v1, `--backend`/`--config`, `run_config.json` + `manifest.json`); AIC-003 done locally (`workloads/registry.py` WorkloadSpec v1, seeded `softmax`, float64 oracle, legacy `example_add`) |
+| M1 Foundations & target | AIC-001, 031, 002, 003 | Harry | batch 01 AWAITING_ACCEPTANCE on `harry/batch-01` (report: `docs/IMPLEMENTATION_PROGRESS.md`): AIC-001 done locally (offline pytest suite, fake Anthropic client, CI); AIC-031 Mac part done (`environment.py`, `scripts/probe_target.py`, `evidence/targets/mac-cpu.json`, `docs/TARGET_DECISION.md` **DRAFT**) — NV-host probe (phase B) pending; AIC-002 done locally (`contracts.py` RunConfig v1, `--backend`/`--config`, `run_config.json` + `manifest.json`); AIC-003 done locally (`workloads/registry.py` WorkloadSpec v1, seeded `softmax`, float64 oracle, legacy `example_add`); dual-backend rules D-06 + guard tests (`tests/test_backend_portability.py`) |
 | M2 Reliable, isolated evaluation | AIC-004 … 009 | AIC-004: Harry; rest TBD | AIC-004 done locally (`benchmark.compare_outputs` / `check_correctness`, correctness matrix of 18 softmax fixtures); 005 … 009 not started |
 | M3 – M8 | AIC-010 … 033 | TBD | not started |
 
@@ -68,6 +69,8 @@ Course deadlines (fixed by KTH, not by AIC-1.1): report draft **2026-11-20 17:00
 - D-03 AI use is allowed with this file kept up to date.
 - D-04 English only for documentation and code comments.
 - D-05 The NV host runs Windows with an NVIDIA RTX 40-series GPU (Ada, newer than Volta, so CUPTI profiling under WSL2 is supported); the GPU path is WSL2 Ubuntu + Windows NVIDIA driver (no Linux driver inside WSL). Exact model and driver version are recorded by the AIC-031 probe.
+- D-06 All code and tests run on both CPU and CUDA, so every member can test locally (Mac, CI: CPU). CPU runs
+  prove correctness only; CUDA correctness and **all** timing evidence come from the NV host. Rules: §7.
 
 **Pending** (default in brackets — used until the team decides)
 - P1 `docs/IMPLEMENTATION_PLAN.md`, the 33-task backlog, `CODEBASE_AUDIT.md`, `CODEX_WORKFLOW.md` do not exist yet; the team creates and maintains them from now on. Batch 01 creates `docs/IMPLEMENTATION_PROGRESS.md` (its first entry is the batch-01 report).
@@ -90,6 +93,25 @@ Course deadlines (fixed by KTH, not by AIC-1.1): report draft **2026-11-20 17:00
 - Never dump `os.environ`; record only allowlisted variables.
 - Use AI incrementally: small, explainable steps the committer can present (1.5 h final presentation).
 - Correctness is a hard gate before timing; never loosen a tolerance after seeing a failing candidate.
+
+**Dual-backend code (D-06).** `tests/test_backend_portability.py` has best-effort AST guards for rules 1 and 5,
+tests the `--require-gpu` wiring of rule 2 and demonstrates rule 3; rules 2 (subprocess) and 4 are review-only.
+1. **Never choose a backend in harness code** (root modules, `workloads/`, `scripts/`). It comes from
+   `RunConfig.backend` through `environment.select_backend()`. Outside `environment.py`: no `jax.devices("gpu")`,
+   no `backend=` or `device=` arguments, no `jax.default_device`, no `jax.config.update("jax_platforms", ...)`, no
+   `JAX_PLATFORMS`. To ask "is this a GPU?", use `environment.has_gpu(devices)`. Test setup (`tests/conftest.py`,
+   `tests/backends.py`) and CI may set `JAX_PLATFORMS`.
+2. **Tests run on CPU by default.** A test that only makes sense on a GPU is marked `@pytest.mark.needs_gpu`
+   and runs JAX in a subprocess with `tests/backends.gpu_env()`. It is skipped without CUDA; on the NV host run
+   `pytest --require-gpu` so a broken CUDA setup errors instead of skipping.
+3. **Pallas: `interpret=jax.default_backend() == "cpu"`.** Hard-coded `False` does not compile on CPU; hard-coded
+   `True` would time the interpreter on the GPU. Interpret-mode results are correctness evidence only.
+   Exception: `scripts/probe_target.py` hard-codes both values on purpose, to probe each mode.
+4. **One tolerance per workload, fixed before any search** (in `WorkloadSpec`, covered by `policy_hash`). If a
+   backend needs a different one — GPU float32 matmuls may default to TF32 (to confirm in phase B) — declare it in
+   the spec up front. Current workloads have no matmul and use the same tolerance on both backends.
+5. **No speed claims in ordinary tests.** Checking that a timing exists (`> 0`, finite) is fine; comparing runtimes
+   or speedups belongs in `slow` or `needs_gpu` tests. Mac numbers are never compared with NV-host numbers.
 
 ## 8. Verified pitfalls (keep current)
 JAX 0.4.38:
@@ -143,6 +165,13 @@ Tests (AIC-001):
 - `agent.main()` loads `.env.local` from the cwd: tests use the `no_key` fixture (key removed, cwd = `tmp_path`).
 - pytest exits with code 5 when it collects no tests; the anyio plugin is disabled (`-p no:anyio`) to avoid a pytest 9.2 warning.
 
+Dual backend (D-06):
+- `conftest.py` forces `JAX_PLATFORMS=cpu` (assignment, not `setdefault`), so the pytest process runs on CPU even
+  on the NV host and even if the shell exports `JAX_PLATFORMS=cuda`. GPU checks run in a child process without it.
+- `needs_gpu` skipping is done by `conftest.pytest_runtest_setup` (one CUDA probe subprocess per session, only when
+  a `needs_gpu` test runs); a marker alone skips nothing. The skip is reported at `conftest.py`, not at the test.
+- `Device.platform` for CUDA may be `gpu` or `cuda` (phase B confirms which); never compare it with a literal.
+
 WSL2 + CUDA (NVIDIA CUDA-on-WSL guide; to be confirmed on the host):
 - Install only the Windows NVIDIA driver; **never** a Linux driver inside WSL; avoid the `cuda`/`cuda-drivers` apt packages.
 - `nvidia-smi` is at `/usr/lib/wsl/lib/nvidia-smi` and often not on PATH; many NVML queries are unsupported; GPU clocks cannot be locked.
@@ -151,6 +180,7 @@ WSL2 + CUDA (NVIDIA CUDA-on-WSL guide; to be confirmed on the host):
 - Mac CPU and WSL2 GPU results are different measurement populations — never compare them.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-06 Harry — D-06 dual-backend rules (§7, `CLAUDE.md`); `needs_gpu` auto-skip and `pytest --require-gpu` in `tests/conftest.py`; forced CPU pin; `environment.has_gpu` (used by `agent.py --require-gpu`); guard tests `tests/test_backend_portability.py`, revised after review.
 - 2026-11-06 Harry — batch 01 report in `docs/IMPLEMENTATION_PROGRESS.md` (status AWAITING_ACCEPTANCE); phase A passed on the Mac; phase B (NV host) pending.
 - 2026-11-06 Harry — AIC-004: `benchmark.py` PyTree comparator, `build_cases`, `check_correctness`, result types and policy hash; legacy `evaluate()` uses it (inf vs inf now rejected; PyTree outputs supported); softmax fixture matrix in `tests/fixtures/`.
 - 2026-11-06 Harry — AIC-003: `workloads/registry.py` (WorkloadSpec v1, `softmax` + legacy `example_add`), `workloads/softmax.py` reference, `workloads/oracles.py` float64 oracle; softmax `OFFSET = 200` (P5 default).

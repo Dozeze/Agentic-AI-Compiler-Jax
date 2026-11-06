@@ -182,9 +182,44 @@ contracts 24 passed (0.04 s); agent_cli 9 passed (23.6 s); workloads 38 passed (
 Total under 2 minutes on CPU; no test is marked `slow`.
 
 ### Still to do
-- §6 phase B on the NV host inside WSL2: `uv sync --locked --extra cuda12`, full suite including `needs_gpu`,
+- §6 phase B on the NV host inside WSL2: `uv sync --locked --extra cuda12`, full suite with `--require-gpu`,
   `probe_target.py --backend cuda --label nvhost-wsl2-cuda`; then fill `docs/TARGET_DECISION.md`, confirm the
   CUDA `device.platform` value and profiler device-lane names (update `environment._ACCEPTED_PLATFORMS`,
   `probe_target._DEVICE_LANE_MARKERS` and `AI_CONTEXT.md` §8 if they differ), and add the results here.
 - Team sign-off of `docs/TARGET_DECISION.md`; team confirmation of the defaults above (P4, P5, P6, P10, P11).
 - First CI run once the branch is pushed.
+
+## Post-batch 01: dual-backend rules (D-06) · 2026-11-06 · owner: Harry · status: AWAITING_REVIEW
+
+Team decision: all code and tests must run on both CPU and CUDA so every member can test locally. Rules are in
+`AI_CONTEXT.md` §7 (summary in `CLAUDE.md`). Changes:
+- `tests/conftest.py`: `needs_gpu` tests are now really skipped without CUDA (before, the marker alone skipped
+  nothing and the one GPU test skipped itself); new `pytest --require-gpu` makes them error instead, for the NV
+  host. `JAX_PLATFORMS=cpu` is now forced, not `setdefault`.
+- `tests/backends.py`: `gpu_env()` and a cached `cuda_status()` probe (one child process per session; a crash
+  reports the last stderr line).
+- `environment.has_gpu(devices)`: accepts every GPU platform name (`gpu`, `cuda`, `rocm`); `agent.py --require-gpu`
+  and `tests/test_foundation.py` use it instead of `platform == "gpu"`.
+- `tests/test_backend_portability.py`: best-effort AST guards for rules 1 and 5, each first run on bad and good
+  snippets; `--require-gpu` error path; a Pallas softmax candidate with `interpret=jax.default_backend() == "cpu"`
+  passes the correctness gate on CPU, while `interpret=False` gives `COMPILE_FAILED`
+  ("Only interpret mode is supported on CPU backend").
+
+Review (separate session, report `D-06-dual-backend-review.md`, not committed): no blockers; all findings were
+reproduced and fixed:
+- S1: forced CPU pin. Before the fix, `JAX_PLATFORMS=cuda pytest -k pallas` failed 2 tests; now 8 pass.
+- S2, S10: wording: which rules are guarded, rule 1 scope, `--require-gpu` errors rather than fails.
+- S3: the rule-5 guard checks each pair of a chained comparison; `> 0` is allowed only on a single value.
+- S4: the rule-1 guard matches the last name segment and `backend=` / `device=` on any call.
+- S5: the rule-5 guard adds `*_s` / `*_time` names, `== pytest.approx`, class and module `pytestmark` markers;
+  ignores `len(...)` and `timeout` names.
+- S6: crash reason keeps stderr.
+- S7: one subprocess run instead of two.
+- S8: case-count asserts.
+- S9: `has_gpu`.
+Known limits: asserts in helper functions and `if ...: raise AssertionError` are not inspected; rule 4 has no
+machine check; the TF32 default on GPU is to be confirmed in phase B.
+
+Mac result after the fixes: `uv run --locked pytest -q -rs` → 179 passed, 1 skipped
+(`needs_gpu: CUDA unavailable (AssertionError: <no message>)`), 50 s;
+`pytest --require-gpu tests/test_environment.py::test_cuda_on_host` → 1 error (exit 1), as intended.

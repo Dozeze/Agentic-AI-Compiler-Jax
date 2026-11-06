@@ -19,6 +19,7 @@ BACKENDS = ("cpu", "cuda", "rocm", "tpu")
 # In JAX 0.4.x, Device.platform reports "gpu" for both CUDA and ROCm; client.platform may distinguish them.
 # To be confirmed on the NV host (AIC-031 phase B).
 _ACCEPTED_PLATFORMS = {"cpu": {"cpu"}, "cuda": {"gpu", "cuda"}, "rocm": {"gpu", "rocm"}, "tpu": {"tpu"}}
+_GPU_PLATFORMS = _ACCEPTED_PLATFORMS["cuda"] | _ACCEPTED_PLATFORMS["rocm"]
 
 # The only environment variables ever recorded. Never dump os.environ.
 ENV_ALLOWLIST = ("JAX_PLATFORMS", "JAX_ENABLE_X64", "XLA_FLAGS", "XLA_PYTHON_CLIENT_PREALLOCATE",
@@ -27,6 +28,11 @@ ENV_ALLOWLIST = ("JAX_PLATFORMS", "JAX_ENABLE_X64", "XLA_FLAGS", "XLA_PYTHON_CLI
 
 # On WSL2, nvidia-smi lives here and is often not on PATH (NVIDIA CUDA on WSL user guide).
 _WSL_NVIDIA_SMI = "/usr/lib/wsl/lib/nvidia-smi"
+
+
+def has_gpu(devices) -> bool:
+    """True if any device is a CUDA or ROCm GPU, whichever platform name JAX reports for it."""
+    return any(device.platform in _GPU_PLATFORMS for device in devices)
 
 
 class BackendUnavailable(RuntimeError):

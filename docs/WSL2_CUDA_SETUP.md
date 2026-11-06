@@ -44,7 +44,7 @@ Steps marked *(to confirm)* have not yet been executed on the NV host; update th
 
 ## 4. Probe and tests (AIC-031 phase B)
 ```bash
-uv run --locked --extra cuda12 pytest -q                     # all pass, including needs_gpu
+uv run --locked --extra cuda12 pytest -q --require-gpu       # all pass; without CUDA, needs_gpu tests error instead of skipping
 uv run --locked --extra cuda12 python scripts/probe_target.py --backend cuda --label nvhost-wsl2-cuda --out evidence/targets
 ```
 Then copy the results (`backend.status`, `profiler.coverage`, `profiler.device_lanes`, `kernel.pallas_native`,

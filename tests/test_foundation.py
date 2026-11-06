@@ -50,7 +50,8 @@ def test_missing_key_is_reported(no_key):
 
 def test_require_gpu_fails_on_cpu(no_key):
     import jax
-    if any(d.platform == "gpu" for d in jax.devices()):
+    from environment import has_gpu
+    if has_gpu(jax.devices()):
         pytest.skip("a GPU is present")
     import agent
     with pytest.raises(SystemExit) as exc:
