@@ -1,0 +1,196 @@
+{
+  "schema_version": "target_probe/v1",
+  "label": "mac-cpu",
+  "backend": {
+    "requested": "cpu",
+    "status": "AVAILABLE",
+    "error_type": null,
+    "detail": null
+  },
+  "environment": {
+    "schema_version": "environment/v1",
+    "captured_utc": "2026-11-06T14:25:38Z",
+    "python": "3.12.16",
+    "platform": {
+      "system": "Darwin",
+      "release": "24.6.0",
+      "machine": "arm64",
+      "node": "HUAWEI-MateBookM1Pro.local",
+      "wsl": false
+    },
+    "versions": {
+      "jax": "0.4.38",
+      "jaxlib": "0.4.38",
+      "numpy": "2.5.2"
+    },
+    "jax": {
+      "default_backend": "cpu",
+      "x64": false
+    },
+    "devices": [
+      {
+        "id": 0,
+        "platform": "cpu",
+        "device_kind": "cpu",
+        "client_platform": "cpu",
+        "platform_version": "cpu"
+      }
+    ],
+    "device_count": 1,
+    "cpu": {
+      "count": 8,
+      "affinity": null
+    },
+    "timer": {
+      "perf_counter_resolution_s": 4.166666666666667e-08
+    },
+    "gpu_tools": {
+      "nvidia_smi": null
+    },
+    "env_allowlist": {
+      "JAX_PLATFORMS": null,
+      "JAX_ENABLE_X64": null,
+      "XLA_FLAGS": null,
+      "XLA_PYTHON_CLIENT_PREALLOCATE": null,
+      "XLA_PYTHON_CLIENT_MEM_FRACTION": null,
+      "CUDA_VISIBLE_DEVICES": null,
+      "HIP_VISIBLE_DEVICES": null,
+      "OMP_NUM_THREADS": null,
+      "TF_CPP_MIN_LOG_LEVEL": "1",
+      "WSL_DISTRO_NAME": null
+    },
+    "repo": {
+      "git_commit": "289e613e51c18ef702338fda68519ca888a68e05",
+      "git_dirty": true,
+      "on_windows_mount": false,
+      "uv_lock_sha256": "5f2447f3dc78927c015ac4f7ff2ba0ae3bbba39f84081763a07aa6fff91ff170",
+      "pyproject_sha256": "bf274a12b7c7c67be1b42acf36791d53858c7a147244f3a77904620b534c3b94"
+    },
+    "unavailable": {
+      "cpu_affinity": "os.sched_getaffinity is not available on this OS (e.g. macOS)",
+      "nvidia_smi": "nvidia-smi not found"
+    }
+  },
+  "ir": {
+    "shape": [
+      128,
+      1024
+    ],
+    "jaxpr": {
+      "ok": true,
+      "lines": 17
+    },
+    "lower": {
+      "ok": true
+    },
+    "stablehlo": {
+      "ok": true,
+      "lines": 16
+    },
+    "hlo": {
+      "ok": true,
+      "lines": 33
+    },
+    "compiled_text": {
+      "ok": true,
+      "lines": 65
+    },
+    "cost_analysis": {
+      "ok": true,
+      "type": "list",
+      "has_flops": true,
+      "flops": 524032.0,
+      "n_keys": 8
+    },
+    "memory_analysis": {
+      "ok": true,
+      "type": "CompiledMemoryStats",
+      "fields": {
+        "alias_size_in_bytes": 0,
+        "argument_size_in_bytes": 524288,
+        "generated_code_size_in_bytes": 0,
+        "host_alias_size_in_bytes": 0,
+        "host_argument_size_in_bytes": 0,
+        "host_generated_code_size_in_bytes": 0,
+        "host_output_size_in_bytes": 0,
+        "host_temp_size_in_bytes": 0,
+        "output_size_in_bytes": 524288,
+        "temp_size_in_bytes": 16896
+      }
+    }
+  },
+  "profiler": {
+    "status": "ok",
+    "coverage": "CPU_EXECUTION_EVENTS",
+    "granularity": "executable",
+    "note": "executable-level runtime events; not per-HLO-op device time",
+    "n_complete_events": 208,
+    "top_event_names": [
+      "ThreadpoolListener::Record",
+      "ThreadpoolListener::StartRegion",
+      "ThreadpoolListener::StopRegion",
+      "PjitFunction(_softmax)",
+      "TfrtCpuBuffer::Await",
+      "TfrtCpuExecutable::Execute",
+      "ParseArguments",
+      "TfrtCpuExecutable::ExecuteHelper",
+      "ThunkExecutor::Execute (wait for completion)",
+      "broadcast_divide_fusion.clone"
+    ],
+    "device_lanes": []
+  },
+  "kernel": {
+    "pallas_import": {
+      "status": "ok"
+    },
+    "pallas_native": {
+      "status": "error",
+      "ok": false,
+      "error_type": "ValueError",
+      "detail": "Only interpret mode is supported on CPU backend."
+    },
+    "pallas_interpret": {
+      "status": "ok",
+      "correct": true
+    },
+    "ffi": {
+      "status": "ok",
+      "attributes": [
+        "ffi_call",
+        "ffi_lowering",
+        "include_dir",
+        "pycapsule",
+        "register_ffi_target"
+      ],
+      "include_dir_exists": true
+    },
+    "c_compiler": {
+      "compiler": "cc",
+      "version": "Apple clang version 17.0.0 (clang-1700.0.13.5)"
+    }
+  },
+  "isolation": {
+    "docker": false,
+    "nvidia_container": null,
+    "nvidia_container_note": "not attempted (use --try-docker-gpu)",
+    "cgroup_v2": false,
+    "user_namespaces": false,
+    "os": "Darwin",
+    "wsl": false,
+    "cwd_on_windows_mount": false
+  },
+  "resources": {
+    "devices": [
+      {
+        "id": 0,
+        "memory_stats": null
+      }
+    ],
+    "host_ram_bytes": 17179869184
+  },
+  "dispatch_probe": {
+    "calls": 1000,
+    "median_us": 4.083849489688873,
+    "note": "informative only; not a benchmark (see AIC-005/006)"
+  }
+}
