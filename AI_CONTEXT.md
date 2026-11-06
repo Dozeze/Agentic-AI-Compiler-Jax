@@ -55,7 +55,7 @@ scratch scripts — **never import them from tests**.
 | Milestone | Tasks | Owner | Status |
 |---|---|---|---|
 | M1 Foundations & target | AIC-001, 031, 002, 003 | Harry | in progress on `harry/batch-01`: AIC-001 done locally (offline pytest suite, fake Anthropic client, CI); AIC-031 Mac part done (`environment.py`, `scripts/probe_target.py`, `evidence/targets/mac-cpu.json`, `docs/TARGET_DECISION.md` **DRAFT**) — NV-host probe (phase B) pending; AIC-002 done locally (`contracts.py` RunConfig v1, `--backend`/`--config`, `run_config.json` + `manifest.json`); AIC-003 done locally (`workloads/registry.py` WorkloadSpec v1, seeded `softmax`, float64 oracle, legacy `example_add`) |
-| M2 Reliable, isolated evaluation | AIC-004 … 009 | AIC-004: Harry; rest TBD | not started |
+| M2 Reliable, isolated evaluation | AIC-004 … 009 | AIC-004: Harry; rest TBD | AIC-004 done locally (`benchmark.compare_outputs` / `check_correctness`, correctness matrix of 18 softmax fixtures); 005 … 009 not started |
 | M3 – M8 | AIC-010 … 033 | TBD | not started |
 
 Course deadlines (fixed by KTH, not by AIC-1.1): report draft **2026-11-20 17:00**; presentation + final report
@@ -119,9 +119,21 @@ Workloads (AIC-003):
 - The float64 oracle (`workloads/oracles.py`) validates the reference only; candidates are compared with the
   jit-compiled reference (AIC-004). JAX x64 is off, so the oracle runs in NumPy.
 - The registry is not wired into `agent.py` yet (M3); `--source/--function` remains the run path.
+
+Correctness (AIC-004):
+- `check_correctness` compares candidates with the **jit-compiled frozen reference**, not the oracle. A failing or
+  non-finite reference raises `ReferenceInvalid` (harness bug, never a candidate failure).
+- Categories: `COMPILE_FAILED`, `EXECUTION_FAILED`, `STRUCTURE_MISMATCH` (tree, shape, dtype — bf16 for f32 fails),
+  `NONFINITE`, `NUMERIC_MISMATCH`. A compile failure is not retried for the same shape/dtype; other shapes are.
+- `build_cases(..., include_heldout_shapes=True)` is a smoke test only, never AIC-018 held-out evidence.
+- Relative error uses denominator `max(|e|, max(1e-3·max|e|, tiny))`; it is reported only, not used for the verdict.
+- `policy_hash` covers tolerance, non-finite policy, case names, workload id and reference sha256.
 - Pallas on CPU: interpret mode only (`ValueError` otherwise) — not native-kernel evidence.
 - Current `benchmark.evaluate` accepts a candidate that is faster only by noise (same code: 4.80 / 4.00 / 4.03 µs) — fixed by AIC-005/006, not before.
-- Current `benchmark.evaluate` treats reference `inf` == candidate `inf` as correct — fixed by AIC-004.
+- Since AIC-004, `benchmark.evaluate` rejects non-finite output even when the reference is non-finite too
+  (`error` = "reference produced non-finite values; …"), and supports PyTree outputs; timing now uses
+  `jax.block_until_ready(out)` so tuple/dict outputs can be timed. The five legacy result keys keep their meaning;
+  a size-bounded `correctness` key is added (it reaches the LLM via `get_history`; never inputs or seeds).
 - `exp(x - logsumexp(x))` is a valid softmax rewrite but fails rtol 1e-5 when logits are offset by ≥ 1000.
 - `controller.agent_loop` passes the **same** `messages` list object on every API call (mutated in place);
   `tests/fakes.py` stores a snapshot per call.
@@ -139,6 +151,7 @@ WSL2 + CUDA (NVIDIA CUDA-on-WSL guide; to be confirmed on the host):
 - Mac CPU and WSL2 GPU results are different measurement populations — never compare them.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-06 Harry — AIC-004: `benchmark.py` PyTree comparator, `build_cases`, `check_correctness`, result types and policy hash; legacy `evaluate()` uses it (inf vs inf now rejected; PyTree outputs supported); softmax fixture matrix in `tests/fixtures/`.
 - 2026-11-06 Harry — AIC-003: `workloads/registry.py` (WorkloadSpec v1, `softmax` + legacy `example_add`), `workloads/softmax.py` reference, `workloads/oracles.py` float64 oracle; softmax `OFFSET = 200` (P5 default).
 - 2026-11-06 Harry — AIC-002: `contracts.py` (RunConfig v1, strict parsing, CLI > file > defaults, sha256 hash); `agent.py --backend/--config`, writes `run_config.json` + `manifest.json` before any LLM call; `--iterations` default 10 → 3.
 - 2026-11-06 Harry — AIC-031 (Mac part): `environment.py` backend selection + environment capture; `scripts/probe_target.py` (`target_probe/v1`); `evidence/targets/mac-cpu.json`; `docs/WSL2_CUDA_SETUP.md`; `docs/TARGET_DECISION.md` (DRAFT).
