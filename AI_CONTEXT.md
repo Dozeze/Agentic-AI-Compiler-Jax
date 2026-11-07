@@ -9,7 +9,7 @@
 > Keep this file short: it is the current state, not a history. Detailed evidence goes in
 > `docs/IMPLEMENTATION_PROGRESS.md`; the full plan is `docs/IMPLEMENTATION_PLAN.md`.
 
-Last updated: 2026-11-06 by Harry (Weizhuo Sun)
+Last updated: 2026-11-07 by Harry (Weizhuo Sun)
 
 ---
 
@@ -55,7 +55,7 @@ scratch scripts — **never import them from tests**.
 ## 5. Status (update every push)
 | Milestone | Tasks | Owner | Status |
 |---|---|---|---|
-| M1 Foundations & target | AIC-001, 031, 002, 003 | Harry | batch 01 AWAITING_ACCEPTANCE on `harry/batch-01` (report: `docs/IMPLEMENTATION_PROGRESS.md`): AIC-001 done locally (offline pytest suite, fake Anthropic client, CI); AIC-031 Mac part done (`environment.py`, `scripts/probe_target.py`, `evidence/targets/mac-cpu.json`, `docs/TARGET_DECISION.md` **DRAFT**) — NV-host probe (phase B) pending; AIC-002 done locally (`contracts.py` RunConfig v1, `--backend`/`--config`, `run_config.json` + `manifest.json`); AIC-003 done locally (`workloads/registry.py` WorkloadSpec v1, seeded `softmax`, float64 oracle, legacy `example_add`); dual-backend rules D-06 + guard tests (`tests/test_backend_portability.py`) |
+| M1 Foundations & target | AIC-001, 031, 002, 003 | Harry | batch 01 AWAITING_ACCEPTANCE, pushed to `origin/harry/batch-01` (D-07; report: `docs/IMPLEMENTATION_PROGRESS.md`): AIC-001 done locally (offline pytest suite, fake Anthropic client, CI); AIC-031 Mac part done (`environment.py`, `scripts/probe_target.py`, `evidence/targets/mac-cpu.json`, `docs/TARGET_DECISION.md` **DRAFT**) — NV-host probe (phase B) pending; AIC-002 done locally (`contracts.py` RunConfig v1, `--backend`/`--config`, `run_config.json` + `manifest.json`); AIC-003 done locally (`workloads/registry.py` WorkloadSpec v1, seeded `softmax`, float64 oracle, legacy `example_add`); dual-backend rules D-06 + guard tests (`tests/test_backend_portability.py`) |
 | M2 Reliable, isolated evaluation | AIC-004 … 009 | AIC-004: Harry; rest TBD | AIC-004 done locally (`benchmark.compare_outputs` / `check_correctness`, correctness matrix of 18 softmax fixtures); 005 … 009 not started |
 | M3 – M8 | AIC-010 … 033 | TBD | not started |
 
@@ -71,6 +71,8 @@ Course deadlines (fixed by KTH, not by AIC-1.1): report draft **2026-11-20 17:00
 - D-05 The NV host runs Windows with an NVIDIA RTX 40-series GPU (Ada, newer than Volta, so CUPTI profiling under WSL2 is supported); the GPU path is WSL2 Ubuntu + Windows NVIDIA driver (no Linux driver inside WSL). Exact model and driver version are recorded by the AIC-031 probe.
 - D-06 All code and tests run on both CPU and CUDA, so every member can test locally (Mac, CI: CPU). CPU runs
   prove correctness only; CUDA correctness and **all** timing evidence come from the NV host. Rules: §7.
+- D-07 Hand-off: the author verifies locally (full suite + phase A on the Mac), then pushes their own branch;
+  the rest of the team runs it from there (CI, and phase B on the NV host). Nobody pushes to `main` directly.
 
 **Pending** (default in brackets — used until the team decides)
 - P1 `docs/IMPLEMENTATION_PLAN.md`, the 33-task backlog, `CODEBASE_AUDIT.md`, `CODEX_WORKFLOW.md` do not exist yet; the team creates and maintains them from now on. Batch 01 creates `docs/IMPLEMENTATION_PROGRESS.md` (its first entry is the batch-01 report).
@@ -180,6 +182,7 @@ WSL2 + CUDA (NVIDIA CUDA-on-WSL guide; to be confirmed on the host):
 - Mac CPU and WSL2 GPU results are different measurement populations — never compare them.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-07 Harry — pushed `harry/batch-01` (batch 01 + D-06) for the team to run (D-07); first CI run; phase B still pending.
 - 2026-11-06 Harry — D-06 dual-backend rules (§7, `CLAUDE.md`); `needs_gpu` auto-skip and `pytest --require-gpu` in `tests/conftest.py`; forced CPU pin; `environment.has_gpu` (used by `agent.py --require-gpu`); guard tests `tests/test_backend_portability.py`, revised after review.
 - 2026-11-06 Harry — batch 01 report in `docs/IMPLEMENTATION_PROGRESS.md` (status AWAITING_ACCEPTANCE); phase A passed on the Mac; phase B (NV host) pending.
 - 2026-11-06 Harry — AIC-004: `benchmark.py` PyTree comparator, `build_cases`, `check_correctness`, result types and policy hash; legacy `evaluate()` uses it (inf vs inf now rejected; PyTree outputs supported); softmax fixture matrix in `tests/fixtures/`.

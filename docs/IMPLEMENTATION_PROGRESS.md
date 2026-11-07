@@ -187,7 +187,7 @@ Total under 2 minutes on CPU; no test is marked `slow`.
   CUDA `device.platform` value and profiler device-lane names (update `environment._ACCEPTED_PLATFORMS`,
   `probe_target._DEVICE_LANE_MARKERS` and `AI_CONTEXT.md` §8 if they differ), and add the results here.
 - Team sign-off of `docs/TARGET_DECISION.md`; team confirmation of the defaults above (P4, P5, P6, P10, P11).
-- First CI run once the branch is pushed.
+- First CI run: triggered by the push of `harry/batch-01` on 2026-11-07 (D-07); result to be added here.
 
 ## Post-batch 01: dual-backend rules (D-06) · 2026-11-06 · owner: Harry · status: AWAITING_REVIEW
 
