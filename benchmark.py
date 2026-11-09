@@ -508,6 +508,91 @@ def analyze_session(session: PairedSession, protocol) -> SessionAnalysis:
                            stability(session, protocol))
 
 
+class CalibrationError(RuntimeError):
+    """No usable A/A calibration: too few sessions, an unstable session, or a mismatched record."""
+
+
+CALIBRATION_SCHEMA = "aa_calibration/v1"
+
+
+@dataclass(frozen=True)
+class Calibration:
+    """The frozen minimum effect delta for one workload shape on one measurement population.
+
+    A population is the device fingerprint plus the runner identity: native and container timings, or
+    CPU and GPU timings, are different populations and never share a delta (AIC-1.1 §5.1).
+    """
+    schema_version: str
+    label: str
+    workload_id: str
+    shape: tuple[int, ...]
+    dtype: str
+    protocol_hash: str
+    fingerprint: str
+    repeats: int                                  # the frozen calls per block, calibrated from the baseline
+    delta: float
+    aa_relative_differences: tuple[float, ...]
+    timer_resolution_s: float
+    created_utc: str
+
+    def to_json(self) -> dict:
+        return dataclasses.asdict(self)
+
+    @classmethod
+    def from_json(cls, data: dict) -> "Calibration":
+        if data.get("schema_version") != CALIBRATION_SCHEMA:
+            raise CalibrationError(f"not an {CALIBRATION_SCHEMA} record")
+        return cls(**{**data, "shape": tuple(data["shape"]),
+                      "aa_relative_differences": tuple(data["aa_relative_differences"])})
+
+    def save(self, path) -> None:
+        from pathlib import Path
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(json.dumps(self.to_json(), indent=2, allow_nan=False) + "\n", encoding="utf-8")
+        tmp.replace(path)
+
+    @classmethod
+    def load(cls, path) -> "Calibration":
+        from pathlib import Path
+        return cls.from_json(json.loads(Path(path).read_text(encoding="utf-8")))
+
+    def check(self, *, workload_id, shape, dtype, protocol_hash, fingerprint) -> None:
+        """Raise CalibrationError unless this record was made for exactly this measurement."""
+        wanted = {"workload_id": workload_id, "shape": tuple(shape), "dtype": dtype,
+                  "protocol_hash": protocol_hash, "fingerprint": fingerprint}
+        wrong = [f"{k}: calibrated {getattr(self, k)!r}, measuring {v!r}"
+                 for k, v in wanted.items() if getattr(self, k) != v]
+        if wrong:
+            raise CalibrationError("calibration does not match this measurement: " + "; ".join(wrong))
+
+
+def aa_threshold(sessions, protocol, timer_resolution_s):
+    """(delta, relative differences) from independent A/A sessions (AIC-1.1 §5.6).
+
+    Each session measures the baseline against itself in a fresh process. delta is the larger of the
+    95th percentile of |median(A) / median(A') - 1| and the timer-resolution floor relative to the
+    shortest block. Any unstable A/A session makes the calibration fail: a noisy host cannot support a
+    speed claim, and the threshold must not quietly absorb the noise.
+    """
+    if len(sessions) < protocol.aa_sessions:
+        raise CalibrationError(f"need {protocol.aa_sessions} A/A sessions, got {len(sessions)}")
+    unstable = [f"session {i}: {'; '.join(s.reasons)}" for i, s in
+                enumerate(stability(session, protocol) for session in sessions) if not s.stable]
+    if unstable:
+        raise CalibrationError("unstable A/A sessions: " + " | ".join(unstable))
+    diffs = []
+    shortest_block_s = float("inf")
+    for session in sessions:
+        a = np.median([b.a_s for b in session.blocks])
+        b = np.median([b.b_s for b in session.blocks])
+        diffs.append(float(abs(a / b - 1.0)))
+        shortest_block_s = min(shortest_block_s, *(min(b.a_ns, b.b_ns) / 1e9 for b in session.blocks))
+    floor = timer_resolution_s / shortest_block_s if shortest_block_s > 0 else float("inf")
+    return max(float(np.percentile(diffs, 95)), floor), tuple(diffs)
+
+
 def timeit_version_1(function, args, num_runs=30, num_tests=1):
     """Return the mean runtime per call across several timing batches."""
     if num_runs <= 0:

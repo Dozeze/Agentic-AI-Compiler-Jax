@@ -5,6 +5,7 @@ numbers are exact and the tests make no speed claims about real code (D-06 rule 
 """
 import math
 
+import numpy as np
 import pytest
 
 import benchmark
@@ -173,3 +174,59 @@ def test_analyze_session_refuses_a_different_protocol():
     other = dataclasses.replace(SMALL, n_blocks=8)
     with pytest.raises(ValueError, match="different protocol"):
         benchmark.analyze_session(_session([100] * 6, [50] * 6), other)
+
+
+def _aa(scale):
+    """An A/A session whose second side runs `scale` times as long as the first."""
+    return _session([1_000_000] * 6, [round(1_000_000 * scale)] * 6)
+
+
+def test_aa_threshold_is_the_95th_percentile_of_aa_differences():
+    sessions = [_aa(s) for s in (1.00, 1.01, 0.98, 1.00, 1.02)]
+    delta, diffs = benchmark.aa_threshold(sessions, SMALL, timer_resolution_s=1e-9)
+    assert len(diffs) == 5
+    assert math.isclose(delta, float(np.percentile(diffs, 95)))
+
+
+def test_aa_threshold_has_a_timer_resolution_floor():
+    sessions = [_aa(1.0)] * 5                       # identical sides: zero A/A difference
+    delta, _ = benchmark.aa_threshold(sessions, SMALL, timer_resolution_s=1e-6)
+    assert math.isclose(delta, 1e-6 / 1e-3)         # 1 us resolution over 1 ms blocks
+
+
+def test_aa_threshold_needs_enough_stable_sessions():
+    with pytest.raises(benchmark.CalibrationError, match="need 5"):
+        benchmark.aa_threshold([_aa(1.0)] * 4, SMALL, 1e-9)
+    noisy = _session([1_000_000] * 6, [1_000_000, 2_000_000] * 3)
+    with pytest.raises(benchmark.CalibrationError, match="unstable"):
+        benchmark.aa_threshold([_aa(1.0)] * 4 + [noisy], SMALL, 1e-9)
+
+
+def _calibration(**overrides):
+    from contracts import protocol_hash
+    fields = dict(schema_version=benchmark.CALIBRATION_SCHEMA, label="test", workload_id="softmax",
+                  shape=(128, 1024), dtype="float32", protocol_hash=protocol_hash(SMALL),
+                  fingerprint="cpu|cpu|test", repeats=20, delta=0.03,
+                  aa_relative_differences=(0.01, 0.02, 0.0, 0.01, 0.03), timer_resolution_s=1e-9,
+                  created_utc="2026-11-09T00:00:00Z")
+    return benchmark.Calibration(**{**fields, **overrides})
+
+
+def test_calibration_roundtrip_and_check(tmp_path):
+    cal = _calibration()
+    cal.save(tmp_path / "cal.json")
+    loaded = benchmark.Calibration.load(tmp_path / "cal.json")
+    assert loaded == cal
+    loaded.check(workload_id="softmax", shape=(128, 1024), dtype="float32",
+                 protocol_hash=cal.protocol_hash, fingerprint="cpu|cpu|test")
+
+
+@pytest.mark.parametrize("field, value", [("workload_id", "example_add"), ("shape", (32, 128)),
+                                          ("fingerprint", "gpu|NVIDIA|test"), ("protocol_hash", "x")])
+def test_calibration_refuses_another_measurement(field, value):
+    cal = _calibration()
+    wanted = dict(workload_id="softmax", shape=(128, 1024), dtype="float32",
+                  protocol_hash=cal.protocol_hash, fingerprint="cpu|cpu|test")
+    wanted[field] = value
+    with pytest.raises(benchmark.CalibrationError, match=field):
+        cal.check(**wanted)
