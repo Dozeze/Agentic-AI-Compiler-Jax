@@ -3,6 +3,85 @@
 Evidence log: what each task did, the commands run, their actual output, and deviations.
 The current-state snapshot is `AI_CONTEXT.md`.
 
+## Batch 02 (AIC-005, 006, 007, 008, 009) · 2026-11-09 · owner: Sergio · status: AWAITING_ACCEPTANCE
+
+Branch `sergio/batch-02` (from `harry/batch-01` at `bff744d`). Implemented on Sergio's Mac (macOS, arm64, Python
+3.12, jax/jaxlib 0.4.38, uv 0.11.26, Docker Desktop 29.6.1 linux/arm64). One small commit per element; every
+commit passed the full offline suite before it was made.
+
+### Summary
+- AIC-005: paired-block timing protocol (`contracts.MeasurementProtocol`, `benchmark.measure_paired`), raw blocks,
+  summary statistics, paired log-ratio bootstrap, stability diagnostics, A/A calibration (`benchmark.aa_threshold`,
+  `benchmark.Calibration`, `scripts/calibrate_aa.py`), AOT compile timing.
+- AIC-006: `controller.decide` / `judge` / `verify_winner`: stable session, CI lower bound > 1 + δ, one retry,
+  confirmation in a fresh session, final check against the original baseline on every shape.
+- AIC-007: Proposal v1 / Evaluation v1 / Attempt v1 (`contracts.py`), `source_policy.py`, `benchmark_code` takes a
+  validated proposal.
+- AIC-008: `array_io.py` (pickle-free exchange), `worker.py`, `runner.py` (`TrustedSubprocessRunner`), host-side
+  correctness from worker outputs.
+- AIC-009: worker image (`docker/worker.Dockerfile`, `scripts/build_worker_image.py`), `runner.DockerRunner`,
+  hostile containment probes, CI `containment` job, and the controller rewritten around `Evaluator`: it never
+  runs candidate code itself.
+
+### Commits
+| task | commit | element |
+|---|---|---|
+| AIC-005 | `8160e08` | measurement protocol v1 in the run config |
+| AIC-005 | `bd7d2e5` | repeat count calibrated from the baseline only |
+| AIC-005 | `ee9abc6` | paired AB/BA blocks with raw records |
+| AIC-005 | `e6e6bb3` | summary statistics, paired bootstrap speedup |
+| AIC-005 | `4f08e8d` | stability diagnostics, session analysis |
+| AIC-005 | `10dd15f` | A/A calibration of delta, `Calibration` record |
+| AIC-005 | `139f32a` | lowering and compilation timed separately |
+| AIC-006 | `d87ebf0` | acceptance rule, one retry, fresh confirmation, final verification |
+| AIC-007 | `d40c8a4` | Proposal / Evaluation / Attempt contracts |
+| AIC-007 | `2241fb2` | source policy |
+| AIC-007 | `ba0aeb6` | `benchmark_code` takes a validated Proposal v1 |
+| AIC-008 | `445e0e3` | pickle-free, bounded array exchange |
+| AIC-008 | `c8ff063` | worker (`outputs`, `measure`) |
+| AIC-008 | `b89ad5c` | runner boundary, trusted subprocess runner |
+| AIC-008 | `a0e9c7c` | host-side correctness from worker outputs |
+| AIC-009 | `faaad18` | worker image from the lock file |
+| AIC-009 | `c1cca65` | `DockerRunner`, real containment tests |
+| AIC-009 | `3544bb8` | CI containment job |
+| AIC-009 | `fed6a03` | controller evaluates only through runners and `judge()` |
+| AIC-005 | `10f9e5d` | `scripts/calibrate_aa.py` |
+
+### Gates (Mac, Docker Desktop running)
+- Full suite: `env -u ANTHROPIC_API_KEY uv run --locked pytest -q` → `349 passed, 1 skipped` (the skip: `needs_gpu`).
+- Per new test file: measurement 27, decision 10, source_policy 49, array_io 8, worker 7, runner 12,
+  containment 10 (+1 `needs_gpu` skipped), isolated_run 1 — all passed.
+- Containment probes on Docker Desktop (linux/arm64), all held with the source policy bypassed: no network or DNS
+  (`OSError` / `gaierror`), uid 65534, `CapEff` 0, `NoNewPrivs` 1, no credentials in the environment (only the
+  base image's public `GPG_KEY`), no host paths, read-only root (`/app`, `/etc` not writable), `/tmp` scratch
+  writable, fewer than 128 processes, memory exhaustion contained, a hung container killed at the deadline, no
+  container left behind.
+- The 18-fixture correctness matrix gives the same verdicts, case by case, through the worker + host comparison
+  as in-process.
+- End to end in Docker (`tests/test_isolated_run.py`): softmax, `jax.nn.softmax` rewrite measured with raw blocks;
+  the naive softmax rejected as `CORRECTNESS_FAILED` (NONFINITE).
+- First calibration trial, Docker Desktop on the Mac, softmax (128, 1024): 111 calls per block, δ = 0.076 from
+  5 A/A sessions, 11 s. Not committed: official calibrations come from the NV host (D-06).
+
+### Deviations and decisions (defaults recorded as P12–P15 in `AI_CONTEXT.md` §6)
+- Isolation is Docker (P12); without it, model-written code is refused and the run stops before any LLM call
+  (P13). `--runner subprocess` keeps baseline and proposal-only work available.
+- The A/A calibration is taken lazily, before the first candidate measurement, unless a frozen `--calibration`
+  file is given; a noisy host stops the run instead of loosening the threshold (P14).
+- `UNCALIBRATED` is not a candidate state: a missing or unusable calibration ends the run as `INTERRUPTED`.
+- New flat modules beyond the plan's list: `source_policy.py` and `array_io.py` (each testable on its own; P15).
+- The configured backend is forwarded as `selected_backend=` so the rule-1 AST guard keeps rejecting `backend=`.
+- Tests that need short sessions use loosened instability limits; the defaults (10 %, 5 %) are unchanged and the
+  guard against speed claims in ordinary tests still holds (synthetic numbers use `math.isclose`).
+
+### Known limitations
+- All timing here is CPU, in a Docker VM on macOS: correctness and mechanics only, never a speed claim (D-06).
+- GPU containment, the GPU A/A calibration and phase B of AIC-031 need the NV host: `scripts/phase_b.sh`.
+- The bind-mounted work directory is writable and not size-limited by Docker; result files are size-checked
+  before they are read.
+- Budgets other than candidates, deadlines and sizes (requests, tokens, money) are still recorded, not enforced
+  (AIC-013).
+
 ## Batch 01 (AIC-001, 031, 002, 003, 004) · 2026-11-06 · owner: Harry · status: AWAITING_ACCEPTANCE
 
 Branch `harry/batch-01` (from `main` at `51df747`), local commits only, not pushed. Implemented in one wave on

@@ -34,6 +34,7 @@ Sergio Medina Hernandez (`SergioMedinaH`), Weizhuo "Harry" Sun.
 |---|---|
 | `main` | Base for all AIC-1.1 work. Flat Python modules, Anthropic client, JAX 0.4.38. |
 | `harry/batch-01` | Harry's batch 01: AIC-001, 031, 002, 003, 004. Harry's plan is local only (`docs/plans/` is git-ignored). |
+| `sergio/batch-02` | Sergio's batch 02: AIC-005, 006, 007, 008, 009 (from `harry/batch-01`). |
 | `claude-experiment` | Sergio's separate HALO prototype (Gemini/Vertex, JAX 0.11, 18 tasks, results). Shares no code with `main`; AIC-1.1 does not use it. Reference only. |
 | `new_ver` | Stale ancestor of `main`. Ignore. |
 
@@ -50,13 +51,16 @@ scratch scripts — **never import them from tests**.
 - CPU tests: `uv sync --locked && uv run --locked pytest -q` (no API key, no network).
 - GPU (inside WSL2): `uv sync --locked --extra cuda12 && uv run --locked --extra cuda12 pytest -q --require-gpu`
   (`--require-gpu` turns the `needs_gpu` skip into a setup error, non-zero exit, when CUDA is broken).
-- Run (needs a key in `.env.local`): `uv run --locked python agent.py --backend cpu --source workloads/example.py --function bad_func --iterations 1` (`--config run.json` for a RunConfig v1 file)
+- Isolation: start Docker, then `uv run --locked python scripts/build_worker_image.py` (add `--variant cuda12` on the NV host).
+- Run (needs a key in `.env.local`): `uv run --locked python agent.py --backend cpu --source workloads/example.py --function bad_func --iterations 1` (`--config run.json` for a RunConfig v1 file; `--runner subprocess` without Docker: baseline only)
+- Freeze δ: `uv run --locked python scripts/calibrate_aa.py --workload softmax --backend cpu --runner docker --label <population>`, then `--calibration <file>`.
+- NV host, everything GPU in one go: `scripts/phase_b.sh`.
 
 ## 5. Status (update every push)
 | Milestone | Tasks | Owner | Status |
 |---|---|---|---|
 | M1 Foundations & target | AIC-001, 031, 002, 003 | Harry | batch 01 AWAITING_ACCEPTANCE, pushed to `origin/harry/batch-01` (D-07; report: `docs/IMPLEMENTATION_PROGRESS.md`): AIC-001 done locally (offline pytest suite, fake Anthropic client, CI); AIC-031 Mac part done (`environment.py`, `scripts/probe_target.py`, `evidence/targets/mac-cpu.json`, `docs/TARGET_DECISION.md` **DRAFT**) — NV-host probe (phase B) pending; AIC-002 done locally (`contracts.py` RunConfig v1, `--backend`/`--config`, `run_config.json` + `manifest.json`); AIC-003 done locally (`workloads/registry.py` WorkloadSpec v1, seeded `softmax`, float64 oracle, legacy `example_add`); dual-backend rules D-06 + guard tests (`tests/test_backend_portability.py`) |
-| M2 Reliable, isolated evaluation | AIC-004 … 009 | AIC-004: Harry; AIC-005 … 009: Sergio | AIC-004 done (Harry). AIC-005 … 009 in progress on `sergio/batch-02` (Sergio): measurement protocol v1 in `contracts.py` |
+| M2 Reliable, isolated evaluation | AIC-004 … 009 | AIC-004: Harry; AIC-005 … 009: Sergio | batch 02 AWAITING_ACCEPTANCE on `sergio/batch-02` (report: `docs/IMPLEMENTATION_PROGRESS.md`): AIC-004 done (Harry); AIC-005 timing protocol + A/A calibration, AIC-006 decision rule, AIC-007 contracts + source policy, AIC-008 worker/runner, AIC-009 Docker containment + controller integration done on the Mac (CPU). Pending on the NV host: GPU containment and the official δ (`scripts/phase_b.sh`) |
 | M3 – M8 | AIC-010 … 033 | TBD | not started |
 
 Course deadlines (fixed by KTH, not by AIC-1.1): report draft **2026-11-20 17:00**; presentation + final report
@@ -86,6 +90,13 @@ Course deadlines (fixed by KTH, not by AIC-1.1): report draft **2026-11-20 17:00
 - P9 What to do with `claude-experiment` results (Sergio). [reference only]
 - P10 Move root scratch scripts into `scratch/`? [leave them; AIC-001 isolates them with `testpaths = ["tests"]`]
 - P11 Record the hostname in run manifests? [yes (`environment.platform.node`); hash it if anyone objects]
+- P12 Isolation technology for model-written code (AIC-009)? [Docker: same path on the Mac, in CI and on the NV host
+  (`--gpus all` under WSL2); `runner.DockerRunner`, image from `uv.lock`]
+- P13 What if isolation is unavailable? [block: exit 2 `ISOLATION_UNAVAILABLE` before any LLM call; `--runner subprocess`
+  runs the baseline and refuses model candidates (the run ends as INTERRUPTED)]
+- P14 When is δ calibrated? [lazily, before the first candidate measurement, unless a frozen `--calibration` file is given;
+  official files come from `scripts/calibrate_aa.py` on the NV host]
+- P15 New flat modules `source_policy.py` and `array_io.py`? [yes; each is tested on its own]
 
 ## 7. Rules for code changes
 - One branch per person/batch; never push straight to `main`. One task per commit/PR; message starts with the task ID (`AIC-001: ...`).
@@ -194,6 +205,7 @@ Evaluation pipeline (AIC-005 … 009):
 - A measurement population is device + JAX version + runner/image: a change mid-run stops the run (INTERRUPTED).
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-09 Sergio — batch 02 report in `docs/IMPLEMENTATION_PROGRESS.md`; P12–P15 defaults; `scripts/phase_b.sh` (all NV-host steps in one command); WSL2 doc §5 Docker + NVIDIA Container Toolkit; GPU containment test (`needs_gpu`).
 - 2026-11-09 Sergio — AIC-005: `scripts/calibrate_aa.py` freezes an A/A calibration per workload and population (exit 1 on a noisy host); first Mac Docker trial: softmax δ = 0.076 (not committed: official δ comes from the NV host).
 - 2026-11-09 Sergio — AIC-009: controller rewritten around `Evaluator` (reference → isolated candidate outputs → host comparison → A/A calibration → `judge()`); `agent.py --runner docker|subprocess`, `--calibration`; ISOLATION_UNAVAILABLE exits before any LLM call; Attempt v1 records with raw blocks in history; configured backend forwarded as `selected_backend=` (rule 1).
 - 2026-11-09 Sergio — AIC-009: CI job `containment` (builds the CPU worker image, runs `-m needs_docker --require-docker`); the `test` job excludes needs_docker.

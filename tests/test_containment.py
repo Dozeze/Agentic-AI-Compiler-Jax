@@ -151,3 +151,23 @@ def test_no_container_survives_its_request(probe):
 def test_preflight_reports_a_missing_image():
     reason = runner.DockerRunner(selected_backend="cpu", image="aic-worker:does-not-exist").preflight()
     assert reason and "not built" in reason
+
+
+@pytest.mark.needs_gpu
+def test_gpu_container_sees_the_gpu_and_nothing_else(tmp_path):
+    """NV host only: the cuda12 image with --gpus all runs the reference on the GPU, still contained."""
+    docker = runner.DockerRunner(selected_backend="cuda")
+    reason = docker.preflight()
+    assert reason is None, reason          # build it with: scripts/build_worker_image.py --variant cuda12
+    work = tmp_path / "work"
+    work.mkdir()
+    from fixtures.softmax_candidates import REFERENCE
+    (work / "cand.py").write_text(REFERENCE)
+    array_io.save(work / "inputs.npz", {"a": array_io.flatten((np.ones((128, 1024), np.float32),))})
+    request = {"schema_version": worker.REQUEST_SCHEMA, "mode": "outputs", "backend": "cuda",
+               "function_name": "softmax", "sources": {"candidate": "cand.py"}, "inputs": "inputs.npz"}
+    outcome = docker.run(work, request, trusted=False, timeout_s=300)
+    assert outcome.status == runner.OK, (outcome.detail, outcome.stderr[-2000:])
+    assert outcome.result["device"]["platform"] in ("gpu", "cuda")
+    assert outcome.result["cases"] == [{"name": "a", "status": "ok"}]
+    assert _no_container_left()

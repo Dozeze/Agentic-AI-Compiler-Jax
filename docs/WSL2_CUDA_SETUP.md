@@ -51,10 +51,16 @@ Then copy the results (`backend.status`, `profiler.coverage`, `profiler.device_l
 `isolation`, `resources`) into `docs/TARGET_DECISION.md`. Record the actual `device.platform` value seen under CUDA
 (expected `gpu`) and the device-lane names in `AI_CONTEXT.md` §8.
 
-## 5. Docker (later, for AIC-009)
-Docker Desktop with the WSL2 backend, or Docker CE inside WSL, plus NVIDIA Container Toolkit ≥ 2.6.0.
-Under WSL2 only `--gpus all` is supported (no per-GPU selection). The probe only tries a GPU container with
-`--try-docker-gpu` (it may pull an image).
+## 5. Docker for isolated evaluation (AIC-009)
+Model-written code runs only in the worker container (`runner.DockerRunner`). On the NV host:
+1. Docker Desktop with the WSL2 backend, or Docker CE inside the WSL2 distro.
+2. NVIDIA Container Toolkit ≥ 2.6.0 inside WSL2, then `sudo nvidia-ctk runtime configure --runtime=docker` and
+   restart Docker. Under WSL2 only `--gpus all` is supported (no per-GPU selection); the runner uses exactly that.
+3. Check: `docker run --rm --gpus all ubuntu nvidia-smi` lists the GPU.
+4. Build both worker images (the tag is a content hash; rebuild whenever the harness changes — the runner
+   refuses a missing tag):
+   `uv run --locked python scripts/build_worker_image.py --variant cpu` and `--variant cuda12`.
+5. Run `scripts/phase_b.sh`: probe, GPU tests, CPU + GPU containment tests and the official A/A calibration.
 
 ## 6. Measurement hygiene (record with every official run)
 - Close GPU-heavy Windows applications; note the Windows power plan; note whether the GPU also drives a display.
