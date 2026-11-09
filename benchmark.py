@@ -1,4 +1,5 @@
-"""Candidate evaluation: correctness checking (AIC-004) and legacy timing.
+"""Candidate evaluation: correctness checking (AIC-004), the paired-block timing protocol (AIC-005)
+and legacy timing.
 
 Correctness is a hard gate before timing. Candidates are compared with the jit-compiled frozen
 reference on the same device, dtype and XLA settings; the NumPy oracle only validates the reference
@@ -10,6 +11,7 @@ import hashlib
 import json
 import math
 import statistics
+import time
 import timeit
 from dataclasses import dataclass, replace
 
@@ -294,6 +296,47 @@ def check_correctness(candidate_fn, spec, cases, *, reference_fn=None) -> Correc
                                 spec.workload_id, spec.reference_sha256),
         cases=tuple(results),
     )
+
+
+# ---------------------------------------------------------------------------
+# Paired-block timing protocol (AIC-005, AIC-1.1 §5)
+#
+# The metric is steady-state end-to-end latency of a compiled JAX call, dispatch and synchronisation
+# included. Every call is synchronised with jax.block_until_ready, so the clock never measures only the
+# asynchronous dispatch. `clock` is injectable (nanoseconds, monotonic) so the protocol logic is
+# testable with a deterministic fake clock; real runs use time.perf_counter_ns.
+# ---------------------------------------------------------------------------
+
+def warm_up(fn, args, calls):
+    """Run `fn` `calls` times, synchronised, outside any timed window."""
+    for _ in range(calls):
+        jax.block_until_ready(fn(*args))
+
+
+def _run_block(fn, args, repeats, clock):
+    """(start_ns, elapsed_ns) of `repeats` synchronised calls."""
+    start = clock()
+    for _ in range(repeats):
+        jax.block_until_ready(fn(*args))
+    return start, clock() - start
+
+
+def calibrate_repeats(baseline, args, protocol, *, clock=time.perf_counter_ns):
+    """Calls per block, chosen from the baseline only and then frozen for both sides (AIC-1.1 §5.3).
+
+    Doubles the repeat count until one block lasts at least `min_block_s` (or the cap is hit), then
+    scales it so a block lasts about `target_block_s`. A call slower than `max_block_s` gets one repeat.
+    """
+    repeats = 1
+    while True:
+        _, elapsed_ns = _run_block(baseline, args, repeats, clock)
+        if elapsed_ns >= protocol.min_block_s * 1e9 or repeats >= protocol.max_repeats:
+            break
+        repeats = min(protocol.max_repeats, repeats * 2)
+    per_call_s = elapsed_ns / 1e9 / repeats
+    if per_call_s <= 0:
+        return protocol.max_repeats
+    return max(1, min(protocol.max_repeats, round(protocol.target_block_s / per_call_s)))
 
 
 def timeit_version_1(function, args, num_runs=30, num_tests=1):

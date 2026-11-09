@@ -182,6 +182,7 @@ WSL2 + CUDA (NVIDIA CUDA-on-WSL guide; to be confirmed on the host):
 - Mac CPU and WSL2 GPU results are different measurement populations — never compare them.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-09 Sergio — AIC-005: `benchmark.warm_up`, `benchmark.calibrate_repeats` (repeat count from the baseline only, 10–50 ms blocks, capped); fake-clock tests in `tests/test_measurement.py`.
 - 2026-11-09 Sergio — AIC-005: `contracts.MeasurementProtocol` (paired_blocks/v1: warmup ≥ 5, 10–50 ms blocks, ≥ 20 paired blocks, seeded order and bootstrap, ≥ 5 A/A sessions, 1 retry, ≥ 3 final sessions), `validate_protocol`, `protocol_hash`; `RunConfig.measurement`.
 - 2026-11-09 Harry — pushed `harry/batch-01` (batch 01 + D-06) for the team to run (D-07); first CI run passed (179 passed, 1 `needs_gpu` skipped); CI result recorded in `docs/IMPLEMENTATION_PROGRESS.md`; phase B still pending.
 - 2026-11-06 Harry — D-06 dual-backend rules (§7, `CLAUDE.md`); `needs_gpu` auto-skip and `pytest --require-gpu` in `tests/conftest.py`; forced CPU pin; `environment.has_gpu` (used by `agent.py --require-gpu`); guard tests `tests/test_backend_portability.py`, revised after review.
