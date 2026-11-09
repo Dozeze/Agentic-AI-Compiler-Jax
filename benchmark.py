@@ -409,6 +409,57 @@ def measure_paired(a, b, args, protocol, *, repeats=None, clock=time.perf_counte
     return PairedSession(protocol_hash(protocol), repeats, tuple(blocks))
 
 
+@dataclass(frozen=True)
+class LatencySummary:
+    """Per-call latency over the blocks of one side, in seconds."""
+    n: int
+    median_s: float
+    mean_s: float
+    std_s: float
+    q1_s: float
+    q3_s: float
+    min_s: float
+    max_s: float
+    iqr_over_median: float
+
+
+def summarize(latencies_s) -> LatencySummary:
+    x = np.asarray(latencies_s, dtype=np.float64)
+    q1, median, q3 = (float(v) for v in np.percentile(x, [25, 50, 75]))
+    return LatencySummary(n=int(x.size), median_s=median, mean_s=float(x.mean()),
+                          std_s=float(x.std(ddof=1)) if x.size > 1 else 0.0, q1_s=q1, q3_s=q3,
+                          min_s=float(x.min()), max_s=float(x.max()),
+                          iqr_over_median=(q3 - q1) / median if median > 0 else float("inf"))
+
+
+@dataclass(frozen=True)
+class SpeedupEstimate:
+    """Speedup of B over A (A time / B time, > 1 means B is faster) with a paired bootstrap interval.
+
+    The point estimate is the geometric mean of the per-block ratios. The interval resamples whole
+    blocks, never individual calls, because the calls inside a block are not independent.
+    """
+    speedup: float
+    ci_low: float
+    ci_high: float
+    confidence: float
+    n_blocks: int
+    bootstrap_samples: int
+    bootstrap_seed: int
+
+
+def paired_speedup(a_s, b_s, protocol) -> SpeedupEstimate:
+    log_ratio = np.log(np.asarray(a_s, np.float64) / np.asarray(b_s, np.float64))
+    rng = np.random.default_rng(protocol.bootstrap_seed)
+    idx = rng.integers(0, log_ratio.size, size=(protocol.bootstrap_samples, log_ratio.size))
+    means = log_ratio[idx].mean(axis=1)
+    tail = (1.0 - protocol.confidence) / 2.0 * 100.0
+    lo, hi = np.percentile(means, [tail, 100.0 - tail])
+    return SpeedupEstimate(float(np.exp(log_ratio.mean())), float(np.exp(lo)), float(np.exp(hi)),
+                           protocol.confidence, int(log_ratio.size), protocol.bootstrap_samples,
+                           protocol.bootstrap_seed)
+
+
 def timeit_version_1(function, args, num_runs=30, num_tests=1):
     """Return the mean runtime per call across several timing batches."""
     if num_runs <= 0:

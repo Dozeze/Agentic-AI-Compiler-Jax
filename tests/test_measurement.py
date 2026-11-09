@@ -3,6 +3,8 @@
 The protocol logic is tested with a deterministic fake clock: no test here measures real time, so the
 numbers are exact and the tests make no speed claims about real code (D-06 rule 5).
 """
+import math
+
 import pytest
 
 import benchmark
@@ -102,3 +104,31 @@ def test_session_json_roundtrip():
     clock = FakeClock()
     session = benchmark.measure_paired(clock.fn(10), clock.fn(20), (), SMALL, repeats=2, clock=clock)
     assert benchmark.PairedSession.from_json(session.to_json()) == session
+
+
+def test_summarize_reports_every_statistic():
+    s = benchmark.summarize([1.0, 2.0, 3.0, 4.0, 5.0])
+    assert (s.n, s.median_s, s.mean_s, s.min_s, s.max_s) == (5, 3.0, 3.0, 1.0, 5.0)
+    assert (s.q1_s, s.q3_s) == (2.0, 4.0)
+    assert s.iqr_over_median == pytest.approx(2.0 / 3.0)
+    assert math.isclose(s.std_s, 1.5811388, rel_tol=1e-6)
+
+
+def test_paired_speedup_is_the_geometric_mean_of_block_ratios():
+    est = benchmark.paired_speedup([2.0, 8.0], [1.0, 2.0], SMALL)    # ratios 2 and 4
+    assert math.isclose(est.speedup, 8 ** 0.5)
+    assert est.n_blocks == 2 and est.confidence == SMALL.confidence
+
+
+def test_paired_speedup_interval_is_seeded_and_contains_the_point():
+    a = [1.0 + 0.01 * (i % 5) for i in range(20)]
+    b = [0.5 + 0.02 * (i % 3) for i in range(20)]
+    first, again = benchmark.paired_speedup(a, b, SMALL), benchmark.paired_speedup(a, b, SMALL)
+    assert first == again
+    bounds = [first.ci_low, first.speedup, first.ci_high]
+    assert bounds == sorted(bounds)                   # the interval contains the point estimate
+
+
+def test_identical_sides_give_a_degenerate_interval_at_one():
+    est = benchmark.paired_speedup([0.3] * 20, [0.3] * 20, SMALL)
+    assert (est.speedup, est.ci_low, est.ci_high) == (1.0, 1.0, 1.0)
