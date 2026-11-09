@@ -121,3 +121,30 @@ def test_hash_changes_with_value():
         else:
             changed = {f"budgets.{f.name}": value + 1}
         assert config_hash(resolve_run_config(changed, None)) != base, f.name
+
+
+def test_measurement_protocol_defaults_meet_plan():
+    p = contracts.MeasurementProtocol()
+    contracts.validate_protocol(p)
+    assert p.warmup_calls >= 5 and p.n_blocks >= 20 and p.aa_sessions >= 5 and p.final_sessions >= 3
+    assert (p.min_block_s, p.target_block_s, p.max_block_s) == (0.010, 0.020, 0.050)   # AIC-1.1: 10-50 ms
+
+
+@pytest.mark.parametrize("override", [
+    {"measurement.n_blocks": 19},
+    {"measurement.warmup_calls": 4},
+    {"measurement.aa_sessions": 4},
+    {"measurement.final_sessions": 2},
+    {"measurement.min_block_s": 0.1},
+    {"measurement.confidence": 1.0},
+    {"measurement.protocol": "legacy_timeit/v0"},
+])
+def test_measurement_protocol_below_plan_minimum_rejected(override):
+    with pytest.raises(ConfigError, match="measurement"):
+        resolve_run_config(override, None)
+
+
+def test_protocol_hash_tracks_every_field():
+    base = contracts.MeasurementProtocol()
+    assert contracts.protocol_hash(base) == contracts.protocol_hash(contracts.MeasurementProtocol())
+    assert contracts.protocol_hash(base) != contracts.protocol_hash(dataclasses.replace(base, order_seed=1))

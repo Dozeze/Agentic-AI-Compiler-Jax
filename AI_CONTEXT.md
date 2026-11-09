@@ -9,7 +9,7 @@
 > Keep this file short: it is the current state, not a history. Detailed evidence goes in
 > `docs/IMPLEMENTATION_PROGRESS.md`; the full plan is `docs/IMPLEMENTATION_PLAN.md`.
 
-Last updated: 2026-11-09 by Harry (Weizhuo Sun)
+Last updated: 2026-11-09 by Sergio (Sergio Medina Hernandez)
 
 ---
 
@@ -56,7 +56,7 @@ scratch scripts — **never import them from tests**.
 | Milestone | Tasks | Owner | Status |
 |---|---|---|---|
 | M1 Foundations & target | AIC-001, 031, 002, 003 | Harry | batch 01 AWAITING_ACCEPTANCE, pushed to `origin/harry/batch-01` (D-07; report: `docs/IMPLEMENTATION_PROGRESS.md`): AIC-001 done locally (offline pytest suite, fake Anthropic client, CI); AIC-031 Mac part done (`environment.py`, `scripts/probe_target.py`, `evidence/targets/mac-cpu.json`, `docs/TARGET_DECISION.md` **DRAFT**) — NV-host probe (phase B) pending; AIC-002 done locally (`contracts.py` RunConfig v1, `--backend`/`--config`, `run_config.json` + `manifest.json`); AIC-003 done locally (`workloads/registry.py` WorkloadSpec v1, seeded `softmax`, float64 oracle, legacy `example_add`); dual-backend rules D-06 + guard tests (`tests/test_backend_portability.py`) |
-| M2 Reliable, isolated evaluation | AIC-004 … 009 | AIC-004: Harry; rest TBD | AIC-004 done locally (`benchmark.compare_outputs` / `check_correctness`, correctness matrix of 18 softmax fixtures); 005 … 009 not started |
+| M2 Reliable, isolated evaluation | AIC-004 … 009 | AIC-004: Harry; AIC-005 … 009: Sergio | AIC-004 done (Harry). AIC-005 … 009 in progress on `sergio/batch-02` (Sergio): measurement protocol v1 in `contracts.py` |
 | M3 – M8 | AIC-010 … 033 | TBD | not started |
 
 Course deadlines (fixed by KTH, not by AIC-1.1): report draft **2026-11-20 17:00**; presentation + final report
@@ -182,6 +182,7 @@ WSL2 + CUDA (NVIDIA CUDA-on-WSL guide; to be confirmed on the host):
 - Mac CPU and WSL2 GPU results are different measurement populations — never compare them.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-09 Sergio — AIC-005: `contracts.MeasurementProtocol` (paired_blocks/v1: warmup ≥ 5, 10–50 ms blocks, ≥ 20 paired blocks, seeded order and bootstrap, ≥ 5 A/A sessions, 1 retry, ≥ 3 final sessions), `validate_protocol`, `protocol_hash`; `RunConfig.measurement`.
 - 2026-11-09 Harry — pushed `harry/batch-01` (batch 01 + D-06) for the team to run (D-07); first CI run passed (179 passed, 1 `needs_gpu` skipped); CI result recorded in `docs/IMPLEMENTATION_PROGRESS.md`; phase B still pending.
 - 2026-11-06 Harry — D-06 dual-backend rules (§7, `CLAUDE.md`); `needs_gpu` auto-skip and `pytest --require-gpu` in `tests/conftest.py`; forced CPU pin; `environment.has_gpu` (used by `agent.py --require-gpu`); guard tests `tests/test_backend_portability.py`, revised after review.
 - 2026-11-06 Harry — batch 01 report in `docs/IMPLEMENTATION_PROGRESS.md` (status AWAITING_ACCEPTANCE); phase A passed on the Mac; phase B (NV host) pending.

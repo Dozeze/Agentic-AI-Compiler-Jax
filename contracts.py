@@ -55,6 +55,33 @@ class BenchmarkSettings:
 
 
 @dataclass(frozen=True)
+class MeasurementProtocol:
+    """Paired-block timing protocol (AIC-1.1 §5, AIC-005). Frozen per experiment; `protocol_hash` records it.
+
+    Each block runs the same number of synchronised calls of A (incumbent) and B (candidate) back to back,
+    in a balanced, seeded AB/BA order. The repeat count is calibrated from the baseline only so that one
+    block lasts about `target_block_s`, then frozen for both sides.
+    """
+    protocol: str = "paired_blocks/v1"
+    warmup_calls: int = 5                  # per executable, before any timed block
+    min_block_s: float = 0.010             # calibration grows the repeat count until a block reaches this
+    target_block_s: float = 0.020          # ... then scales it to this
+    max_block_s: float = 0.050             # a single call longer than this is still one repeat (recorded)
+    max_repeats: int = 10_000              # hard cap on calls per block
+    n_blocks: int = 20                     # paired blocks per session (AIC-1.1: at least 20)
+    order_seed: int = 0                    # seeds the AB/BA shuffle
+    bootstrap_samples: int = 10_000
+    bootstrap_seed: int = 0
+    confidence: float = 0.95
+    max_iqr_over_median: float = 0.10      # diagnostic instability limits (AIC-1.1 §5.6)
+    max_baseline_drift: float = 0.05
+    aa_sessions: int = 5                   # independent A/A sessions before search
+    unstable_retries: int = 1              # one fixed retry, never unbounded reruns
+    confirmation_sessions: int = 1         # fresh sessions a provisional winner must also pass
+    final_sessions: int = 3                # fresh sessions against the original baseline for a final winner
+
+
+@dataclass(frozen=True)
 class ModelSettings:
     provider: str = "anthropic"
     model_id: str = "claude-haiku-4-5-20251001"   # AIC-1.1: "a starting suggestion, not a guarantee"
@@ -75,6 +102,7 @@ class RunConfig:
     runner: str = "in-process/v0"    # honest: candidates are exec'd in this process; no isolation yet
     output_dir: str = "runs/latest"
     benchmark: BenchmarkSettings = field(default_factory=BenchmarkSettings)
+    measurement: MeasurementProtocol = field(default_factory=MeasurementProtocol)
     model: ModelSettings = field(default_factory=ModelSettings)
     budgets: Budgets = field(default_factory=Budgets)
 
@@ -171,6 +199,34 @@ def validate(cfg: RunConfig) -> None:
             raise ConfigError(f"run_config.benchmark.{name}: must be positive")
     if cfg.model.max_tokens <= 0:
         raise ConfigError("run_config.model.max_tokens: must be positive")
+    validate_protocol(cfg.measurement, path="run_config.measurement")
+
+
+def validate_protocol(p: MeasurementProtocol, path: str = "measurement") -> None:
+    """The AIC-1.1 §5 minimums. Tests may build smaller protocols directly; a run config never can."""
+    if p.protocol != "paired_blocks/v1":
+        raise ConfigError(f"{path}.protocol: expected 'paired_blocks/v1', got {p.protocol!r}")
+    if p.warmup_calls < 5:
+        raise ConfigError(f"{path}.warmup_calls: AIC-1.1 requires at least 5")
+    if p.n_blocks < 20:
+        raise ConfigError(f"{path}.n_blocks: AIC-1.1 requires at least 20 paired blocks")
+    if not 0 < p.min_block_s <= p.target_block_s <= p.max_block_s:
+        raise ConfigError(f"{path}: need 0 < min_block_s <= target_block_s <= max_block_s")
+    if p.max_repeats < 1 or p.bootstrap_samples < 100:
+        raise ConfigError(f"{path}: max_repeats must be >= 1 and bootstrap_samples >= 100")
+    if not 0.5 < p.confidence < 1:
+        raise ConfigError(f"{path}.confidence: must be in (0.5, 1)")
+    if p.max_iqr_over_median <= 0 or p.max_baseline_drift <= 0:
+        raise ConfigError(f"{path}: instability limits must be positive")
+    if p.aa_sessions < 5:
+        raise ConfigError(f"{path}.aa_sessions: AIC-1.1 requires at least 5 A/A sessions")
+    if p.unstable_retries < 0 or p.confirmation_sessions < 1 or p.final_sessions < 3:
+        raise ConfigError(f"{path}: need unstable_retries >= 0, confirmation_sessions >= 1, final_sessions >= 3")
+
+
+def protocol_hash(p: MeasurementProtocol) -> str:
+    """sha256 of the canonical protocol: a calibration is only valid for the exact protocol it was made with."""
+    return hashlib.sha256(json.dumps(dataclasses.asdict(p), sort_keys=True).encode()).hexdigest()
 
 
 # ---------------------------------------------------------------------------
