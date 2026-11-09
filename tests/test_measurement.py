@@ -230,3 +230,23 @@ def test_calibration_refuses_another_measurement(field, value):
     wanted[field] = value
     with pytest.raises(benchmark.CalibrationError, match=field):
         cal.check(**wanted)
+
+
+def test_compile_timed_returns_a_working_executable_and_stage_times():
+    import jax.numpy as jnp
+    x = jnp.arange(8, dtype=jnp.float32)
+    compiled = benchmark.compile_timed(lambda v: v * 2.0, (x,))
+    assert compiled.lower_s >= 0 and compiled.compile_s >= 0
+    assert np.array_equal(np.asarray(compiled.executable(x)), np.arange(8, dtype=np.float32) * 2)
+    assert "multiply" in compiled.lowered.as_text()
+
+
+def test_measure_paired_runs_real_executables():
+    """Mechanics only on a real backend: synchronised calls, raw blocks, no speed claim."""
+    import jax.numpy as jnp
+    x = jnp.ones((64, 64), jnp.float32)
+    a = benchmark.compile_timed(lambda v: v @ v, (x,)).executable
+    b = benchmark.compile_timed(lambda v: jnp.dot(v, v), (x,)).executable
+    session = benchmark.measure_paired(a, b, (x,), SMALL, repeats=2)
+    assert len(session.blocks) == SMALL.n_blocks
+    assert all(block.a_ns > 0 and block.b_ns > 0 for block in session.blocks)

@@ -182,6 +182,7 @@ WSL2 + CUDA (NVIDIA CUDA-on-WSL guide; to be confirmed on the host):
 - Mac CPU and WSL2 GPU results are different measurement populations — never compare them.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-09 Sergio — AIC-005: `benchmark.compile_timed` (ahead-of-time lower + compile, timed separately, `Lowered` kept for AIC-010).
 - 2026-11-09 Sergio — AIC-005: `benchmark.aa_threshold` (δ = max(p95 of A/A median differences, timer floor); unstable A/A fails) and `benchmark.Calibration` (aa_calibration/v1 record, `check()` refuses another workload/shape/protocol/population).
 - 2026-11-09 Sergio — AIC-005: `benchmark.stability` (IQR/median > 10 %, baseline drift > 5 %) and `benchmark.analyze_session` (host-side analysis of raw blocks; refuses a different protocol hash).
 - 2026-11-09 Sergio — AIC-005: `benchmark.summarize` (median, mean, std, quartiles, min/max, IQR/median) and `benchmark.paired_speedup` (geometric-mean ratio, fixed-seed bootstrap over paired log ratios by block).

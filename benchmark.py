@@ -308,6 +308,30 @@ def check_correctness(candidate_fn, spec, cases, *, reference_fn=None) -> Correc
 # testable with a deterministic fake clock; real runs use time.perf_counter_ns.
 # ---------------------------------------------------------------------------
 
+@dataclass(frozen=True)
+class Compiled:
+    """An ahead-of-time compiled executable, with lowering and compilation timed separately."""
+    executable: object
+    lowered: object               # kept for IR extraction (AIC-010)
+    lower_s: float
+    compile_s: float
+
+
+def compile_timed(fn, args, *, clock=time.perf_counter_ns) -> Compiled:
+    """jax.jit(fn).lower(*args).compile(), with each stage timed and nothing else in the window.
+
+    Compiling once, before any correctness or timing pass, keeps the two numbers honest: a later warm
+    jit cache cannot make one side's compile time read as zero while the other's does not.
+    """
+    jitted = jax.jit(fn)
+    t0 = clock()
+    lowered = jitted.lower(*args)
+    t1 = clock()
+    executable = lowered.compile()
+    t2 = clock()
+    return Compiled(executable, lowered, (t1 - t0) / 1e9, (t2 - t1) / 1e9)
+
+
 def warm_up(fn, args, calls):
     """Run `fn` `calls` times, synchronised, outside any timed window."""
     for _ in range(calls):
