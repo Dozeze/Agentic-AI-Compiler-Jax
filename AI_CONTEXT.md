@@ -182,6 +182,7 @@ WSL2 + CUDA (NVIDIA CUDA-on-WSL guide; to be confirmed on the host):
 - Mac CPU and WSL2 GPU results are different measurement populations — never compare them.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-09 Sergio — AIC-007: `source_policy.py` (AST allowlist: jax/jnp/lax/nn/scipy/math/functools imports, defs, assignments; rejects dunders, dynamic code, file/process/callback/device/config access, module mutation); all 18 fixtures pass it.
 - 2026-11-09 Sergio — AIC-007: `contracts.Proposal` v1 + `parse_proposal` (strict, size-limited, no paths or evaluation parameters), `Evaluation` v1, `Attempt` v1 (host-built, terminal states only); `ContractError` base class.
 - 2026-11-09 Sergio — AIC-006: terminal states in `contracts.py`; `controller.decide` (stable + CI lower bound > 1 + δ), `controller.judge` (one retry, fresh confirmation), `controller.verify_winner` (≥ 3 sessions vs the original baseline on every shape).
 - 2026-11-09 Sergio — AIC-005: `benchmark.compile_timed` (ahead-of-time lower + compile, timed separately, `Lowered` kept for AIC-010).
