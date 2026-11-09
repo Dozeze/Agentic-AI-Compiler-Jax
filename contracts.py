@@ -28,6 +28,26 @@ class ConfigError(ValueError):
     """Unknown key, wrong type or invalid value. The message names the dotted path."""
 
 
+# Terminal states of a candidate (AIC-1.1 §3). A provider error or an empty response is a request
+# event, not a candidate, so it has no state here.
+PROPOSAL_INVALID = "PROPOSAL_INVALID"
+POLICY_REJECTED = "POLICY_REJECTED"
+COMPILE_FAILED = "COMPILE_FAILED"
+EXECUTION_FAILED = "EXECUTION_FAILED"
+TIMEOUT = "TIMEOUT"
+RESOURCE_LIMIT = "RESOURCE_LIMIT"
+CORRECTNESS_FAILED = "CORRECTNESS_FAILED"
+MEASUREMENT_UNSTABLE = "MEASUREMENT_UNSTABLE"
+VALID_SLOWER = "VALID_SLOWER"
+VALID_NO_CHANGE = "VALID_NO_CHANGE"
+DUPLICATE = "DUPLICATE"
+ACCEPTED = "ACCEPTED"
+INTERRUPTED = "INTERRUPTED"
+TERMINAL_STATES = (PROPOSAL_INVALID, POLICY_REJECTED, COMPILE_FAILED, EXECUTION_FAILED, TIMEOUT, RESOURCE_LIMIT,
+                   CORRECTNESS_FAILED, MEASUREMENT_UNSTABLE, VALID_SLOWER, VALID_NO_CHANGE, DUPLICATE, ACCEPTED,
+                   INTERRUPTED)
+
+
 @dataclass(frozen=True)
 class Budgets:
     """Development ceilings from AIC-1.1 §7. Recorded only in this batch; enforced by AIC-013/015."""

@@ -1,11 +1,82 @@
 import difflib
 from copy import deepcopy
+from dataclasses import dataclass
 from pathlib import Path
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import benchmark
 import json
+
+from contracts import ACCEPTED, MEASUREMENT_UNSTABLE, VALID_NO_CHANGE, VALID_SLOWER
+
+
+# ---------------------------------------------------------------------------
+# Acceptance decision (AIC-006, AIC-1.1 §5.7)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Decision:
+    state: str        # a terminal state from contracts
+    reason: str
+
+
+def decide(analysis, delta) -> Decision:
+    """Rule on ONE stable-or-not measurement session of a correct candidate against the incumbent.
+
+    Correctness is decided before this is ever called. A session must be stable; then the candidate is
+    provisionally better only if the lower bound of its speedup exceeds 1 + delta, where delta is the
+    frozen A/A calibration. It is slower only if the upper bound is below 1 / (1 + delta); anything in
+    between is indistinguishable from noise.
+    """
+    if not analysis.stability.stable:
+        return Decision(MEASUREMENT_UNSTABLE, "; ".join(analysis.stability.reasons))
+    s = analysis.speedup
+    interval = f"speedup {s.speedup:.3f}x, {s.confidence:.0%} CI [{s.ci_low:.3f}, {s.ci_high:.3f}]"
+    if s.ci_low > 1 + delta:
+        return Decision(ACCEPTED, f"{interval}; lower bound clears 1 + delta = {1 + delta:.3f}")
+    if s.ci_high < 1 / (1 + delta):
+        return Decision(VALID_SLOWER, f"{interval}; upper bound below 1 / (1 + delta)")
+    return Decision(VALID_NO_CHANGE, f"{interval}; not distinguishable from noise (delta = {delta:.3f})")
+
+
+def judge(measure, delta, protocol):
+    """(Decision, analyses) for a correct candidate, from fresh sessions produced by `measure()`.
+
+    An unstable session gets `protocol.unstable_retries` fixed retries, never unbounded reruns looking for
+    a win. A provisional win must be repeated by `protocol.confirmation_sessions` further fresh sessions
+    before promotion; all of them must meet the same rule.
+    """
+    analyses = []
+    for _ in range(1 + protocol.unstable_retries):
+        analyses.append(measure())
+        decision = decide(analyses[-1], delta)
+        if decision.state != MEASUREMENT_UNSTABLE:
+            break
+    if decision.state != ACCEPTED:
+        return decision, analyses
+    for i in range(protocol.confirmation_sessions):
+        analyses.append(measure())
+        confirmation = decide(analyses[-1], delta)
+        if confirmation.state != ACCEPTED:
+            state = MEASUREMENT_UNSTABLE if confirmation.state == MEASUREMENT_UNSTABLE else VALID_NO_CHANGE
+            return Decision(state, f"provisional win not confirmed in fresh session {i + 1}: "
+                                   f"{confirmation.reason}"), analyses
+    return Decision(ACCEPTED, f"{decision.reason}; confirmed in {protocol.confirmation_sessions} fresh "
+                              f"session(s)"), analyses
+
+
+def verify_winner(measure_against_baseline, shapes, delta_for, protocol):
+    """Final check of a frozen winner (AIC-1.1 §5.8): `protocol.final_sessions` fresh sessions against the
+    ORIGINAL baseline on every declared shape. Returns (reproduced, {shape: [Decision, ...]}); a single
+    session that does not clear 1 + delta on any shape means the effect did not reproduce.
+    """
+    per_shape = {}
+    for shape in shapes:
+        per_shape[shape] = [decide(measure_against_baseline(shape), delta_for(shape))
+                            for _ in range(protocol.final_sessions)]
+    reproduced = all(d.state == ACCEPTED for decisions in per_shape.values() for d in decisions)
+    return reproduced, per_shape
 
 
 def read_python_source(source_path):
