@@ -194,6 +194,7 @@ Evaluation pipeline (AIC-005 … 009):
 - A measurement population is device + JAX version + runner/image: a change mid-run stops the run (INTERRUPTED).
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-09 Sergio — AIC-005: `scripts/calibrate_aa.py` freezes an A/A calibration per workload and population (exit 1 on a noisy host); first Mac Docker trial: softmax δ = 0.076 (not committed: official δ comes from the NV host).
 - 2026-11-09 Sergio — AIC-009: controller rewritten around `Evaluator` (reference → isolated candidate outputs → host comparison → A/A calibration → `judge()`); `agent.py --runner docker|subprocess`, `--calibration`; ISOLATION_UNAVAILABLE exits before any LLM call; Attempt v1 records with raw blocks in history; configured backend forwarded as `selected_backend=` (rule 1).
 - 2026-11-09 Sergio — AIC-009: CI job `containment` (builds the CPU worker image, runs `-m needs_docker --require-docker`); the `test` job excludes needs_docker.
 - 2026-11-09 Sergio — AIC-009: `runner.DockerRunner` (no network, read-only root, no capabilities, no-new-privileges, nobody, CPU/memory/PID limits, tmpfs scratch, only the work dir mounted, OOM → RESOURCE_LIMIT, verified removal); `needs_docker` marker + `--require-docker`; `tests/test_containment.py` hostile probes pass on Docker Desktop.

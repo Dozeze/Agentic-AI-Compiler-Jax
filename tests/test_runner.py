@@ -134,3 +134,18 @@ def test_docker_variant_follows_the_backend():
     assert runner.DockerRunner(selected_backend="cuda").variant == "cuda12"
     assert runner.DockerRunner(selected_backend="cpu").variant == "cpu"
     assert runner.DockerRunner(selected_backend=None).variant == "cpu"
+
+
+@pytest.mark.slow
+def test_calibrate_aa_script_writes_or_refuses(repo_root, clean_env, tmp_path):
+    """Mechanics only: on a quiet host it writes a calibration, on a noisy one it refuses (exit 1)."""
+    import subprocess
+    proc = subprocess.run([sys.executable, str(repo_root / "scripts" / "calibrate_aa.py"), "--workload", "softmax",
+                           "--backend", "cpu", "--runner", "subprocess", "--label", "test", "--out", str(tmp_path)],
+                          cwd=tmp_path, env=clean_env, capture_output=True, text=True, timeout=600)
+    assert proc.returncode in (0, 1), proc.stderr
+    if proc.returncode == 0:
+        written = list(tmp_path.rglob("softmax-128x1024.json"))
+        assert len(written) == 1 and json.loads(written[0].read_text())["label"] == "test"
+    else:
+        assert "not calibrated" in proc.stderr
