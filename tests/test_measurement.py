@@ -54,3 +54,51 @@ def test_warm_up_calls_are_synchronised_and_counted():
     clock, log = FakeClock(), []
     benchmark.warm_up(clock.fn(5, log, "a"), (), 5)
     assert log == ["a"] * 5
+
+
+def test_block_order_is_balanced_and_seeded():
+    order = benchmark.block_order(20, seed=0)
+    assert order.count("AB") == order.count("BA") == 10
+    assert order == benchmark.block_order(20, seed=0)
+    assert order != benchmark.block_order(20, seed=1)
+    assert benchmark.block_order(5, seed=0).count("AB") == 3
+
+
+def test_measure_paired_records_raw_blocks_in_the_declared_order():
+    clock, log = FakeClock(), []
+    a, b = clock.fn(2_000_000, log, "a"), clock.fn(1_000_000, log, "b")
+    session = benchmark.measure_paired(a, b, (), SMALL, repeats=3, clock=clock)
+
+    assert session.repeats == 3 and len(session.blocks) == SMALL.n_blocks
+    timed = log[2 * SMALL.warmup_calls:]                       # warm-up runs both sides first
+    expected = []
+    for order in benchmark.block_order(SMALL.n_blocks, SMALL.order_seed):
+        expected += [order[0].lower()] * 3 + [order[1].lower()] * 3
+    assert timed == expected
+    for block in session.blocks:
+        assert (block.a_ns, block.b_ns) == (6_000_000, 3_000_000)
+        assert (block.a_s, block.b_s) == (0.002, 0.001)
+        first, second = (block.a_start_ns, block.b_start_ns) if block.order == "AB" \
+            else (block.b_start_ns, block.a_start_ns)
+        assert second > first
+
+
+def test_measure_paired_calibrates_from_a_only():
+    clock = FakeClock()
+    calls = {"a": 0, "b": 0}
+
+    def counted(name, cost):
+        def run(*_):
+            calls[name] += 1
+            clock.now += cost
+        return run
+
+    session = benchmark.measure_paired(counted("a", 1_000_000), counted("b", 7), (), SMALL, clock=clock)
+    assert session.repeats == 20                                # from A's 1 ms per call
+    assert calls["b"] == SMALL.warmup_calls + SMALL.n_blocks * 20   # B never ran during calibration
+
+
+def test_session_json_roundtrip():
+    clock = FakeClock()
+    session = benchmark.measure_paired(clock.fn(10), clock.fn(20), (), SMALL, repeats=2, clock=clock)
+    assert benchmark.PairedSession.from_json(session.to_json()) == session

@@ -6,6 +6,7 @@ reference on the same device, dtype and XLA settings; the NumPy oracle only vali
 itself (AIC-003). Comparison order: tree structure, leaf count, then per leaf exact shape, exact dtype,
 non-finite values, and finally values (integers and bools exactly; floats with atol + rtol * |expected|).
 """
+import dataclasses
 import functools
 import hashlib
 import json
@@ -337,6 +338,75 @@ def calibrate_repeats(baseline, args, protocol, *, clock=time.perf_counter_ns):
     if per_call_s <= 0:
         return protocol.max_repeats
     return max(1, min(protocol.max_repeats, round(protocol.target_block_s / per_call_s)))
+
+
+def block_order(n_blocks, seed):
+    """Balanced AB/BA order, shuffled with a fixed seed: neither side systematically runs first."""
+    import random
+    orders = ["AB"] * ((n_blocks + 1) // 2) + ["BA"] * (n_blocks // 2)
+    random.Random(seed).shuffle(orders)
+    return orders
+
+
+@dataclass(frozen=True)
+class Block:
+    """One paired block, raw: both sides ran `repeats` synchronised calls back to back."""
+    index: int
+    order: str                # "AB" or "BA": which side ran first
+    repeats: int
+    a_ns: int                 # elapsed nanoseconds for the A calls
+    b_ns: int
+    a_start_ns: int           # start offsets from the first timed block (monotonic clock)
+    b_start_ns: int
+
+    @property
+    def a_s(self) -> float:
+        """Normalised A latency: seconds per call."""
+        return self.a_ns / 1e9 / self.repeats
+
+    @property
+    def b_s(self) -> float:
+        return self.b_ns / 1e9 / self.repeats
+
+
+@dataclass(frozen=True)
+class PairedSession:
+    """Raw result of one measurement session: A (incumbent or baseline) against B (candidate)."""
+    protocol_hash: str
+    repeats: int
+    blocks: tuple[Block, ...]
+
+    def to_json(self) -> dict:
+        return {"protocol_hash": self.protocol_hash, "repeats": self.repeats,
+                "blocks": [dataclasses.asdict(b) for b in self.blocks]}
+
+    @classmethod
+    def from_json(cls, data: dict) -> "PairedSession":
+        return cls(data["protocol_hash"], int(data["repeats"]),
+                   tuple(Block(**b) for b in data["blocks"]))
+
+
+def measure_paired(a, b, args, protocol, *, repeats=None, clock=time.perf_counter_ns) -> PairedSession:
+    """One paired session of `protocol.n_blocks` blocks in balanced, seeded AB/BA order.
+
+    `a` and `b` should be compiled executables, so no compilation happens inside the timed window.
+    Both are warmed up first. `repeats=None` calibrates from `a` (the baseline side); pass the frozen
+    value to reuse it across sessions. Inputs must already be on the device.
+    """
+    from contracts import protocol_hash
+    warm_up(a, args, protocol.warmup_calls)
+    warm_up(b, args, protocol.warmup_calls)
+    if repeats is None:
+        repeats = calibrate_repeats(a, args, protocol, clock=clock)
+    origin = clock()
+    blocks = []
+    for index, order in enumerate(block_order(protocol.n_blocks, protocol.order_seed)):
+        first, second = (a, b) if order == "AB" else (b, a)
+        s1, e1 = _run_block(first, args, repeats, clock)
+        s2, e2 = _run_block(second, args, repeats, clock)
+        (a_start, a_ns), (b_start, b_ns) = ((s1, e1), (s2, e2)) if order == "AB" else ((s2, e2), (s1, e1))
+        blocks.append(Block(index, order, repeats, a_ns, b_ns, a_start - origin, b_start - origin))
+    return PairedSession(protocol_hash(protocol), repeats, tuple(blocks))
 
 
 def timeit_version_1(function, args, num_runs=30, num_tests=1):
