@@ -7,7 +7,7 @@ import tomllib
 
 import pytest
 
-from fakes import FakeAnthropic, tool_use
+from fakes import FakeAnthropic, proposal, tool_use
 
 ORIGINAL = "import jax.numpy as jnp\n\ndef bad_func(x, y):\n    return x + y\n"
 WRONG = "import jax.numpy as jnp\n\ndef bad_func(x, y):\n    return x - y\n"
@@ -102,8 +102,8 @@ def test_evaluate_rejects_missing_function(example):
 def _history_script():
     return [
         [tool_use("t1", "get_current_code", {})],
-        [tool_use("t2", "benchmark_code", {"code": ORIGINAL})],
-        [tool_use("t3", "benchmark_code", {"code": WRONG})],
+        [tool_use("t2", "benchmark_code", proposal(ORIGINAL))],
+        [tool_use("t3", "benchmark_code", proposal(WRONG))],
         [],
     ]
 
@@ -131,8 +131,8 @@ def test_fake_loop_feeds_tool_results_back(no_key, repo_root):
 
 
 def test_one_benchmark_per_turn(no_key, repo_root):
-    script = [[tool_use("a", "benchmark_code", {"code": ORIGINAL}),
-               tool_use("b", "benchmark_code", {"code": WRONG})], []]
+    script = [[tool_use("a", "benchmark_code", proposal(ORIGINAL)),
+               tool_use("b", "benchmark_code", proposal(WRONG))], []]
     client, controller = _build(repo_root, script, no_key / "run")
     before = len(controller.history)
     controller.agent_loop(model="fake-model")
@@ -144,3 +144,22 @@ def test_one_benchmark_per_turn(no_key, repo_root):
 def test_root_scripts_not_collected(repo_root):
     config = tomllib.loads((repo_root / "pyproject.toml").read_text())
     assert config["tool"]["pytest"]["ini_options"]["testpaths"] == ["tests"]
+
+
+def test_invalid_proposal_is_recorded_not_run(no_key, repo_root):
+    script = [[tool_use("a", "benchmark_code", {"code": ORIGINAL})], []]
+    _, controller = _build(repo_root, script, no_key / "run")
+    history = controller.agent_loop(model="fake-model")
+    assert history[-1]["state"] == "PROPOSAL_INVALID"
+    assert "proposal.code: unknown key" in history[-1]["error"]
+    assert history[-1]["code"] is None
+
+
+def test_policy_violation_is_recorded_not_run(no_key, repo_root):
+    evil = "import os\n\ndef bad_func(x, y):\n    os.system('touch /tmp/pwned')\n    return x + y\n"
+    script = [[tool_use("a", "benchmark_code", proposal(evil))], []]
+    _, controller = _build(repo_root, script, no_key / "run")
+    history = controller.agent_loop(model="fake-model")
+    assert history[-1]["state"] == "POLICY_REJECTED"
+    assert "import of 'os'" in history[-1]["error"]
+    assert history[-1]["runtime_mean"] is None

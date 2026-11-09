@@ -88,8 +88,10 @@ def bad_func(x, y):
         "You optimize pure JAX functions through the existing evaluator. "
         "Preserve the function signature and numerical behavior. Do not use "
         "CUDA-only libraries, custom kernels, approximations, or changes to "
-        "precision. Return only raw Python source, without Markdown fences or "
-        "escaped quotes. The evaluator applies jax.jit itself, so do not add "
+        "precision. Submit each candidate with benchmark_code as a proposal: a "
+        "hypothesis, the single transformation, its rationale, the expected effect "
+        "and the complete candidate source (raw Python, no Markdown fences or "
+        "escaped quotes). The evaluator applies jax.jit itself, so do not add "
         "@jax.jit or call jax.jit in the candidate. Inspect the current code "
         "and history before proposing a candidate."
     )

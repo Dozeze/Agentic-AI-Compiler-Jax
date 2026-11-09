@@ -34,3 +34,10 @@ class FakeAnthropic:
 
     def __init__(self, script, **_ignored):
         self.messages = FakeMessages(list(script))
+
+
+def proposal(source: str, **fields) -> dict:
+    """A complete benchmark_code input (Proposal v1) around `source`."""
+    return {"hypothesis": "test hypothesis", "transformation": "test transformation",
+            "rationale": "test rationale", "expected_effect": "none expected",
+            "candidate_source": source, **fields}

@@ -8,7 +8,9 @@ import matplotlib.pyplot as plt
 import benchmark
 import json
 
-from contracts import ACCEPTED, MEASUREMENT_UNSTABLE, VALID_NO_CHANGE, VALID_SLOWER
+from contracts import (ACCEPTED, MEASUREMENT_UNSTABLE, POLICY_REJECTED, PROPOSAL_INVALID, VALID_NO_CHANGE,
+                       VALID_SLOWER, Budgets, ContractError, parse_proposal)
+from source_policy import check_source
 
 
 # ---------------------------------------------------------------------------
@@ -210,25 +212,39 @@ class Controller:
             {
                 "name": "benchmark_code",
                 "description": (
-                    "Evaluate and record a candidate JAX implementation. "
-                    "The candidate is checked for syntax and output correctness "
-                    "before being benchmarked. A correct candidate becomes the "
-                    "current best only when it is faster than the incumbent."
+                    "Submit one proposal: a hypothesis and a complete candidate source. The harness "
+                    "checks the source against its policy (pure JAX only), then for correctness, and "
+                    "only then measures it. A correct candidate becomes the current best only when it "
+                    "is faster than the incumbent."
                 ),
                 "input_schema": {
                     "type": "object",
                     "properties": {
-                        "code": {
+                        "hypothesis": {"type": "string",
+                                       "description": "Why this change should be faster."},
+                        "transformation": {"type": "string",
+                                           "description": "The single change made, e.g. 'vectorise the loop'."},
+                        "rationale": {"type": "string",
+                                      "description": "The evidence (code, history) behind the hypothesis."},
+                        "expected_effect": {"type": "string",
+                                            "description": "Predicted effect; a hypothesis, not a measurement."},
+                        "candidate_source": {
                             "type": "string",
                             "description": (
-                                "Complete Python source code containing the "
-                                "candidate JAX function. Return raw source "
-                                "without Markdown fences, escaped quotes, or "
+                                "Complete Python source of the candidate module: imports from jax, "
+                                "jax.numpy, jax.lax, jax.nn, jax.scipy, math or functools only, and the "
+                                "function itself. Raw source without Markdown fences, escaped quotes or "
                                 "@jax.jit decorators; the evaluator applies JIT."
                             ),
-                        }
+                        },
+                        "parent_id": {"type": "integer",
+                                      "description": "Iteration this builds on (default: current best)."},
+                        "constraints": {"type": "array", "items": {"type": "string"},
+                                        "description": "Semantics the rewrite preserves."},
+                        "notes": {"type": "string"},
                     },
-                    "required": ["code"],
+                    "required": ["hypothesis", "transformation", "rationale", "expected_effect",
+                                 "candidate_source"],
                     "additionalProperties": False,
                 },
             },
@@ -298,6 +314,37 @@ class Controller:
     def benchmark_code(self, code):
         return self.current_runtime(code)
 
+    def submit_proposal(self, tool_input):
+        """Validate a proposal and its source before anything runs; then evaluate it.
+
+        An invalid proposal or a policy violation is a terminal candidate state recorded in the history,
+        and the candidate's code is never executed.
+        """
+        max_source_bytes = Budgets().max_source_bytes
+        try:
+            proposal = parse_proposal(tool_input, max_source_bytes=max_source_bytes)
+        except ContractError as error:
+            return self._record_rejection(PROPOSAL_INVALID, str(error), code=None, proposal=None)
+        policy = check_source(proposal.candidate_source, self.function_name, max_source_bytes=max_source_bytes)
+        if not policy.ok:
+            return self._record_rejection(POLICY_REJECTED, policy.summary(), code=proposal.candidate_source,
+                                          proposal=proposal)
+        self.updateHist(proposal.candidate_source)
+        self.history[-1]["proposal"] = _proposal_json(proposal)
+        return self.history[-1]
+
+    def _record_rejection(self, state, reason, *, code, proposal):
+        self.iteration += 1
+        entry = {"iteration": self.iteration, "state": state, "code": code, "runtime_mean": None,
+                 "runtime_std": None, "syntax_correct": state != PROPOSAL_INVALID and "syntax error" not in reason,
+                 "output_correct": False, "accepted": False, "changes": None, "error": reason,
+                 "proposal": _proposal_json(proposal) if proposal else None,
+                 "source_path": self.source_path, "function_name": self.function_name}
+        self.history.append(entry)
+        self._report_runtime(entry)
+        self._write_iteration_json(entry)
+        return entry
+
     def _dispatch_tool(self, name, tool_input):
         """Run one model-requested tool and return JSON-serializable data."""
         if name == "get_history":
@@ -307,10 +354,7 @@ class Controller:
             return {"code": self.get_current_code()}
 
         if name == "benchmark_code":
-            if not isinstance(tool_input, dict) or not isinstance(tool_input.get("code"), str):
-                return {"error": "benchmark_code requires a string 'code' field"}
-            self.updateHist(tool_input["code"])
-            return self.history[-1]
+            return self.submit_proposal(tool_input)
 
         return {"error": f"Unknown tool: {name}"}
 
@@ -368,11 +412,7 @@ class Controller:
                     result = {"error": "Only one benchmark_code call is allowed per turn"}
                 else:
                     result = self._dispatch_tool(name, block.input)
-                    if (
-                        name == "benchmark_code"
-                        and isinstance(block.input, dict)
-                        and isinstance(block.input.get("code"), str)
-                    ):
+                    if name == "benchmark_code":       # every submission spends a candidate slot
                         evaluated_this_turn = True
                         candidate_count += 1
 
@@ -421,3 +461,11 @@ class Controller:
         plt.grid()
         plt.legend()
         plt.show()
+
+
+def _proposal_json(proposal):
+    """The proposal as recorded in history, without its source (already in `code`)."""
+    from dataclasses import asdict
+    data = asdict(proposal)
+    data.pop("candidate_source")
+    return data
