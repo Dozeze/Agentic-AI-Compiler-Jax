@@ -182,6 +182,7 @@ WSL2 + CUDA (NVIDIA CUDA-on-WSL guide; to be confirmed on the host):
 - Mac CPU and WSL2 GPU results are different measurement populations — never compare them.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-09 Sergio — AIC-009: `docker/worker.Dockerfile` (locked deps via uv, harness modules only, user nobody; `EXTRA=cuda12` GPU variant) and `scripts/build_worker_image.py` (minimal build context; tag = content hash from `runner.image_reference`).
 - 2026-11-09 Sergio — AIC-008: `benchmark.compare_flat` / `report_from_outputs` (host-side verdict on worker outputs; the candidate never sees reference outputs or tolerances); the 18-fixture matrix reproduced through the worker case by case.
 - 2026-11-09 Sergio — AIC-008: `runner.py` (`execute`: own session, deadline, process-group cleanup, bounded log tails via temp files; result validation; env allowlist without credentials or JAX_PLATFORMS) and `TrustedSubprocessRunner` (trusted code only; model code → ISOLATION_UNAVAILABLE).
 - 2026-11-09 Sergio — AIC-008: `worker.py` (worker_request/v1 → worker_result/v1; backend via `select_backend` first; modes `outputs` and `measure`; raw outputs and raw blocks only, never a verdict).

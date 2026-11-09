@@ -98,3 +98,21 @@ def test_worker_env_has_no_credentials_or_backend_pin(tmp_path, monkeypatch):
     assert "ANTHROPIC_API_KEY" not in env and "GOOGLE_APPLICATION_CREDENTIALS" not in env
     assert "JAX_PLATFORMS" not in env
     assert env["HOME"] == str(tmp_path)
+
+
+def test_image_reference_is_a_content_hash(monkeypatch, tmp_path):
+    cpu, gpu = runner.image_reference("cpu"), runner.image_reference("cuda12")
+    assert cpu.startswith("aic-worker:cpu-") and gpu.startswith("aic-worker:cuda12-") and cpu != gpu
+    assert runner.image_reference("cpu") == cpu
+    changed = tmp_path / "worker.Dockerfile"
+    changed.write_text(runner.DOCKERFILE.read_text() + "\n# changed\n")
+    monkeypatch.setattr(runner, "DOCKERFILE", changed)
+    assert runner.image_reference("cpu") != cpu
+    with pytest.raises(ValueError, match="variant"):
+        runner.image_reference("rocm")
+
+
+def test_image_contains_no_secrets_or_repo_state():
+    names = {p.name for p in runner.image_files()}
+    assert "worker.py" in names and "uv.lock" in names
+    assert not any(n.startswith(".env") or n in ("controller.py", "agent.py") for n in names)

@@ -40,6 +40,31 @@ _PASSTHROUGH_ENV = ("PATH", "LANG", "LC_ALL", "SYSTEMROOT", "XLA_FLAGS", "XLA_PY
                     "XLA_PYTHON_CLIENT_MEM_FRACTION", "CUDA_VISIBLE_DEVICES", "TF_CPP_MIN_LOG_LEVEL")
 MAX_RESULT_BYTES = 16 << 20
 
+# Everything the worker image is built from. The image tag is a hash of exactly these files, so a change
+# to any of them yields a new tag and the runner never runs a stale harness.
+DOCKERFILE = REPO / "docker" / "worker.Dockerfile"
+IMAGE_FILES = ("pyproject.toml", "uv.lock", "worker.py", "benchmark.py", "contracts.py", "environment.py",
+               "array_io.py", "workloads/__init__.py", "workloads/registry.py", "workloads/oracles.py",
+               "workloads/softmax.py", "workloads/example.py")
+IMAGE_REPOSITORY = "aic-worker"
+VARIANTS = {"cpu": "", "cuda12": "cuda12"}       # variant -> uv extra
+
+
+def image_files() -> list[Path]:
+    return [REPO / name for name in IMAGE_FILES if (REPO / name).exists()]
+
+
+def image_reference(variant: str) -> str:
+    """`aic-worker:<variant>-<content hash>` for the current harness files."""
+    if variant not in VARIANTS:
+        raise ValueError(f"unknown worker image variant {variant!r}; choose from {sorted(VARIANTS)}")
+    import hashlib
+    digest = hashlib.sha256(variant.encode())
+    inputs = [("Dockerfile", DOCKERFILE), *((str(p.relative_to(REPO)), p) for p in image_files())]
+    for label, path in inputs:
+        digest.update(label.encode() + b"\0" + path.read_bytes() + b"\0")
+    return f"{IMAGE_REPOSITORY}:{variant}-{digest.hexdigest()[:16]}"
+
 
 @dataclass(frozen=True)
 class RunOutcome:
