@@ -182,6 +182,7 @@ WSL2 + CUDA (NVIDIA CUDA-on-WSL guide; to be confirmed on the host):
 - Mac CPU and WSL2 GPU results are different measurement populations — never compare them.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-09 Sergio — AIC-008: `worker.py` (worker_request/v1 → worker_result/v1; backend via `select_backend` first; modes `outputs` and `measure`; raw outputs and raw blocks only, never a verdict).
 - 2026-11-09 Sergio — AIC-008: `array_io.py` (npz with allow_pickle=False + JSON index of tree structure, leaf paths, dtypes, shapes; rejects undeclared arrays, changed dtypes, object arrays, symlinks, paths outside the work dir, oversize files).
 - 2026-11-09 Sergio — AIC-007: `benchmark_code` takes a Proposal v1; `Controller.submit_proposal` records PROPOSAL_INVALID / POLICY_REJECTED without running the code; `tests/fakes.proposal` helper.
 - 2026-11-09 Sergio — AIC-007: `source_policy.py` (AST allowlist: jax/jnp/lax/nn/scipy/math/functools imports, defs, assignments; rejects dunders, dynamic code, file/process/callback/device/config access, module mutation); all 18 fixtures pass it.
