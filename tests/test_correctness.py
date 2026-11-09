@@ -202,3 +202,52 @@ def test_evaluate_rejects_both_inf():
     result = benchmark.evaluate(src, reference, args, function_name="bad_func")
     assert result["output_correct"] is False
     assert "non-finite" in result["error"]
+
+
+# ---------------------------------------------------------------------------
+# The same matrix across the process boundary (AIC-008): worker outputs, host comparison
+# ---------------------------------------------------------------------------
+
+def _worker_outputs(tmp_path, name, source, cases):
+    import array_io
+    import worker
+    work = tmp_path / name
+    work.mkdir()
+    (work / "cand.py").write_text(source)
+    array_io.save(work / "inputs.npz", {n: array_io.flatten(args) for n, args in cases})
+    request = {"schema_version": worker.REQUEST_SCHEMA, "mode": "outputs", "backend": "cpu",
+               "function_name": "softmax", "sources": {"candidate": "cand.py"}, "inputs": "inputs.npz"}
+    result = worker.handle(request, work)
+    outputs = array_io.load(work / "outputs.npz", base=work, max_bytes=256 << 20)
+    return result["cases"], outputs
+
+
+@pytest.fixture(scope="module")
+def worker_matrix(cases, tmp_path_factory):
+    tmp = tmp_path_factory.mktemp("worker-matrix")
+    _, expected = _worker_outputs(tmp, "frozen-reference", FIXTURES["REFERENCE"], cases)
+    names = [n for n, _ in cases]
+    policy = benchmark.policy_hash(SOFTMAX.tolerance, names, SOFTMAX.workload_id, SOFTMAX.reference_sha256)
+    reports = {}
+    for name, source in FIXTURES.items():
+        statuses, actual = _worker_outputs(tmp, name, source, cases)
+        reports[name] = benchmark.report_from_outputs(names, expected, statuses, actual, SOFTMAX.tolerance, policy)
+    return reports
+
+
+@pytest.mark.parametrize("name", list(EXPECTED))
+def test_worker_matrix_matches_in_process_matrix(worker_matrix, matrix, name):
+    across, inside = worker_matrix[name], matrix[name]
+    assert (across.passed, across.category) == EXPECTED[name]
+    assert [(c.case, c.passed, c.category) for c in across.cases] == \
+        [(c.case, c.passed, c.category) for c in inside.cases]
+    assert across.policy_hash == inside.policy_hash
+
+
+def test_report_from_outputs_missing_output_is_an_execution_failure():
+    from array_io import flatten
+    expected = {"c": flatten(X)}
+    report = benchmark.report_from_outputs(["c"], expected, [{"name": "c", "status": "ok"}], {}, TOL, "h")
+    assert report.category == "EXECUTION_FAILED"
+    report = benchmark.report_from_outputs(["c"], expected, [], {}, TOL, "h")
+    assert "no result" in report.cases[0].detail

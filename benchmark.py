@@ -199,6 +199,51 @@ def compare_outputs(expected, actual, tol) -> CaseResult:
     return CaseResult("", True, None, leaves, None)
 
 
+def compare_flat(expected, actual, tol) -> CaseResult:
+    """compare_outputs for trees that crossed a process boundary as array_io.FlatTree.
+
+    The structure check compares the PyTreeDef strings, then every leaf goes through the same per-leaf
+    rules as compare_outputs. Raises ReferenceInvalid if `expected` contains non-finite values.
+    """
+    if expected.treedef != actual.treedef:
+        return CaseResult("", False, "STRUCTURE_MISMATCH", (),
+                          f"tree: expected {expected.treedef}, got {actual.treedef}")
+    if len(expected.leaves) != len(actual.leaves):
+        return CaseResult("", False, "STRUCTURE_MISMATCH", (),
+                          f"leaf count: expected {len(expected.leaves)}, got {len(actual.leaves)}")
+    leaves = tuple(_compare_leaf(path, e, a, tol)
+                   for (path, e), (_, a) in zip(expected.leaves, actual.leaves))
+    failing = [leaf for leaf in leaves if not leaf.passed]
+    if failing:
+        return CaseResult("", False, failing[0].category, leaves,
+                          f"leaf {failing[0].path or '<root>'}: {failing[0].detail}")
+    return CaseResult("", True, None, leaves, None)
+
+
+def report_from_outputs(case_names, expected, worker_cases, actual, tol, policy) -> CorrectnessReport:
+    """The host-side verdict on a worker's `outputs` run (AIC-008).
+
+    `expected` holds the trusted reference outputs per case, `worker_cases` the worker's per-case
+    statuses and `actual` the candidate outputs it returned. The worker's statuses only report compile
+    and execution failures; every comparison happens here, outside the candidate's process.
+    """
+    statuses = {c["name"]: c for c in worker_cases}
+    results = []
+    for name in case_names:
+        status = statuses.get(name, {"status": "EXECUTION_FAILED", "detail": "worker reported no result"})
+        if status["status"] != "ok":
+            category = status["status"] if status["status"] in FAILURE_CATEGORIES else "EXECUTION_FAILED"
+            results.append(CaseResult(name, False, category, (), _clip(status.get("detail"))))
+        elif name not in actual:
+            results.append(CaseResult(name, False, "EXECUTION_FAILED", (), "worker returned no output"))
+        else:
+            results.append(replace(compare_flat(expected[name], actual[name], tol), case=name))
+    first_failure = next((r for r in results if not r.passed), None)
+    return CorrectnessReport(passed=first_failure is None,
+                             category=None if first_failure is None else first_failure.category,
+                             policy_hash=policy, cases=tuple(results))
+
+
 def _shape_name(shape) -> str:
     return "(" + ",".join(str(n) for n in shape) + ")"
 
