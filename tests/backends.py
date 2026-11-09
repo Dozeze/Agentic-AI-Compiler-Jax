@@ -43,3 +43,21 @@ def cuda_status() -> tuple[bool, str]:
     if lines[-1] == "ok":
         return True, "CUDA available"
     return False, f"CUDA unavailable ({lines[-1]})"
+
+
+@functools.lru_cache(maxsize=1)
+def docker_status() -> tuple[bool, str]:
+    """Return (available, reason): a reachable daemon and a CPU worker image for the current harness.
+
+    The image is built on first use (a content-hashed tag, so an existing one is current).
+    """
+    sys.path.insert(0, str(REPO))
+    import runner
+    reason = runner.DockerRunner(backend="cpu").preflight()
+    if reason is not None and "not built" in reason:
+        build = subprocess.run([sys.executable, str(REPO / "scripts" / "build_worker_image.py")],
+                               capture_output=True, text=True, timeout=1800)
+        if build.returncode != 0:
+            return False, "worker image build failed: " + (build.stderr.strip().splitlines() or ["?"])[-1][:200]
+        reason = runner.DockerRunner(backend="cpu").preflight()
+    return (True, "Docker available") if reason is None else (False, reason)

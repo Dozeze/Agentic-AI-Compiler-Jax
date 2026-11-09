@@ -186,3 +186,92 @@ class TrustedSubprocessRunner:
                                            max_log_bytes=self.max_log_bytes)
         detail = f"exceeded the {timeout_s:g} s deadline" if status == TIMEOUT else None
         return _outcome(status, out, err, wall_s, workdir, self.max_log_bytes, detail)
+
+
+def _docker(*args: str, timeout: float = 60) -> subprocess.CompletedProcess:
+    return subprocess.run(["docker", *args], capture_output=True, text=True, timeout=timeout)
+
+
+class DockerRunner:
+    """One locked-down container per request: the only path for model-written code (AIC-009).
+
+    Controls (AIC-1.1 §7): no network; read-only root filesystem; all capabilities dropped and
+    no-new-privileges (Docker's default seccomp profile stays on); a non-root user; CPU, memory (no swap)
+    and PID limits; a size-limited tmpfs as the only scratch space; only the request's own work directory
+    mounted; no inherited environment, so no credentials. A GPU is exposed only for backend `cuda`
+    (`--gpus all`, the only form WSL2 supports). The parent owns the deadline, kills the container on
+    timeout, inspects it for an out-of-memory kill, removes it and verifies it is gone.
+    """
+    name = "docker/v1"
+    isolated = True
+
+    def __init__(self, *, backend: str | None, image: str | None = None, memory: str = "2g", cpus: float = 2,
+                 pids: int = 128, scratch_mb: int = 256, max_log_bytes: int = 1 << 20):
+        self.variant = "cuda12" if backend == "cuda" else "cpu"
+        self.image = image or image_reference(self.variant)
+        self.gpus = backend == "cuda"
+        self.limits = {"memory": memory, "cpus": cpus, "pids": pids, "scratch_mb": scratch_mb}
+        self.max_log_bytes = max_log_bytes
+
+    def identity(self) -> dict:
+        image_id = None
+        try:
+            inspected = _docker("image", "inspect", "--format", "{{.Id}}", self.image, timeout=30)
+            image_id = inspected.stdout.strip() or None if inspected.returncode == 0 else None
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        return {"runner": self.name, "isolated": True, "image": self.image, "image_id": image_id,
+                "gpus": self.gpus, "limits": self.limits}
+
+    def preflight(self) -> str | None:
+        """None when containers can run; otherwise why not (the run is then ISOLATION_UNAVAILABLE)."""
+        try:
+            if _docker("info", "--format", "{{.ServerVersion}}", timeout=30).returncode != 0:
+                return "the Docker daemon is not reachable (start Docker Desktop or the docker service)"
+            if _docker("image", "inspect", self.image, timeout=30).returncode != 0:
+                return (f"worker image {self.image} is not built: "
+                        f"uv run --locked python scripts/build_worker_image.py --variant {self.variant}")
+        except FileNotFoundError:
+            return "the docker CLI is not installed"
+        except subprocess.TimeoutExpired:
+            return "the Docker daemon did not answer"
+        return None
+
+    def argv(self, workdir: Path, container: str) -> list[str]:
+        limits = self.limits
+        argv = ["docker", "run", "--name", container, "--label", "aic.worker=1",
+                "--network", "none", "--read-only", "--cap-drop", "ALL",
+                "--security-opt", "no-new-privileges",
+                "--user", "65534:65534", "--pids-limit", str(limits["pids"]),
+                "--memory", limits["memory"], "--memory-swap", limits["memory"], "--cpus", str(limits["cpus"]),
+                "--tmpfs", f"/tmp:rw,nosuid,nodev,size={limits['scratch_mb']}m,mode=1777",
+                "--env", "HOME=/tmp", "--workdir", "/work",
+                "--mount", f"type=bind,source={Path(workdir).resolve()},target=/work"]
+        if self.gpus:
+            argv += ["--gpus", "all"]
+        return argv + [self.image, "/work"]
+
+    def run(self, workdir: Path, request: dict, *, trusted: bool, timeout_s: float) -> RunOutcome:
+        del trusted                                      # everything is contained here
+        reason = self.preflight()
+        if reason is not None:
+            return RunOutcome(ISOLATION_UNAVAILABLE, None, "", "", 0.0, reason)
+        import uuid
+        workdir = Path(workdir)
+        _write_request(workdir, request)
+        os.chmod(workdir, 0o777)                         # the container user (nobody) writes its result here
+        container = f"aic-worker-{uuid.uuid4().hex[:12]}"
+        host_env = {k: os.environ[k] for k in ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONTEXT",
+                                               "DOCKER_CONFIG") if k in os.environ}
+        status, out, err, wall_s = execute(self.argv(workdir, container), cwd=workdir, env=host_env,
+                                           timeout_s=timeout_s, max_log_bytes=self.max_log_bytes,
+                                           on_timeout=lambda: _docker("kill", container, timeout=30))
+        oom = _docker("inspect", "--format", "{{.State.OOMKilled}}", container, timeout=30).stdout.strip()
+        _docker("rm", "--force", container, timeout=60)
+        if _docker("ps", "--all", "--quiet", "--filter", f"name=^{container}$", timeout=30).stdout.strip():
+            raise RuntimeError(f"container {container} survived its request")
+        if status == OK and oom == "true":
+            return RunOutcome(RESOURCE_LIMIT, None, _tail(out, self.max_log_bytes), _tail(err, self.max_log_bytes),
+                              wall_s, f"killed for exceeding the {self.limits['memory']} memory limit")
+        detail = f"exceeded the {timeout_s:g} s deadline" if status == TIMEOUT else None
+        return _outcome(status, out, err, wall_s, workdir, self.max_log_bytes, detail)

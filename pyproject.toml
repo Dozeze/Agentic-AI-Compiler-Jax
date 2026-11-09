@@ -27,4 +27,5 @@ addopts = "-ra -p no:anyio"    # the anyio plugin emits PytestRemovedIn10Warning
 markers = [
   "slow: takes longer than 10 seconds",
   "needs_gpu: needs CUDA; skipped without it, an error with --require-gpu",
+  "needs_docker: needs Docker and the worker image; skipped without them, an error with --require-docker",
 ]

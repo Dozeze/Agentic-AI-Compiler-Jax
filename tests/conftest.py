@@ -14,24 +14,30 @@ if str(TESTS) not in sys.path:              # make `fakes` and `fixtures` import
 # Forced, not setdefault: a shell `export JAX_PLATFORMS=cuda` must not move the test process to the GPU.
 os.environ["JAX_PLATFORMS"] = "cpu"   # must happen before any jax import
 
-from backends import cuda_status  # noqa: E402  (importable only after the sys.path setup above)
+from backends import cuda_status, docker_status  # noqa: E402  (importable only after the sys.path setup)
+
+_REQUIREMENTS = {"needs_gpu": (cuda_status, "--require-gpu"), "needs_docker": (docker_status, "--require-docker")}
 
 
 def pytest_addoption(parser):
     parser.addoption("--require-gpu", action="store_true",
                      help="fail needs_gpu tests instead of skipping them when CUDA is unavailable")
+    parser.addoption("--require-docker", action="store_true",
+                     help="fail needs_docker tests instead of skipping them when Docker is unavailable")
 
 
 def pytest_runtest_setup(item):
-    """needs_gpu tests are skipped without CUDA, or failed when --require-gpu is given (NV host)."""
-    if item.get_closest_marker("needs_gpu") is None:
-        return
-    available, reason = cuda_status()       # probed lazily, once per session
-    if available:
-        return
-    if item.config.getoption("--require-gpu"):
-        pytest.fail(f"--require-gpu: {reason}", pytrace=False)
-    pytest.skip(f"needs_gpu: {reason}")
+    """needs_gpu / needs_docker tests are skipped without CUDA / Docker, or failed when the matching
+    --require-* option is given (NV host, CI)."""
+    for marker, (status, option) in _REQUIREMENTS.items():
+        if item.get_closest_marker(marker) is None:
+            continue
+        available, reason = status()        # probed lazily, once per session
+        if available:
+            continue
+        if item.config.getoption(option.lstrip("-").replace("-", "_")):
+            pytest.fail(f"{option}: {reason}", pytrace=False)
+        pytest.skip(f"{marker}: {reason}")
 
 
 @pytest.fixture
