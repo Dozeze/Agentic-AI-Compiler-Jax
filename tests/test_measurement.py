@@ -132,3 +132,44 @@ def test_paired_speedup_interval_is_seeded_and_contains_the_point():
 def test_identical_sides_give_a_degenerate_interval_at_one():
     est = benchmark.paired_speedup([0.3] * 20, [0.3] * 20, SMALL)
     assert (est.speedup, est.ci_low, est.ci_high) == (1.0, 1.0, 1.0)
+
+
+def _session(a_ns, b_ns, protocol=SMALL):
+    """A PairedSession with the given per-block elapsed nanoseconds (repeats = 1)."""
+    from contracts import protocol_hash
+    blocks = tuple(benchmark.Block(i, "AB", 1, a, b, 2 * i, 2 * i + 1)
+                   for i, (a, b) in enumerate(zip(a_ns, b_ns)))
+    return benchmark.PairedSession(protocol_hash(protocol), 1, blocks)
+
+
+def test_quiet_session_is_stable():
+    s = benchmark.stability(_session([100] * 6, [50] * 6), SMALL)
+    assert s.stable and s.reasons == ()
+    assert (s.iqr_over_median_a, s.iqr_over_median_b, s.baseline_drift) == (0.0, 0.0, 0.0)
+
+
+def test_noisy_side_is_unstable():
+    s = benchmark.stability(_session([100] * 6, [50, 80, 50, 80, 50, 80]), SMALL)
+    assert not s.stable
+    assert any(reason.startswith("B IQR/median") for reason in s.reasons)
+
+
+def test_drifting_baseline_is_unstable():
+    s = benchmark.stability(_session([100, 100, 100, 110, 110, 110], [50] * 6), SMALL)
+    assert not s.stable
+    assert math.isclose(s.baseline_drift, 0.1)
+    assert any("drift" in reason for reason in s.reasons)
+
+
+def test_analyze_session_combines_summary_speedup_and_stability():
+    analysis = benchmark.analyze_session(_session([100] * 6, [50] * 6), SMALL)
+    assert math.isclose(analysis.speedup.speedup, 2.0)
+    assert analysis.stability.stable
+    assert analysis.to_json()["a"]["n"] == 6
+
+
+def test_analyze_session_refuses_a_different_protocol():
+    import dataclasses
+    other = dataclasses.replace(SMALL, n_blocks=8)
+    with pytest.raises(ValueError, match="different protocol"):
+        benchmark.analyze_session(_session([100] * 6, [50] * 6), other)

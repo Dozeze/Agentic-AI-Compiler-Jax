@@ -460,6 +460,54 @@ def paired_speedup(a_s, b_s, protocol) -> SpeedupEstimate:
                            protocol.bootstrap_seed)
 
 
+@dataclass(frozen=True)
+class Stability:
+    """Diagnostic limits of AIC-1.1 §5.6: noisy sides or a drifting baseline make a session unusable."""
+    stable: bool
+    iqr_over_median_a: float
+    iqr_over_median_b: float
+    baseline_drift: float          # |median(A, second half) / median(A, first half) - 1|, in block order
+    reasons: tuple[str, ...]
+
+
+def stability(session: PairedSession, protocol) -> Stability:
+    a = [b.a_s for b in session.blocks]
+    iqr_a = summarize(a).iqr_over_median
+    iqr_b = summarize([b.b_s for b in session.blocks]).iqr_over_median
+    half = len(a) // 2
+    first, second = float(np.median(a[:half])), float(np.median(a[half:]))
+    drift = abs(second / first - 1.0) if first > 0 else float("inf")
+    reasons = []
+    for side, value in (("A", iqr_a), ("B", iqr_b)):
+        if value > protocol.max_iqr_over_median:
+            reasons.append(f"{side} IQR/median {value:.3f} > {protocol.max_iqr_over_median}")
+    if drift > protocol.max_baseline_drift:
+        reasons.append(f"baseline drift {drift:.3f} > {protocol.max_baseline_drift}")
+    return Stability(not reasons, iqr_a, iqr_b, drift, tuple(reasons))
+
+
+@dataclass(frozen=True)
+class SessionAnalysis:
+    """Everything the decision needs from one session. Computed on the host from the raw blocks."""
+    a: LatencySummary
+    b: LatencySummary
+    speedup: SpeedupEstimate
+    stability: Stability
+
+    def to_json(self) -> dict:
+        return dataclasses.asdict(self)
+
+
+def analyze_session(session: PairedSession, protocol) -> SessionAnalysis:
+    from contracts import protocol_hash
+    if session.protocol_hash != protocol_hash(protocol):
+        raise ValueError("session was measured under a different protocol")
+    a = [b.a_s for b in session.blocks]
+    b = [b.b_s for b in session.blocks]
+    return SessionAnalysis(summarize(a), summarize(b), paired_speedup(a, b, protocol),
+                           stability(session, protocol))
+
+
 def timeit_version_1(function, args, num_runs=30, num_tests=1):
     """Return the mean runtime per call across several timing batches."""
     if num_runs <= 0:
