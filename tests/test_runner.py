@@ -1,0 +1,100 @@
+"""Execution boundary (AIC-008): fresh processes, deadlines, cleanup, bounded logs, trust levels."""
+import dataclasses
+import json
+import os
+import sys
+import textwrap
+import time
+
+import numpy as np
+import pytest
+
+import array_io
+import runner
+import worker
+from contracts import MeasurementProtocol
+from fixtures.softmax_candidates import REFERENCE
+
+INFINITE = "def softmax(x):\n    while True:\n        pass\n"
+
+
+def _prepare(work, source):
+    work.mkdir(parents=True, exist_ok=True)
+    (work / "cand.py").write_text(source)
+    array_io.save(work / "inputs.npz", {"a": array_io.flatten((np.ones((4, 8), np.float32),))})
+    return {"schema_version": worker.REQUEST_SCHEMA, "mode": "outputs", "backend": "cpu",
+            "function_name": "softmax", "sources": {"candidate": "cand.py"}, "inputs": "inputs.npz"}
+
+
+def test_trusted_code_runs_in_a_fresh_process(tmp_path):
+    request = _prepare(tmp_path / "w", REFERENCE)
+    outcome = runner.TrustedSubprocessRunner().run(tmp_path / "w", request, trusted=True, timeout_s=120)
+    assert outcome.status == runner.OK, outcome.detail
+    assert outcome.result["cases"][0]["status"] == "ok"
+    assert outcome.result["device"]["platform"] == "cpu"
+
+
+def test_model_code_is_refused_without_isolation(tmp_path):
+    request = _prepare(tmp_path / "w", REFERENCE)
+    outcome = runner.TrustedSubprocessRunner().run(tmp_path / "w", request, trusted=False, timeout_s=120)
+    assert outcome.status == runner.ISOLATION_UNAVAILABLE
+    assert not (tmp_path / "w" / "request.json").exists()          # nothing was even prepared to run
+
+
+def test_deadline_kills_the_worker(tmp_path):
+    request = _prepare(tmp_path / "w", INFINITE)
+    outcome = runner.TrustedSubprocessRunner(reviewed_fixtures=True).run(tmp_path / "w", request,
+                                                                         trusted=False, timeout_s=8)
+    assert outcome.status == runner.TIMEOUT and outcome.result is None
+    assert "deadline" in outcome.detail
+
+
+def test_descendants_are_killed_after_exit(tmp_path):
+    marker = tmp_path / "grandchild.pid"
+    script = textwrap.dedent(f"""
+        import subprocess, sys
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        open({str(marker)!r}, "w").write(str(child.pid))
+    """)
+    status, *_ = runner.execute([sys.executable, "-c", script], cwd=tmp_path, env=dict(os.environ),
+                                timeout_s=30, max_log_bytes=1000)
+    assert status == runner.OK
+    pid = int(marker.read_text())
+    for _ in range(50):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.1)
+    else:
+        pytest.fail("the grandchild survived the request")
+
+
+def test_logs_are_bounded(tmp_path):
+    status, out, err, _ = runner.execute([sys.executable, "-c", "print('x' * 100000)"], cwd=tmp_path,
+                                         env=dict(os.environ), timeout_s=30, max_log_bytes=1000)
+    assert status == runner.OK and len(out) == 1000
+
+
+def test_missing_or_forged_result_is_a_crash(tmp_path):
+    work = tmp_path / "w"
+    request = _prepare(work, REFERENCE)
+    request["mode"] = "measure"                                    # missing fields: the worker reports an error
+    request.update(protocol=dataclasses.asdict(MeasurementProtocol()), case="missing")
+    outcome = runner.TrustedSubprocessRunner().run(work, request, trusted=True, timeout_s=120)
+    assert outcome.status == runner.OK and outcome.result["status"] == "error"
+
+    (work / "result.json").write_text(json.dumps({"schema_version": "forged"}))
+    assert runner.read_result(work) is None
+    os.remove(work / "result.json")
+    os.symlink(tmp_path / "elsewhere.json", work / "result.json")
+    assert runner.read_result(work) is None
+
+
+def test_worker_env_has_no_credentials_or_backend_pin(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-secret")
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", "/secret.json")
+    env = runner.worker_env(tmp_path)
+    assert "ANTHROPIC_API_KEY" not in env and "GOOGLE_APPLICATION_CREDENTIALS" not in env
+    assert "JAX_PLATFORMS" not in env
+    assert env["HOME"] == str(tmp_path)
