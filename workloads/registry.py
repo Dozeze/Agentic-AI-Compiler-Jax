@@ -150,6 +150,23 @@ EXAMPLE_ADD = WorkloadSpec(
 REGISTRY = {s.workload_id: s for s in (SOFTMAX, EXAMPLE_ADD)}
 
 
+def legacy_source_spec(source_path, function_name, args) -> WorkloadSpec:
+    """Adapter for `agent.py --source`: a trusted .py file whose TEST_ARGS / make_test_args are the only
+    case. Not scientific: one input, no edge cases, no held-out split."""
+    arrays = tuple(np.asarray(a) for a in args)
+    if not arrays:
+        raise ValueError("a --source workload needs at least one input array")
+    path = Path(source_path).resolve()
+    return WorkloadSpec(
+        schema_version=WORKLOAD_SCHEMA, workload_id=f"source:{path.stem}", version=1, reference_path=path,
+        function_name=function_name,
+        dtypes=tuple(dict.fromkeys(["float32", *(str(a.dtype) for a in arrays)])), static_params={},
+        development_shapes=(arrays[0].shape,), heldout_shapes=(), search_seeds=(0,),
+        input_factory=lambda seed, shape, dtype: tuple(a.copy() for a in arrays), oracle=None,
+        output_contract="as produced by the reference", tolerance=Tolerance(rtol=1e-5, atol=1e-6),
+        edge_cases=(), max_input_bytes=max(1 << 20, 2 * sum(a.nbytes for a in arrays)), scientific=False)
+
+
 def get(workload_id: str) -> WorkloadSpec:
     """Return a workload spec; KeyError lists the available IDs."""
     try:

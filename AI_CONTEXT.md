@@ -99,7 +99,8 @@ Course deadlines (fixed by KTH, not by AIC-1.1): report draft **2026-11-20 17:00
 **Dual-backend code (D-06).** `tests/test_backend_portability.py` has best-effort AST guards for rules 1 and 5,
 tests the `--require-gpu` wiring of rule 2 and demonstrates rule 3; rules 2 (subprocess) and 4 are review-only.
 1. **Never choose a backend in harness code** (root modules, `workloads/`, `scripts/`). It comes from
-   `RunConfig.backend` through `environment.select_backend()`. Outside `environment.py`: no `jax.devices("gpu")`,
+   `RunConfig.backend` through `environment.select_backend()`; code that only forwards that configured name (to a runner,
+   the evaluator or a worker request) passes it as `selected_backend=`, never `backend=`. Outside `environment.py`: no `jax.devices("gpu")`,
    no `backend=` or `device=` arguments, no `jax.default_device`, no `jax.config.update("jax_platforms", ...)`, no
    `JAX_PLATFORMS`. To ask "is this a GPU?", use `environment.has_gpu(devices)`. Test setup (`tests/conftest.py`,
    `tests/backends.py`) and CI may set `JAX_PLATFORMS`.
@@ -142,7 +143,7 @@ Workloads (AIC-003):
   sources (`workloads/softmax.py`) contain no inputs or seeds. Edge cases use the fixed seed 12345.
 - The float64 oracle (`workloads/oracles.py`) validates the reference only; candidates are compared with the
   jit-compiled reference (AIC-004). JAX x64 is off, so the oracle runs in NumPy.
-- The registry is not wired into `agent.py` yet (M3); `--source/--function` remains the run path.
+- The registry is wired into the controller: `RunConfig.workload_id` (config file) selects a registered workload; `--source/--function` builds a non-scientific `registry.legacy_source_spec`.
 
 Correctness (AIC-004):
 - `check_correctness` compares candidates with the **jit-compiled frozen reference**, not the oracle. A failing or
@@ -153,7 +154,7 @@ Correctness (AIC-004):
 - Relative error uses denominator `max(|e|, max(1e-3·max|e|, tiny))`; it is reported only, not used for the verdict.
 - `policy_hash` covers tolerance, non-finite policy, case names, workload id and reference sha256.
 - Pallas on CPU: interpret mode only (`ValueError` otherwise) — not native-kernel evidence.
-- Current `benchmark.evaluate` accepts a candidate that is faster only by noise (same code: 4.80 / 4.00 / 4.03 µs) — fixed by AIC-005/006, not before.
+- Legacy `benchmark.evaluate` (in-process, accepts noise: same code 4.80 / 4.00 / 4.03 µs) is kept for its tests only; the controller no longer uses it. Since AIC-006/009 the controller evaluates through `Evaluator` + a runner and accepts only via `judge()` (CI lower bound > 1 + δ, confirmed in a fresh session).
 - Since AIC-004, `benchmark.evaluate` rejects non-finite output even when the reference is non-finite too
   (`error` = "reference produced non-finite values; …"), and supports PyTree outputs; timing now uses
   `jax.block_until_ready(out)` so tuple/dict outputs can be timed. The five legacy result keys keep their meaning;
@@ -181,7 +182,19 @@ WSL2 + CUDA (NVIDIA CUDA-on-WSL guide; to be confirmed on the host):
 - Keep the repo inside the WSL filesystem (`~/...`), not under `/mnt/c/...` (slow cross-filesystem I/O).
 - Mac CPU and WSL2 GPU results are different measurement populations — never compare them.
 
+Evaluation pipeline (AIC-005 … 009):
+- `controller.Evaluator`: frozen reference outputs (trusted) → candidate outputs in a worker → host comparison
+  (`benchmark.report_from_outputs`) → lazy A/A calibration (or a frozen `--calibration` file, checked) → `judge()`.
+  The controller never executes candidate code; `Controller.__init__` has no side effects, `start()` runs the baseline.
+- Runners: `--runner docker` (default; the only path for model-written code) or `--runner subprocess` (trusted code
+  only: model candidates end the run as INTERRUPTED). Docker unavailable → exit 2 `ISOLATION_UNAVAILABLE` before any
+  LLM call. Build the image with `uv run --locked python scripts/build_worker_image.py`; its tag is a content hash.
+- On a busy Mac, tiny workloads (x + y, µs per call) usually fail the 10 % / 5 % instability limits: the run then
+  stops with "no usable A/A calibration" instead of guessing a threshold. That is the protocol working.
+- A measurement population is device + JAX version + runner/image: a change mid-run stops the run (INTERRUPTED).
+
 ## 9. Change log (newest first, one line per push)
+- 2026-11-09 Sergio — AIC-009: controller rewritten around `Evaluator` (reference → isolated candidate outputs → host comparison → A/A calibration → `judge()`); `agent.py --runner docker|subprocess`, `--calibration`; ISOLATION_UNAVAILABLE exits before any LLM call; Attempt v1 records with raw blocks in history; configured backend forwarded as `selected_backend=` (rule 1).
 - 2026-11-09 Sergio — AIC-009: CI job `containment` (builds the CPU worker image, runs `-m needs_docker --require-docker`); the `test` job excludes needs_docker.
 - 2026-11-09 Sergio — AIC-009: `runner.DockerRunner` (no network, read-only root, no capabilities, no-new-privileges, nobody, CPU/memory/PID limits, tmpfs scratch, only the work dir mounted, OOM → RESOURCE_LIMIT, verified removal); `needs_docker` marker + `--require-docker`; `tests/test_containment.py` hostile probes pass on Docker Desktop.
 - 2026-11-09 Sergio — AIC-009: `docker/worker.Dockerfile` (locked deps via uv, harness modules only, user nobody; `EXTRA=cuda12` GPU variant) and `scripts/build_worker_image.py` (minimal build context; tag = content hash from `runner.image_reference`).

@@ -65,24 +65,26 @@ def _load_source_workload(source_path, function_name):
     return source, jax.jit(function), args
 
 
-def build_controller(client, max_iterations=DEFAULT_ITERATIONS, source_path=None, function_name="bad_func", output_dir=None):
-    """Build the small forward-only workload used by the first milestone."""
+def build_controller(client, max_iterations=DEFAULT_ITERATIONS, source_path=None, function_name="bad_func",
+                     output_dir=None, *, workload_id=None, runner=None, selected_backend=None, protocol=None,
+                     calibration=None):
+    """Build the controller for a registered workload (`workload_id`) or a trusted --source file.
+
+    Without either, the registered `example_add` workload (the original x + y example) is used. The
+    default runner is the isolated DockerRunner; pass another runner explicitly.
+    """
+    import tempfile
+    from contracts import MeasurementProtocol
+    from controller import Evaluator
+    from runner import DockerRunner
+    from workloads import registry
+
     if source_path is not None:
-        initial_code, reference_func, args = _load_source_workload(source_path, function_name)
+        _, _, args = _load_source_workload(source_path, function_name)
+        spec = registry.legacy_source_spec(source_path, function_name, args)
     else:
-        initial_code = """
-import jax.numpy as jnp
-
-def bad_func(x, y):
-    return x + y
-""".strip()
-
-        namespace = {}
-        exec(initial_code, namespace)
-        reference_func = jax.jit(namespace[function_name])
-        x_test = jnp.arange(32, dtype=jnp.float32)
-        y_test = jnp.ones(32, dtype=jnp.float32)
-        args = (x_test, y_test)
+        spec = registry.get(workload_id or "example_add")
+        function_name = spec.function_name
 
     prompt = (
         "You optimize pure JAX functions through the existing evaluator. "
@@ -95,19 +97,25 @@ def bad_func(x, y):
         "@jax.jit or call jax.jit in the candidate. Inspect the current code "
         "and history before proposing a candidate."
     )
-    # Initialize agent
+    workdir = Path(output_dir) / "work" if output_dir is not None else Path(tempfile.mkdtemp(prefix="aic-run-"))
+    evaluator = Evaluator(spec, runner or DockerRunner(selected_backend=selected_backend),
+                          protocol or MeasurementProtocol(), workdir, selected_backend=selected_backend,
+                          calibration=calibration)
     return Controller(
         agent="Claude",
         prompt=prompt,
-        reference_func=reference_func,
-        args=args,
-        initial_code=initial_code,
+        evaluator=evaluator,
         client=client,
         function_name=function_name,
         max_iterations=max_iterations,
         output_dir=output_dir,
         source_path=source_path,
     )
+
+
+def client_factory():
+    """The LLM client for the configured provider. Tests replace anthropic.Anthropic with a fake."""
+    return anthropic.Anthropic()
 
 
 def atomic_write_json(path, obj):
@@ -139,6 +147,11 @@ def _build_parser():
                              "Without it, JAX chooses (legacy) and the run is marked non-scientific")
     parser.add_argument("--config", type=Path, default=None,
                         help="JSON RunConfig v1 file; precedence is CLI > file > defaults")
+    parser.add_argument("--runner", choices=("docker", "subprocess"), default=None,
+                        help="where code runs: docker (default; isolated, required for model-written code) or "
+                             "subprocess (trusted code only: the baseline runs, model candidates are refused)")
+    parser.add_argument("--calibration", type=Path, default=None,
+                        help="frozen A/A calibration JSON; without it the run calibrates before its first measurement")
     return parser
 
 
@@ -152,6 +165,8 @@ def _cli_overrides(args):
         "source_path": str(args.source) if args.source is not None else None,
         "function_name": args.function,
         "output_dir": str(args.output_dir) if args.output_dir is not None else None,
+        "runner": args.runner,
+        "calibration_path": str(args.calibration) if args.calibration is not None else None,
     }
 
 
@@ -185,6 +200,14 @@ def main(argv=None):
     if not os.getenv("ANTHROPIC_API_KEY"):
         raise RuntimeError("ANTHROPIC_API_KEY is missing; put it in .env.local or the environment")
 
+    # Where code runs. Model-written code needs isolation; without it the run stops before any LLM call.
+    from runner import DockerRunner, TrustedSubprocessRunner
+    runner = DockerRunner(selected_backend=cfg.backend) if cfg.runner == "docker" else TrustedSubprocessRunner()
+    reason = runner.preflight()
+    if reason is not None:
+        print(f"error: ISOLATION_UNAVAILABLE: {reason}", file=sys.stderr)
+        sys.exit(2)
+
     # Record the run before any LLM call.
     output_dir = Path(cfg.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -195,26 +218,38 @@ def main(argv=None):
         "backend_requested": cfg.backend,
         "scientific": cfg.backend is not None,
         "reason": None if cfg.backend is not None else "backend not explicitly selected",
+        "runner": runner.identity(),
         "environment": collect_environment(REPO, devices),
     }
     atomic_write_json(output_dir / "run_config.json", to_dict(cfg))
     atomic_write_json(output_dir / "manifest.json", manifest)
 
-    client = anthropic.Anthropic()
+    from benchmark import Calibration
+    from controller import BaselineFailed
     controller = build_controller(
-        client,
+        client_factory(),
         max_iterations=cfg.budgets.max_candidates,
         source_path=Path(cfg.source_path) if cfg.source_path is not None else None,
         function_name=cfg.function_name,
         output_dir=output_dir,
+        workload_id=None if cfg.source_path is not None else cfg.workload_id,
+        runner=runner,
+        selected_backend=cfg.backend,
+        protocol=cfg.measurement,
+        calibration=Calibration.load(cfg.calibration_path) if cfg.calibration_path else None,
     )
+    try:
+        controller.start()
+    except BaselineFailed as error:
+        print(f"error: baseline failed, no proposal requested: {error}", file=sys.stderr)
+        sys.exit(2)
     if cfg.budgets.max_candidates == 0:
         # A zero candidate budget is valid and means: no provider request at all.
         history = controller.provide_hist()
     else:
-        # agent_controller.agent_loop() # JUST A LOOP FOR TESTING! NOT THE ACTUAL LOOP. THE LOOP SHOULD NOT BE INSIDE
-        # THE CONTROLLER.
         history = controller.agent_loop(model=cfg.model.model_id, max_tokens=cfg.model.max_tokens)
+    if controller.stop_reason:
+        print(f"Run stopped: {controller.stop_reason}")
 
     print(f"Completed {len(history) - 1} candidate evaluations.")
     print(f"Best runtime: {controller.best_runtime}")
@@ -222,6 +257,8 @@ def main(argv=None):
         "Accepted candidates: "
         f"{sum(item['accepted'] for item in history[1:])}"
     )
+    for item in history[1:]:
+        print(f"  iteration {item['iteration']}: {item['state']}")
     if history[-1].get("error"):
         print(f"Last evaluation error: {history[-1]['error']}")
 

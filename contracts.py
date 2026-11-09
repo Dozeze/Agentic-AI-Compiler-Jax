@@ -22,6 +22,7 @@ from environment import BACKENDS
 RUN_CONFIG_SCHEMA = "run_config/v1"
 SPLITS = ("development", "heldout")
 CONTEXT_CONDITIONS = ("C0", "C1", "C2", "C3", "C4", "K")
+RUNNERS = ("docker", "subprocess")
 
 
 class ContractError(ValueError):
@@ -123,7 +124,8 @@ class RunConfig:
     seeds: tuple[int, ...] = (0, 1, 2, 3, 4)
     correctness_policy_hash: str | None = None   # filled from the workload policy once the registry is wired in
     context_condition: str = "C2"
-    runner: str = "in-process/v0"    # honest: candidates are exec'd in this process; no isolation yet
+    runner: str = "docker"           # docker: isolated containers; subprocess: trusted code only (AIC-009)
+    calibration_path: str | None = None   # a frozen A/A calibration; without it the run calibrates at start
     output_dir: str = "runs/latest"
     benchmark: BenchmarkSettings = field(default_factory=BenchmarkSettings)
     measurement: MeasurementProtocol = field(default_factory=MeasurementProtocol)
@@ -204,6 +206,8 @@ def validate(cfg: RunConfig) -> None:
         raise ConfigError(f"run_config.backend: must be one of {BACKENDS} or null, got {cfg.backend!r}")
     if cfg.split not in SPLITS:
         raise ConfigError(f"run_config.split: must be one of {SPLITS}, got {cfg.split!r}")
+    if cfg.runner not in RUNNERS:
+        raise ConfigError(f"run_config.runner: must be one of {RUNNERS}, got {cfg.runner!r}")
     if cfg.context_condition not in CONTEXT_CONDITIONS:
         raise ConfigError(f"run_config.context_condition: must be one of {CONTEXT_CONDITIONS}, "
                           f"got {cfg.context_condition!r}")

@@ -7,6 +7,7 @@ import tomllib
 
 import pytest
 
+from contracts import MeasurementProtocol
 from fakes import FakeAnthropic, proposal, tool_use
 
 ORIGINAL = "import jax.numpy as jnp\n\ndef bad_func(x, y):\n    return x + y\n"
@@ -20,12 +21,24 @@ def example(repo_root):
     return source, reference, args
 
 
-def _build(repo_root, script, output_dir, max_iterations=3):
+# A short protocol for tests: the mechanics are the same, the sessions are seconds, not minutes. Blocks of
+# 2 ms on a shared CPU are noisy, so the instability limits are loosened here; these tests check the
+# pipeline, never a speed (the real limits, 10 % and 5 %, are in contracts.MeasurementProtocol).
+FAST = MeasurementProtocol(warmup_calls=2, min_block_s=0.001, target_block_s=0.002, max_block_s=0.01,
+                           n_blocks=6, bootstrap_samples=500, max_iqr_over_median=1.0, max_baseline_drift=1.0)
+
+
+def _build(repo_root, script, output_dir, max_iterations=3, runner=None):
+    """A controller on the example workload. Fixtures here are reviewed code, so the trusted runner may
+    run them as if they were model output (agent.py never does this)."""
     import agent
+    from runner import TrustedSubprocessRunner
     client = FakeAnthropic(script)
     controller = agent.build_controller(client, max_iterations=max_iterations,
                                         source_path=repo_root / "workloads/example.py",
-                                        function_name="bad_func", output_dir=output_dir)
+                                        function_name="bad_func", output_dir=output_dir, selected_backend="cpu",
+                                        runner=runner or TrustedSubprocessRunner(reviewed_fixtures=True),
+                                        protocol=FAST)
     return client, controller
 
 
@@ -113,17 +126,23 @@ def test_fake_loop_records_history(no_key, repo_root):
     _, controller = _build(repo_root, _history_script(), out_dir)
     history = controller.agent_loop(model="fake-model")
     assert len(history) == 3
-    # Never assert `accepted` for identical code: today's acceptance rule is timing noise (AIC-005/006).
+    assert history[0]["state"] == "ACCEPTED" and "baseline" in history[0]["reason"]
+    # The same computation as the baseline: correct, measured, and never accepted on noise (AIC-006).
     assert history[1]["output_correct"] is True
+    assert history[1]["state"] in ("VALID_NO_CHANGE", "VALID_SLOWER", "MEASUREMENT_UNSTABLE")
+    sessions = history[1]["attempt"]["evaluation"]["sessions"]
+    assert sessions and len(sessions[0]["raw"]["blocks"]) == FAST.n_blocks
+    assert (out_dir / "work" / "calibration.json").is_file()
     assert history[2]["output_correct"] is False
-    assert history[2]["accepted"] is False
+    assert history[2]["accepted"] is False and history[2]["state"] == "CORRECTNESS_FAILED"
     for i in range(3):
         assert (out_dir / f"iteration_{i:04d}.json").is_file()
     assert len(json.loads((out_dir / "history.json").read_text())) == 3
 
 
 def test_fake_loop_feeds_tool_results_back(no_key, repo_root):
-    client, controller = _build(repo_root, _history_script(), no_key / "run")
+    script = [[tool_use("t1", "get_current_code", {})], [tool_use("t2", "benchmark_code", proposal(WRONG))], []]
+    client, controller = _build(repo_root, script, no_key / "run")
     controller.agent_loop(model="fake-model")
     last = client.messages.calls[1]["messages_snapshot"][-1]
     assert last["role"] == "user"
@@ -131,9 +150,10 @@ def test_fake_loop_feeds_tool_results_back(no_key, repo_root):
 
 
 def test_one_benchmark_per_turn(no_key, repo_root):
-    script = [[tool_use("a", "benchmark_code", proposal(ORIGINAL)),
-               tool_use("b", "benchmark_code", proposal(WRONG))], []]
+    script = [[tool_use("a", "benchmark_code", proposal(WRONG)),
+               tool_use("b", "benchmark_code", proposal(ORIGINAL))], []]
     client, controller = _build(repo_root, script, no_key / "run")
+    controller.start()
     before = len(controller.history)
     controller.agent_loop(model="fake-model")
     assert len(controller.history) == before + 1
@@ -163,3 +183,37 @@ def test_policy_violation_is_recorded_not_run(no_key, repo_root):
     assert history[-1]["state"] == "POLICY_REJECTED"
     assert "import of 'os'" in history[-1]["error"]
     assert history[-1]["runtime_mean"] is None
+
+
+def test_constructor_has_no_side_effects(no_key, repo_root):
+    _, controller = _build(repo_root, [], no_key / "run")
+    assert controller.history == [] and not (no_key / "run").exists()
+
+
+def test_model_code_is_refused_without_isolation(no_key, repo_root):
+    from runner import TrustedSubprocessRunner
+    script = [[tool_use("a", "benchmark_code", proposal(WRONG))], [tool_use("b", "get_history", {})], []]
+    client, controller = _build(repo_root, script, no_key / "run", runner=TrustedSubprocessRunner())
+    history = controller.agent_loop(model="fake-model")
+    assert history[-1]["state"] == "INTERRUPTED"
+    assert "isolated runner" in history[-1]["reason"]
+    assert controller.stop_reason and len(client.messages.calls) == 1   # the loop stopped right there
+
+
+def test_duplicate_is_not_measured_again(no_key, repo_root):
+    baseline = (repo_root / "workloads/example.py").read_text()
+    reformatted = baseline.replace("    return x + y", "    return x+y   # same program")
+    script = [[tool_use("a", "benchmark_code", proposal(reformatted))], []]
+    _, controller = _build(repo_root, script, no_key / "run")
+    history = controller.agent_loop(model="fake-model")
+    assert history[-1]["state"] == "DUPLICATE" and "iteration 0" in history[-1]["reason"]
+    assert history[-1]["attempt"]["evaluation"] is None
+
+
+def test_history_shown_to_the_model_is_compact(no_key, repo_root):
+    script = [[tool_use("a", "benchmark_code", proposal(WRONG))], []]
+    _, controller = _build(repo_root, script, no_key / "run")
+    controller.agent_loop(model="fake-model")
+    view = controller.provide_hist()[-1]
+    assert "attempt" not in view
+    assert view["correctness"]["passed"] is False and view["correctness"]["first_failure"]

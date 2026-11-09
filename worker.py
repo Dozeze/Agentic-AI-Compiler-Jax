@@ -35,7 +35,8 @@ def _device_info(jax) -> dict:
     device = jax.devices()[0]
     return {"platform": device.platform, "device_kind": device.device_kind,
             "device_count": jax.device_count(), "jax": jax.__version__,
-            "default_backend": jax.default_backend()}
+            "default_backend": jax.default_backend(),
+            "timer_resolution_s": __import__("time").get_clock_info("perf_counter").resolution}
 
 
 def _load(workdir: Path, name: str, function_name: str):

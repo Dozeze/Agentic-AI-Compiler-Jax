@@ -205,11 +205,11 @@ class DockerRunner:
     name = "docker/v1"
     isolated = True
 
-    def __init__(self, *, backend: str | None, image: str | None = None, memory: str = "2g", cpus: float = 2,
+    def __init__(self, *, selected_backend: str | None, image: str | None = None, memory: str = "2g", cpus: float = 2,
                  pids: int = 128, scratch_mb: int = 256, max_log_bytes: int = 1 << 20):
-        self.variant = "cuda12" if backend == "cuda" else "cpu"
+        self.variant = "cuda12" if selected_backend == "cuda" else "cpu"
         self.image = image or image_reference(self.variant)
-        self.gpus = backend == "cuda"
+        self.gpus = selected_backend == "cuda"
         self.limits = {"memory": memory, "cpus": cpus, "pids": pids, "scratch_mb": scratch_mb}
         self.max_log_bytes = max_log_bytes
 

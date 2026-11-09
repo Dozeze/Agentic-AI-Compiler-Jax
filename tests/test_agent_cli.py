@@ -45,7 +45,7 @@ def _agent(repo_root, env, cwd, *args):
 def _drive(repo_root, env, tmp_path, *extra):
     out = tmp_path / "run"
     argv = ["--backend", "cpu", "--source", str(repo_root / "workloads/example.py"),
-            "--function", "bad_func", "--output-dir", str(out), *extra]
+            "--function", "bad_func", "--output-dir", str(out), "--runner", "subprocess", *extra]
     code = DRIVER.format(repo=str(repo_root), tests=str(repo_root / "tests"), key=FAKE_KEY,
                          out=str(out), argv=argv)
     proc = subprocess.run([sys.executable, "-c", code], cwd=tmp_path, env=env,
@@ -57,7 +57,7 @@ def _drive(repo_root, env, tmp_path, *extra):
 def test_help_unchanged(repo_root, clean_env, tmp_path):
     proc = _agent(repo_root, clean_env, tmp_path, "--help")
     assert proc.returncode == 0, proc.stderr
-    for option in (*LEGACY, "--backend", "--config"):
+    for option in (*LEGACY, "--backend", "--config", "--runner", "--calibration"):
         assert option in proc.stdout
     assert not any(tmp_path.iterdir()), "--help must not write anything"
 
@@ -93,8 +93,8 @@ def test_manifest_written_before_llm(repo_root, clean_env, tmp_path):
     assert manifest["backend_requested"] == "cpu"
     assert manifest["environment"]["devices"][0]["platform"] == "cpu"
     assert manifest["environment"]["repo"]["uv_lock_sha256"]
-    for path in out.iterdir():
-        assert FAKE_KEY not in path.read_text(), path.name
+    for path in (p for p in out.rglob("*") if p.is_file()):
+        assert FAKE_KEY.encode() not in path.read_bytes(), path.name
     assert FAKE_KEY not in proc.stdout + proc.stderr
 
 
@@ -130,3 +130,16 @@ def test_require_gpu_conflicts_with_cpu_backend(repo_root, clean_env, tmp_path):
     proc = _agent(repo_root, clean_env, tmp_path, "--backend", "cpu", "--require-gpu")
     assert proc.returncode == 2
     assert "Traceback" not in proc.stderr
+
+
+def test_unavailable_isolation_stops_before_any_llm_call(repo_root, clean_env, tmp_path):
+    """With --runner docker and no usable Docker (here: an image that cannot exist), nothing is sent."""
+    code = DRIVER.format(repo=str(repo_root), tests=str(repo_root / "tests"), key=FAKE_KEY,
+                         out=str(tmp_path / "run"),
+                         argv=["--backend", "cpu", "--runner", "docker", "--output-dir", str(tmp_path / "run")])
+    code = code.replace("import agent\n", "import agent, runner\nrunner.image_reference = lambda v: 'aic-worker:none'\n")
+    proc = subprocess.run([sys.executable, "-c", code], cwd=tmp_path, env=clean_env, capture_output=True,
+                          text=True, timeout=180)
+    assert proc.returncode == 2
+    assert "ISOLATION_UNAVAILABLE" in proc.stderr
+    assert not (tmp_path / "run").exists()

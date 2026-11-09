@@ -74,7 +74,7 @@ def _run(tmp_path, source, timeout_s=120, memory="2g"):
     array_io.save(work / "inputs.npz", {"a": array_io.flatten((np.ones((4, 8), np.float32),))})
     request = {"schema_version": worker.REQUEST_SCHEMA, "mode": "outputs", "backend": "cpu",
                "function_name": "softmax", "sources": {"candidate": "cand.py"}, "inputs": "inputs.npz"}
-    docker = runner.DockerRunner(backend="cpu", memory=memory)
+    docker = runner.DockerRunner(selected_backend="cpu", memory=memory)
     return docker.run(work, request, trusted=False, timeout_s=timeout_s), work
 
 
@@ -149,5 +149,5 @@ def test_no_container_survives_its_request(probe):
 
 
 def test_preflight_reports_a_missing_image():
-    reason = runner.DockerRunner(backend="cpu", image="aic-worker:does-not-exist").preflight()
+    reason = runner.DockerRunner(selected_backend="cpu", image="aic-worker:does-not-exist").preflight()
     assert reason and "not built" in reason

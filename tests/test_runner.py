@@ -119,7 +119,7 @@ def test_image_contains_no_secrets_or_repo_state():
 
 
 def test_docker_argv_applies_every_control(tmp_path):
-    argv = runner.DockerRunner(backend="cpu", image="img:tag").argv(tmp_path, "c1")
+    argv = runner.DockerRunner(selected_backend="cpu", image="img:tag").argv(tmp_path, "c1")
     joined = " ".join(argv)
     for flag in ("--network none", "--read-only", "--cap-drop ALL", "--security-opt no-new-privileges",
                  "--user 65534:65534", "--pids-limit 128", "--memory 2g", "--memory-swap 2g", "--cpus 2",
@@ -127,10 +127,10 @@ def test_docker_argv_applies_every_control(tmp_path):
         assert flag in joined, flag
     assert "--privileged" not in joined and "--gpus" not in joined
     assert argv[-2:] == ["img:tag", "/work"]
-    assert "--gpus all" in " ".join(runner.DockerRunner(backend="cuda", image="i").argv(tmp_path, "c2"))
+    assert "--gpus all" in " ".join(runner.DockerRunner(selected_backend="cuda", image="i").argv(tmp_path, "c2"))
 
 
 def test_docker_variant_follows_the_backend():
-    assert runner.DockerRunner(backend="cuda").variant == "cuda12"
-    assert runner.DockerRunner(backend="cpu").variant == "cpu"
-    assert runner.DockerRunner(backend=None).variant == "cpu"
+    assert runner.DockerRunner(selected_backend="cuda").variant == "cuda12"
+    assert runner.DockerRunner(selected_backend="cpu").variant == "cpu"
+    assert runner.DockerRunner(selected_backend=None).variant == "cpu"
