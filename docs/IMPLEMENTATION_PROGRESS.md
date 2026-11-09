@@ -31,7 +31,7 @@ Harry's Mac (macOS 15 / Darwin 24.6.0, arm64, Python 3.12.16, jax/jaxlib 0.4.38,
   - `MPLBACKEND=Agg` set in CI pre-emptively (plan key check #8 suggested it only if CI complains).
   - `FakeAnthropic.__init__` accepts and ignores keyword arguments, so the AIC-002 driver can subclass it.
   - `uv` was not installed on the Mac; installed with Homebrew (`uv 0.13.7`) with Harry's approval.
-- Known limitations: CI has not run yet (nothing is pushed); `astral-sh/setup-uv@v6` and `actions/checkout@v4`
+- Known limitations: CI had not run when this was written (first run: see "First CI run" below); `astral-sh/setup-uv@v6` and `actions/checkout@v4`
   were confirmed to exist with `git ls-remote --tags`.
 
 #### AIC-031 — Target selection (Mac part)
@@ -187,7 +187,11 @@ Total under 2 minutes on CPU; no test is marked `slow`.
   CUDA `device.platform` value and profiler device-lane names (update `environment._ACCEPTED_PLATFORMS`,
   `probe_target._DEVICE_LANE_MARKERS` and `AI_CONTEXT.md` §8 if they differ), and add the results here.
 - Team sign-off of `docs/TARGET_DECISION.md`; team confirmation of the defaults above (P4, P5, P6, P10, P11).
-- First CI run: triggered by the push of `harry/batch-01` on 2026-11-07 (D-07); result to be added here.
+
+### First CI run · 2026-11-09
+- Run 42599232878 (`ci` workflow, push of `harry/batch-01` at c50cb1e, ubuntu-latest, CPython 3.12.3): success.
+- `uv sync --locked` then `uv run --locked pytest -q`: 179 passed, 1 skipped in 32 s. The skip is
+  `test_cuda_on_host` (`needs_gpu`: CUDA unavailable), the same result as on the Mac.
 
 ## Post-batch 01: dual-backend rules (D-06) · 2026-11-06 · owner: Harry · status: AWAITING_REVIEW
 
