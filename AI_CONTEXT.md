@@ -61,7 +61,7 @@ scratch scripts — **never import them from tests**.
 |---|---|---|---|
 | M1 Foundations & target | AIC-001, 031, 002, 003 | Harry | batch 01 AWAITING_ACCEPTANCE, pushed to `origin/harry/batch-01` (D-07; report: `docs/IMPLEMENTATION_PROGRESS.md`): AIC-001 done locally (offline pytest suite, fake Anthropic client, CI); AIC-031 Mac part done (`environment.py`, `scripts/probe_target.py`, `evidence/targets/mac-cpu.json`, `docs/TARGET_DECISION.md` **DRAFT**) — NV-host probe (phase B) pending; AIC-002 done locally (`contracts.py` RunConfig v1, `--backend`/`--config`, `run_config.json` + `manifest.json`); AIC-003 done locally (`workloads/registry.py` WorkloadSpec v1, seeded `softmax`, float64 oracle, legacy `example_add`); dual-backend rules D-06 + guard tests (`tests/test_backend_portability.py`) |
 | M2 Reliable, isolated evaluation | AIC-004 … 009 | AIC-004: Harry; AIC-005 … 009: Sergio | batch 02 AWAITING_ACCEPTANCE on `sergio/batch-02` (report: `docs/IMPLEMENTATION_PROGRESS.md`): AIC-004 done (Harry); AIC-005 timing protocol + A/A calibration, AIC-006 decision rule, AIC-007 contracts + source policy, AIC-008 worker/runner, AIC-009 Docker containment + controller integration done on the Mac (CPU). Pending on the NV host: GPU containment and the official δ (`scripts/phase_b.sh`) |
-| M3 – M8 | AIC-010 … 033 | TBD | not started |
+| M3 – M8 | AIC-010 … 033 | AIC-010: Sergio; rest TBD | AIC-010 in progress on `sergio/batch-03` (Sergio); the rest not started |
 
 Course deadlines (fixed by KTH, not by AIC-1.1): report draft **2026-11-20 17:00**; presentation + final report
 **2026-12-15 … 21**.
@@ -205,6 +205,7 @@ Evaluation pipeline (AIC-005 … 009):
 - A measurement population is device + JAX version + runner/image: a change mid-run stops the run (INTERRUPTED).
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-09 Sergio — AIC-010: `feedback.py` (jaxpr / StableHLO / HLO / compiled op counts and groups, versioned parser, provenance; cost and memory estimates in separate namespaces; null + reason when unavailable; capped raw artifacts).
 - 2026-11-09 Sergio — batch 02 report in `docs/IMPLEMENTATION_PROGRESS.md`; P12–P15 defaults; `scripts/phase_b.sh` (all NV-host steps in one command); WSL2 doc §5 Docker + NVIDIA Container Toolkit; GPU containment test (`needs_gpu`).
 - 2026-11-09 Sergio — AIC-005: `scripts/calibrate_aa.py` freezes an A/A calibration per workload and population (exit 1 on a noisy host); first Mac Docker trial: softmax δ = 0.076 (not committed: official δ comes from the NV host).
 - 2026-11-09 Sergio — AIC-009: controller rewritten around `Evaluator` (reference → isolated candidate outputs → host comparison → A/A calibration → `judge()`); `agent.py --runner docker|subprocess`, `--calibration`; ISOLATION_UNAVAILABLE exits before any LLM call; Attempt v1 records with raw blocks in history; configured backend forwarded as `selected_backend=` (rule 1).
