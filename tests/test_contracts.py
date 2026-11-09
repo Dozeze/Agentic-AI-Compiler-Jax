@@ -148,3 +148,47 @@ def test_protocol_hash_tracks_every_field():
     base = contracts.MeasurementProtocol()
     assert contracts.protocol_hash(base) == contracts.protocol_hash(contracts.MeasurementProtocol())
     assert contracts.protocol_hash(base) != contracts.protocol_hash(dataclasses.replace(base, order_seed=1))
+
+
+GOOD_PROPOSAL = {"hypothesis": "one batched op", "transformation": "vectorise the loop",
+                 "rationale": "XLA sees one op", "expected_effect": "about 2x",
+                 "candidate_source": "def f(x):\n    return x\n"}
+
+
+def test_proposal_parses_and_fills_defaults():
+    p = contracts.parse_proposal(GOOD_PROPOSAL, max_source_bytes=1024)
+    assert (p.target, p.schema_version, p.parent_id, p.constraints) == ("jax_rewrite", "proposal/v1", None, ())
+
+
+@pytest.mark.parametrize("change, message", [
+    ({"code": "x"}, "proposal.code: unknown key"),
+    ({"hypothesis": None}, "proposal.hypothesis"),
+    ({"hypothesis": "  "}, "must not be empty"),
+    ({"target": "native_kernel"}, "only 'jax_rewrite'"),
+    ({"parent_id": True}, "proposal.parent_id"),
+    ({"parent_id": -1}, "must be >= 0"),
+    ({"candidate_source": "x" * 2000}, "larger than 1024 bytes"),
+    ({"rationale": "r" * 5000}, "longer than"),
+])
+def test_proposal_rejects_bad_fields(change, message):
+    with pytest.raises(contracts.ContractError, match=message):
+        contracts.parse_proposal({**GOOD_PROPOSAL, **change}, max_source_bytes=1024)
+
+
+def test_proposal_missing_field_rejected():
+    data = dict(GOOD_PROPOSAL)
+    del data["candidate_source"]
+    with pytest.raises(contracts.ContractError, match="candidate_source: required"):
+        contracts.parse_proposal(data, max_source_bytes=1024)
+
+
+def test_attempt_requires_a_terminal_state_and_serialises():
+    evaluation = contracts.Evaluation(candidate_sha256="ab", stages={"policy": "ok"})
+    attempt = contracts.Attempt(attempt_id=1, state=contracts.VALID_NO_CHANGE, reason="noise",
+                                evaluation=evaluation)
+    data = attempt.to_json()
+    assert data["schema_version"] == "attempt/v1"
+    assert data["evaluation"]["schema_version"] == "evaluation/v1"
+    json.dumps(data, allow_nan=False)
+    with pytest.raises(contracts.ContractError, match="unknown terminal state"):
+        contracts.Attempt(attempt_id=2, state="FASTER", reason="trust me")

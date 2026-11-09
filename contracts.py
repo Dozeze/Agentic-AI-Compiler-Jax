@@ -24,8 +24,12 @@ SPLITS = ("development", "heldout")
 CONTEXT_CONDITIONS = ("C0", "C1", "C2", "C3", "C4", "K")
 
 
-class ConfigError(ValueError):
-    """Unknown key, wrong type or invalid value. The message names the dotted path."""
+class ContractError(ValueError):
+    """A document does not satisfy its contract. The message names the dotted path of the problem."""
+
+
+class ConfigError(ContractError):
+    """Unknown key, wrong type or invalid value in a run config. The message names the dotted path."""
 
 
 # Terminal states of a candidate (AIC-1.1 §3). A provider error or an empty response is a request
@@ -182,6 +186,10 @@ def _build(cls, data: dict, path: str):
         if key not in names:
             raise ConfigError(f"{path}.{key}: unknown key")
     kwargs = {key: _coerce(hints[key], value, f"{path}.{key}") for key, value in data.items()}
+    for f in dataclasses.fields(cls):
+        required = f.default is dataclasses.MISSING and f.default_factory is dataclasses.MISSING
+        if required and f.name not in kwargs:
+            raise ConfigError(f"{path}.{f.name}: required")
     obj = cls(**kwargs)
     if cls is RunConfig:
         validate(obj)
@@ -314,3 +322,99 @@ def resolve_run_config(cli: dict[str, Any], config_path: Path | None) -> RunConf
         _deep_merge(merged, file_data, path="config")
     _deep_merge(merged, {k: v for k, v in cli.items() if v is not None}, path="cli")  # 3. explicit CLI only
     return _build(RunConfig, merged, path="run_config")
+
+
+# ---------------------------------------------------------------------------
+# Proposal v1, Evaluation v1, Attempt v1 (AIC-007, AIC-1.1 §3)
+# ---------------------------------------------------------------------------
+
+PROPOSAL_SCHEMA = "proposal/v1"
+EVALUATION_SCHEMA = "evaluation/v1"
+ATTEMPT_SCHEMA = "attempt/v1"
+MAX_PROPOSAL_TEXT_CHARS = 2000          # each free-text field; the source has its own byte limit
+
+
+@dataclass(frozen=True)
+class Proposal:
+    """What the model may send: a hypothesis and a complete candidate source, nothing else.
+
+    No file paths, shell commands or evaluation parameters: inputs, tolerances, the timing protocol and
+    the decision belong to the harness. `expected_effect` is a hypothesis, never a measurement.
+    """
+    hypothesis: str
+    transformation: str
+    rationale: str
+    expected_effect: str
+    candidate_source: str
+    parent_id: int | None = None
+    constraints: tuple[str, ...] = ()
+    notes: str | None = None
+    target: str = "jax_rewrite"
+    schema_version: str = PROPOSAL_SCHEMA
+
+
+def parse_proposal(data: Any, *, max_source_bytes: int) -> Proposal:
+    """Strictly validate a model-produced proposal. Unknown fields and wrong types raise ContractError."""
+    proposal = _build(Proposal, data, path="proposal")
+    if proposal.schema_version != PROPOSAL_SCHEMA:
+        raise ContractError(f"proposal.schema_version: expected {PROPOSAL_SCHEMA!r}")
+    if proposal.target != "jax_rewrite":
+        raise ContractError(f"proposal.target: only 'jax_rewrite' is supported, got {proposal.target!r}")
+    for name in ("hypothesis", "transformation", "rationale", "expected_effect"):
+        value = getattr(proposal, name)
+        if not value.strip():
+            raise ContractError(f"proposal.{name}: must not be empty")
+        if len(value) > MAX_PROPOSAL_TEXT_CHARS:
+            raise ContractError(f"proposal.{name}: longer than {MAX_PROPOSAL_TEXT_CHARS} characters")
+    if proposal.notes is not None and len(proposal.notes) > MAX_PROPOSAL_TEXT_CHARS:
+        raise ContractError(f"proposal.notes: longer than {MAX_PROPOSAL_TEXT_CHARS} characters")
+    if len(proposal.constraints) > 20 or any(len(c) > 200 for c in proposal.constraints):
+        raise ContractError("proposal.constraints: at most 20 items of 200 characters")
+    if len(proposal.candidate_source.encode("utf-8")) > max_source_bytes:
+        raise ContractError(f"proposal.candidate_source: larger than {max_source_bytes} bytes")
+    if proposal.parent_id is not None and proposal.parent_id < 0:
+        raise ContractError("proposal.parent_id: must be >= 0")
+    return proposal
+
+
+@dataclass(frozen=True)
+class Evaluation:
+    """Evidence about one candidate, assembled by the host from validated worker results.
+
+    Unavailable values are None with a reason in `unavailable`, never zero. `stages` maps each stage
+    (policy, compile, correctness, measurement) to "ok", "failed" or "skipped".
+    """
+    candidate_sha256: str
+    stages: dict
+    correctness: dict | None = None        # CorrectnessReport.to_json()
+    compile: dict | None = None            # {"lower_s": ..., "compile_s": ...} per input signature
+    sessions: tuple = ()                   # [{"raw": PairedSession json, "analysis": SessionAnalysis json}]
+    environment: dict | None = None        # worker device info and runner identity
+    ir: dict | None = None                 # compiler feedback summary (AIC-010)
+    logs: dict | None = None               # bounded stdout/stderr tails
+    failure_category: str | None = None
+    unavailable: dict = field(default_factory=dict)
+    schema_version: str = EVALUATION_SCHEMA
+
+
+@dataclass(frozen=True)
+class Attempt:
+    """One candidate's full record. Built by the host only: a worker cannot set its state or reason."""
+    attempt_id: int
+    state: str
+    reason: str
+    proposal: Proposal | None = None       # None for the immutable baseline
+    parent_id: int | None = None
+    evaluation: Evaluation | None = None
+    provider: dict | None = None           # request id and token usage of the proposing request
+    started_utc: str | None = None
+    finished_utc: str | None = None
+    schema_version: str = ATTEMPT_SCHEMA
+
+    def __post_init__(self):
+        if self.state not in TERMINAL_STATES:
+            raise ContractError(f"attempt.state: unknown terminal state {self.state!r}")
+
+    def to_json(self) -> dict:
+        """Strict JSON-ready dict; writers must use allow_nan=False."""
+        return dataclasses.asdict(self)

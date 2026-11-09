@@ -182,6 +182,7 @@ WSL2 + CUDA (NVIDIA CUDA-on-WSL guide; to be confirmed on the host):
 - Mac CPU and WSL2 GPU results are different measurement populations — never compare them.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-09 Sergio — AIC-007: `contracts.Proposal` v1 + `parse_proposal` (strict, size-limited, no paths or evaluation parameters), `Evaluation` v1, `Attempt` v1 (host-built, terminal states only); `ContractError` base class.
 - 2026-11-09 Sergio — AIC-006: terminal states in `contracts.py`; `controller.decide` (stable + CI lower bound > 1 + δ), `controller.judge` (one retry, fresh confirmation), `controller.verify_winner` (≥ 3 sessions vs the original baseline on every shape).
 - 2026-11-09 Sergio — AIC-005: `benchmark.compile_timed` (ahead-of-time lower + compile, timed separately, `Lowered` kept for AIC-010).
 - 2026-11-09 Sergio — AIC-005: `benchmark.aa_threshold` (δ = max(p95 of A/A median differences, timer floor); unstable A/A fails) and `benchmark.Calibration` (aa_calibration/v1 record, `check()` refuses another workload/shape/protocol/population).
