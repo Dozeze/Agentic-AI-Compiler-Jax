@@ -182,6 +182,7 @@ WSL2 + CUDA (NVIDIA CUDA-on-WSL guide; to be confirmed on the host):
 - Mac CPU and WSL2 GPU results are different measurement populations — never compare them.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-09 Sergio — AIC-009: CI job `containment` (builds the CPU worker image, runs `-m needs_docker --require-docker`); the `test` job excludes needs_docker.
 - 2026-11-09 Sergio — AIC-009: `runner.DockerRunner` (no network, read-only root, no capabilities, no-new-privileges, nobody, CPU/memory/PID limits, tmpfs scratch, only the work dir mounted, OOM → RESOURCE_LIMIT, verified removal); `needs_docker` marker + `--require-docker`; `tests/test_containment.py` hostile probes pass on Docker Desktop.
 - 2026-11-09 Sergio — AIC-009: `docker/worker.Dockerfile` (locked deps via uv, harness modules only, user nobody; `EXTRA=cuda12` GPU variant) and `scripts/build_worker_image.py` (minimal build context; tag = content hash from `runner.image_reference`).
 - 2026-11-09 Sergio — AIC-008: `benchmark.compare_flat` / `report_from_outputs` (host-side verdict on worker outputs; the candidate never sees reference outputs or tolerances); the 18-fixture matrix reproduced through the worker case by case.
