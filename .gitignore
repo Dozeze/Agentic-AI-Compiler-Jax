@@ -26,3 +26,6 @@ evidence/**/*.gz
 
 # macOS Finder metadata
 .DS_Store
+
+# Held-out salts (AIC-018): secret until the final results; only their sha256 is committed
+heldout/

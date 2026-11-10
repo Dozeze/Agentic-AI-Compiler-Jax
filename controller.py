@@ -162,11 +162,13 @@ class Evaluator:
     `protocol.aa_sessions` sessions of the baseline against itself.
     """
 
-    def __init__(self, spec, runner, protocol, workdir, *, selected_backend, budgets=None, calibration=None):
+    def __init__(self, spec, runner, protocol, workdir, *, selected_backend, budgets=None, calibration=None,
+                 cases=None):
+        """`cases` overrides the search cases (the held-out evaluation of AIC-018 passes its own)."""
         self.spec, self.runner, self.protocol, self.backend = spec, runner, protocol, selected_backend
         self.budgets = budgets or Budgets()
         self.workdir = Path(workdir)
-        self.cases = benchmark.build_cases(spec)
+        self.cases = list(cases) if cases is not None else benchmark.build_cases(spec)
         self.case_names = [name for name, _ in self.cases]
         self.policy_hash = benchmark.policy_hash(spec.tolerance, self.case_names, spec.workload_id,
                                                  spec.reference_sha256)

@@ -52,6 +52,8 @@ class WorkloadSpec:
     edge_cases: tuple[EdgeCase, ...]
     max_input_bytes: int
     scientific: bool                      # False for example_add
+    heldout_commitment: str | None = None # sha256 of the secret held-out salt (AIC-018, commit-reveal)
+    heldout_version: int = 1              # a new split after a held-out failure gets a new version
 
     @property
     def reference_source(self) -> str:
