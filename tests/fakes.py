@@ -26,7 +26,7 @@ class FakeMessages:
         self.calls.append({**kwargs, "messages_snapshot": list(kwargs.get("messages", []))})
         blocks = self.script.pop(0) if self.script else []
         return SimpleNamespace(content=blocks, stop_reason="tool_use" if blocks else "end_turn",
-                               usage=SimpleNamespace(input_tokens=0, output_tokens=0))
+                               usage=SimpleNamespace(input_tokens=100, output_tokens=10))
 
 
 class FakeAnthropic:

@@ -301,6 +301,9 @@ def main(argv=None):
     if controller.stop_reason:
         print(f"Run stopped: {controller.stop_reason}")
 
+    totals = controller.usage_totals()
+    print(f"Provider {cfg.model.provider} ({cfg.model.model_id}): {totals['requests']} requests, "
+          f"{totals['input_tokens']} input / {totals['output_tokens']} output tokens.")
     print(f"Completed {len(history) - 1} candidate evaluations.")
     print(f"Best runtime: {controller.best_runtime}")
     print(

@@ -390,6 +390,7 @@ class Controller:
         self.best_runtime = None
         self.best_iteration = None
         self.stop_reason = None
+        self.requests = []          # one record per provider request: model, stop reason, tokens, latency
         self.context_condition = context_condition
         self.output_dir = Path(output_dir) if output_dir is not None else None
         self.source_path = str(source_path) if source_path is not None else None
@@ -569,7 +570,8 @@ class Controller:
         self.iteration += 1
         parent = proposal.parent_id if proposal and proposal.parent_id is not None else self.best_iteration
         attempt = Attempt(attempt_id=self.iteration, state=state, reason=reason, proposal=proposal, parent_id=parent,
-                          evaluation=verdict.evaluation if verdict else None, started_utc=started,
+                          evaluation=verdict.evaluation if verdict else None,
+                          provider=self.requests[-1] if self.requests else None, started_utc=started,
                           finished_utc=_utc())
         failed = state not in (ACCEPTED, VALID_NO_CHANGE, VALID_SLOWER)
         return self._append({
@@ -580,6 +582,26 @@ class Controller:
             "output_correct": bool(verdict and verdict.output_correct), "accepted": state == ACCEPTED,
             "changes": self.changesPython(self.best_code, code) if code else None,
             "error": reason if failed else None, "attempt": attempt.to_json()})
+
+    def _record_request(self, model, response, latency_s):
+        """Usage of one provider request (AIC-1.1 §8 reports actual tokens, not candidate counts)."""
+        usage = getattr(response, "usage", None)
+        record = {"request": len(self.requests) + 1, "model": model, "client": type(self.client).__name__,
+                  "stop_reason": getattr(response, "stop_reason", None),
+                  "input_tokens": getattr(usage, "input_tokens", None),
+                  "output_tokens": getattr(usage, "output_tokens", None),
+                  "latency_s": round(latency_s, 3), "utc": _utc()}
+        self.requests.append(record)
+        if self.output_dir is not None:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+            (self.output_dir / "requests.json").write_text(json.dumps(self.requests, indent=2) + "\n",
+                                                           encoding="utf-8")
+
+    def usage_totals(self):
+        def total(key):
+            return sum(r[key] or 0 for r in self.requests)
+        return {"requests": len(self.requests), "input_tokens": total("input_tokens"),
+                "output_tokens": total("output_tokens")}
 
     def _dispatch_tool(self, name, tool_input):
         """Run one model-requested tool and return JSON-serializable data."""
@@ -614,6 +636,7 @@ class Controller:
         candidate_count = 0
 
         for _ in range(max_turns):
+            started = time.monotonic()
             response = self.client.messages.create(
                 model=model,
                 max_tokens=max_tokens,
@@ -621,6 +644,7 @@ class Controller:
                 tools=self.provideTools(),
                 messages=messages,
             )
+            self._record_request(model, response, time.monotonic() - started)
             messages.append({"role": "assistant", "content": response.content})
 
             tool_results = []

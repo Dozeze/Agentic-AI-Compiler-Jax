@@ -230,3 +230,13 @@ def test_compiler_summary_only_in_compiler_conditions(no_key, repo_root, conditi
     if shown:
         assert "estimates (not measurements)" in view["compiler"]
         assert "add" not in str(view["compiler"]["levels"])          # groups and totals, not raw op lists
+
+
+def test_usage_is_recorded_per_request(no_key, repo_root):
+    script = [[tool_use("a", "benchmark_code", proposal(WRONG))], []]
+    _, controller = _build(repo_root, script, no_key / "run")
+    history = controller.agent_loop(model="fake-model")
+    assert controller.usage_totals() == {"requests": 2, "input_tokens": 200, "output_tokens": 20}
+    assert history[-1]["attempt"]["provider"]["request"] == 1
+    recorded = json.loads((no_key / "run" / "requests.json").read_text())
+    assert [r["stop_reason"] for r in recorded] == ["tool_use", "end_turn"]
