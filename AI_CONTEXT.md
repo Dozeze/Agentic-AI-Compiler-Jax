@@ -9,7 +9,7 @@
 > Keep this file short: it is the current state, not a history. Detailed evidence goes in
 > `docs/IMPLEMENTATION_PROGRESS.md`; the full plan is `docs/IMPLEMENTATION_PLAN.md`.
 
-Last updated: 2026-11-09 by Sergio (Sergio Medina Hernandez)
+Last updated: 2026-11-10 by Sergio (Sergio Medina Hernandez)
 
 ---
 
@@ -205,6 +205,7 @@ Evaluation pipeline (AIC-005 … 009):
 - A measurement population is device + JAX version + runner/image: a change mid-run stops the run (INTERRUPTED).
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-10 Sergio — AIC-010: worker outputs run returns compiler feedback for the measurement case (raw levels in `ir/`); recorded for baseline and candidates; shown to the agent only under C3/C4/K; `feedback.py` added to the worker image.
 - 2026-11-09 Sergio — AIC-010: `feedback.py` (jaxpr / StableHLO / HLO / compiled op counts and groups, versioned parser, provenance; cost and memory estimates in separate namespaces; null + reason when unavailable; capped raw artifacts).
 - 2026-11-09 Sergio — batch 02 report in `docs/IMPLEMENTATION_PROGRESS.md`; P12–P15 defaults; `scripts/phase_b.sh` (all NV-host steps in one command); WSL2 doc §5 Docker + NVIDIA Container Toolkit; GPU containment test (`needs_gpu`).
 - 2026-11-09 Sergio — AIC-005: `scripts/calibrate_aa.py` freezes an A/A calibration per workload and population (exit 1 on a noisy host); first Mac Docker trial: softmax δ = 0.076 (not committed: official δ comes from the NV host).

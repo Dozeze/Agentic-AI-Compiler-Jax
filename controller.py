@@ -180,6 +180,7 @@ class Evaluator:
         self.fingerprint = None
         self.timer_resolution_s = None
         self.reference = None
+        self.baseline_ir = None
         self._requests = 0
 
     @property
@@ -199,6 +200,8 @@ class Evaluator:
         array_io.save(work / "inputs.npz", {name: array_io.flatten(args) for name, args in cases})
         request = {"schema_version": worker.REQUEST_SCHEMA, "mode": mode, "backend": self.backend,
                    "function_name": self.spec.function_name, "sources": files, "inputs": "inputs.npz", **extra}
+        if mode == "outputs":
+            request["analyze_case"] = self.measure_case
         outcome = self.runner.run(work, request, trusted=trusted, timeout_s=timeout_s)
         if outcome.status != runners.OK:
             raise EvaluationError(_OUTCOME_STATE[outcome.status], outcome.detail or outcome.status)
@@ -237,13 +240,14 @@ class Evaluator:
                 if leaf.dtype.kind == "f" and not np.all(np.isfinite(leaf)):
                     raise BaselineFailed(f"reference produced non-finite values in {name}{path}")
         self.reference = outputs
+        self.baseline_ir = result.get("ir")
         return result
 
     def correctness(self, source, *, trusted=False):
         result, outputs = self._outputs(source, trusted=trusted, label="candidate")
         report = benchmark.report_from_outputs(self.case_names, self.reference, result["cases"], outputs,
                                                self.spec.tolerance, self.policy_hash)
-        return report, result["compile"]
+        return report, result["compile"], result.get("ir")
 
     def session(self, a_source, b_source, *, trusted, repeats=None):
         case = [(name, args) for name, args in self.cases if name == self.measure_case]
@@ -287,11 +291,11 @@ class Evaluator:
         stages = {"policy": "ok", "correctness": "skipped", "measurement": "skipped"}
         evaluation = dict(candidate_sha256=hashlib.sha256(candidate_source.encode()).hexdigest(), stages=stages)
         try:
-            report, compile_times = self.correctness(candidate_source)
+            report, compile_times, ir = self.correctness(candidate_source)
         except EvaluationError as error:
             stages["correctness"] = "failed"
             return Verdict(error.state, error.detail, Evaluation(**evaluation, failure_category=error.state))
-        evaluation.update(correctness=report.to_json(), compile=compile_times,
+        evaluation.update(correctness=report.to_json(), compile=compile_times, ir=ir,
                           environment={"fingerprint": self.fingerprint, "runner": self.runner_label})
         if not report.passed:
             stages["correctness"] = "failed"
@@ -331,11 +335,31 @@ class Evaluator:
                        output_correct=True, latency_s=first.median_s, latency_std_s=first.std_s)
 
 
-def _compact(entry):
-    """The history entry as the model sees it: no raw blocks, no per-case lists, just the evidence."""
+#: Context conditions (AIC-1.1 §8) in which the agent sees the compiler summary.
+COMPILER_CONTEXT = ("C3", "C4", "K")
+
+
+def compiler_view(ir):
+    """The bounded compiler summary the agent may see: op totals and groups per level, and XLA's estimates."""
+    if not ir:
+        return None
+    cost = ir.get("compiler_cost_estimates") or {}
+    memory = ir.get("compiler_memory_estimates") or {}
+    return {"levels": {level: {"total_ops": s["total_ops"], "groups": s["groups"]}
+                       for level, s in ir.get("levels", {}).items()},
+            "estimates (not measurements)": {"flops": cost.get("flops"), "bytes_accessed": cost.get("bytes accessed"),
+                                             "temp_bytes": memory.get("temp_size_in_bytes")},
+            "unavailable": sorted(ir.get("unavailable", {}))}
+
+
+def _compact(entry, context_condition="C2"):
+    """The history entry as the model sees it: no raw blocks, no per-case lists, just the evidence.
+    The compiler summary is included only under the context conditions that provide it."""
     view = {k: v for k, v in entry.items() if k != "attempt"}
     attempt = entry.get("attempt") or {}
     evaluation = attempt.get("evaluation") or {}
+    if context_condition in COMPILER_CONTEXT:
+        view["compiler"] = compiler_view(evaluation.get("ir"))
     correctness = evaluation.get("correctness")
     if correctness:
         failing = [c for c in correctness["cases"] if not c["passed"]][:1]
@@ -350,7 +374,7 @@ def _compact(entry):
 
 class Controller:
     def __init__(self, agent: str, prompt, evaluator, client=None, function_name="kernel", max_iterations=3,
-                 output_dir=None, source_path=None):
+                 output_dir=None, source_path=None, context_condition="C2"):
         """Store the agent, prompt and evaluator. No side effects: start() evaluates the baseline."""
         self.agent = agent
         self.init_prompt = prompt
@@ -364,6 +388,7 @@ class Controller:
         self.best_runtime = None
         self.best_iteration = None
         self.stop_reason = None
+        self.context_condition = context_condition
         self.output_dir = Path(output_dir) if output_dir is not None else None
         self.source_path = str(source_path) if source_path is not None else None
 
@@ -377,8 +402,11 @@ class Controller:
             return
         self.evaluator.reference_outputs()
         self.best_code, self.best_iteration = self.initial_code, 0
+        import hashlib
+        evaluation = Evaluation(candidate_sha256=hashlib.sha256(self.initial_code.encode()).hexdigest(),
+                                stages={"reference": "ok"}, ir=self.evaluator.baseline_ir)
         attempt = Attempt(attempt_id=0, state=ACCEPTED, reason="immutable baseline: the frozen reference",
-                          started_utc=_utc(), finished_utc=_utc())
+                          evaluation=evaluation, started_utc=_utc(), finished_utc=_utc())
         self._append({"iteration": 0, "state": ACCEPTED, "reason": attempt.reason, "code": self.initial_code,
                       "runtime_mean": None, "runtime_std": None, "syntax_correct": True, "output_correct": True,
                       "accepted": True, "changes": "No changes", "error": None, "attempt": attempt.to_json()})
@@ -493,7 +521,7 @@ class Controller:
 
     def provide_hist(self):
         """The history as the agent sees it: compact, without raw timing blocks or per-case lists."""
-        return [_compact(entry) for entry in deepcopy(self.history)]
+        return [_compact(entry, self.context_condition) for entry in deepcopy(self.history)]
 
     def provide_prompt(self):
         """ Provides all prompts to agent """
@@ -560,7 +588,7 @@ class Controller:
             return {"code": self.get_current_code()}
 
         if name == "benchmark_code":
-            return _compact(self.submit_proposal(tool_input))
+            return _compact(self.submit_proposal(tool_input), self.context_condition)
 
         return {"error": f"Unknown tool: {name}"}
 

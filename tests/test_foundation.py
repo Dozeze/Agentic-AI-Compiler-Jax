@@ -28,7 +28,7 @@ FAST = MeasurementProtocol(warmup_calls=2, min_block_s=0.001, target_block_s=0.0
                            n_blocks=6, bootstrap_samples=500, max_iqr_over_median=1.0, max_baseline_drift=1.0)
 
 
-def _build(repo_root, script, output_dir, max_iterations=3, runner=None):
+def _build(repo_root, script, output_dir, max_iterations=3, runner=None, context_condition="C2"):
     """A controller on the example workload. Fixtures here are reviewed code, so the trusted runner may
     run them as if they were model output (agent.py never does this)."""
     import agent
@@ -38,7 +38,7 @@ def _build(repo_root, script, output_dir, max_iterations=3, runner=None):
                                         source_path=repo_root / "workloads/example.py",
                                         function_name="bad_func", output_dir=output_dir, selected_backend="cpu",
                                         runner=runner or TrustedSubprocessRunner(reviewed_fixtures=True),
-                                        protocol=FAST)
+                                        protocol=FAST, context_condition=context_condition)
     return client, controller
 
 
@@ -217,3 +217,16 @@ def test_history_shown_to_the_model_is_compact(no_key, repo_root):
     view = controller.provide_hist()[-1]
     assert "attempt" not in view
     assert view["correctness"]["passed"] is False and view["correctness"]["first_failure"]
+
+
+@pytest.mark.parametrize("condition, shown", [("C2", False), ("C3", True)])
+def test_compiler_summary_only_in_compiler_conditions(no_key, repo_root, condition, shown):
+    _, controller = _build(repo_root, [], no_key / "run", context_condition=condition)
+    controller.start()
+    baseline = controller.history[0]["attempt"]["evaluation"]["ir"]
+    assert baseline["levels"]["compiled"]["total_ops"] > 0          # always recorded
+    view = controller.provide_hist()[0]
+    assert ("compiler" in view) is shown
+    if shown:
+        assert "estimates (not measurements)" in view["compiler"]
+        assert "add" not in str(view["compiler"]["levels"])          # groups and totals, not raw op lists

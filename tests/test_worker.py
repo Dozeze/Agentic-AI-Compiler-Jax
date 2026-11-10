@@ -85,3 +85,18 @@ def test_main_turns_any_failure_into_a_result(tmp_path):
 def test_unknown_mode_rejected(tmp_path):
     with pytest.raises(ValueError, match="unknown mode"):
         worker.handle({"schema_version": worker.REQUEST_SCHEMA, "mode": "shell"}, tmp_path)
+
+
+def test_outputs_mode_returns_compiler_feedback_for_the_measurement_case(tmp_path):
+    work = _workdir(tmp_path, {"cand.py": REFERENCE}, CASES)
+    result = worker.handle(_request("outputs", {"candidate": "cand.py"}, analyze_case="a"), work)
+    ir = result["ir"]
+    assert set(ir["levels"]) == {"jaxpr", "stablehlo", "hlo", "compiled"}
+    assert ir["provenance"]["signature"] == ["float32[4, 8]"]
+    assert (work / "ir" / "compiled.txt").is_file()
+
+
+def test_feedback_is_unavailable_when_the_case_did_not_compile(tmp_path):
+    work = _workdir(tmp_path, {"cand.py": COMPILE_ERROR}, CASES)
+    result = worker.handle(_request("outputs", {"candidate": "cand.py"}, analyze_case="a"), work)
+    assert "did not compile" in result["ir"]["unavailable"]["all"]

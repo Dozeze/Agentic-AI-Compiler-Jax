@@ -67,7 +67,7 @@ def _load_source_workload(source_path, function_name):
 
 def build_controller(client, max_iterations=DEFAULT_ITERATIONS, source_path=None, function_name="bad_func",
                      output_dir=None, *, workload_id=None, runner=None, selected_backend=None, protocol=None,
-                     calibration=None):
+                     calibration=None, context_condition="C2"):
     """Build the controller for a registered workload (`workload_id`) or a trusted --source file.
 
     Without either, the registered `example_add` workload (the original x + y example) is used. The
@@ -110,6 +110,7 @@ def build_controller(client, max_iterations=DEFAULT_ITERATIONS, source_path=None
         max_iterations=max_iterations,
         output_dir=output_dir,
         source_path=source_path,
+        context_condition=context_condition,
     )
 
 
@@ -237,6 +238,7 @@ def main(argv=None):
         selected_backend=cfg.backend,
         protocol=cfg.measurement,
         calibration=Calibration.load(cfg.calibration_path) if cfg.calibration_path else None,
+        context_condition=cfg.context_condition,
     )
     try:
         controller.start()

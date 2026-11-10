@@ -44,7 +44,7 @@ MAX_RESULT_BYTES = 16 << 20
 # to any of them yields a new tag and the runner never runs a stale harness.
 DOCKERFILE = REPO / "docker" / "worker.Dockerfile"
 IMAGE_FILES = ("pyproject.toml", "uv.lock", "worker.py", "benchmark.py", "contracts.py", "environment.py",
-               "array_io.py", "workloads/__init__.py", "workloads/registry.py", "workloads/oracles.py",
+               "array_io.py", "feedback.py", "workloads/__init__.py", "workloads/registry.py", "workloads/oracles.py",
                "workloads/softmax.py", "workloads/example.py")
 IMAGE_REPOSITORY = "aic-worker"
 VARIANTS = {"cpu": "", "cuda12": "cuda12"}       # variant -> uv extra

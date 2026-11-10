@@ -59,11 +59,12 @@ def _outputs(request: dict, workdir: Path, jax) -> dict:
         detail = "candidate module failed to load: " + _error(exc)
         return {"cases": [{"name": n, "status": "COMPILE_FAILED", "detail": detail} for n in cases],
                 "compile": {}}
-    results, compiled, failed, outputs = [], {}, {}, {}
+    results, compiled, failed, outputs, case_args = [], {}, {}, {}, {}
     for name, tree in cases.items():
         args = tuple(jax.device_put(a) for a in tree.arrays)
         jax.block_until_ready(args)
         sig = _signature(tree.arrays)
+        case_args[name] = (sig, args)
         if sig in failed:
             results.append({"name": name, "status": "COMPILE_FAILED",
                             "detail": f"not retried: same shape/dtype failed to compile in {failed[sig]}"})
@@ -84,7 +85,19 @@ def _outputs(request: dict, workdir: Path, jax) -> dict:
         results.append({"name": name, "status": "ok"})
     array_io.save(workdir / "outputs.npz", outputs)
     return {"cases": results, "outputs": "outputs.npz",
-            "compile": {sig: {"lower_s": c.lower_s, "compile_s": c.compile_s} for sig, c in compiled.items()}}
+            "compile": {sig: {"lower_s": c.lower_s, "compile_s": c.compile_s} for sig, c in compiled.items()},
+            "ir": _feedback(request.get("analyze_case"), case_args, compiled, fn, workdir, jax)}
+
+
+def _feedback(case, case_args, compiled, fn, workdir, jax):
+    """Compiler feedback (AIC-010) for the measurement case, reusing its compiled executable."""
+    if case is None:
+        return None
+    if case not in case_args or case_args[case][0] not in compiled:
+        return {"unavailable": {"all": f"case {case!r} did not compile"}}
+    import feedback
+    sig, args = case_args[case]
+    return feedback.analyze(jax, fn, args, compiled[sig], artifacts=workdir / "ir")
 
 
 def _measure(request: dict, workdir: Path, jax) -> dict:

@@ -19,7 +19,7 @@ COPY pyproject.toml uv.lock ./
 ARG EXTRA=""
 RUN uv sync --locked --no-dev --no-install-project ${EXTRA:+--extra "$EXTRA"} && rm -rf /root/.cache
 
-COPY worker.py benchmark.py contracts.py environment.py array_io.py ./
+COPY worker.py benchmark.py contracts.py environment.py array_io.py feedback.py ./
 COPY workloads/ ./workloads/
 
 ENV PATH=/opt/venv/bin:$PATH \
