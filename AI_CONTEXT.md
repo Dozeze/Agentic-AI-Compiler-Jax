@@ -154,7 +154,7 @@ Workloads (AIC-003):
   sources (`workloads/softmax.py`) contain no inputs or seeds. Edge cases use the fixed seed 12345.
 - The float64 oracle (`workloads/oracles.py`) validates the reference only; candidates are compared with the
   jit-compiled reference (AIC-004). JAX x64 is off, so the oracle runs in NumPy.
-- The registry is wired into the controller: `RunConfig.workload_id` (config file) selects a registered workload; `--source/--function` builds a non-scientific `registry.legacy_source_spec`.
+- The registry is wired into the run path: `--workload softmax|example_add` (or `workload_id` in a config file) selects a registered workload; `--source/--function` overrides it with a non-scientific `registry.legacy_source_spec`. An unknown workload id is a config error.
 
 Correctness (AIC-004):
 - `check_correctness` compares candidates with the **jit-compiled frozen reference**, not the oracle. A failing or
@@ -205,6 +205,7 @@ Evaluation pipeline (AIC-005 … 009):
 - A measurement population is device + JAX version + runner/image: a change mid-run stops the run (INTERRUPTED).
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-10 Sergio — AIC-003: `agent.py --workload softmax|example_add` (→ `RunConfig.workload_id`; `--source` overrides); unknown workload id is a config error.
 - 2026-11-10 Sergio — AIC-002: manifest `scientific` only with explicit backend + scientific workload + isolated runner (`non_scientific_reasons` lists what is missing); `run_config.json` carries `correctness_policy_hash`; manifest records workload hashes and held-out commitment.
 - 2026-11-10 Sergio — AIC-018: softmax held-out split v1 frozen (commitment b2871080… in `workloads/registry.py`; salt kept outside the repo until the final results).
 - 2026-11-10 Sergio — AIC-018: `heldout.py` + `scripts/heldout.py` (commit-reveal: secret salt in git-ignored `heldout/`, sha256 committed; ≥ 20 seeds disjoint from search/edge seeds × 2 unseen shapes; host-side verdict; burn ledger `evidence/heldout/ledger.jsonl`); `WorkloadSpec.heldout_commitment/heldout_version`.

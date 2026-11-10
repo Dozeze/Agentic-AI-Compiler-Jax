@@ -206,6 +206,10 @@ def validate(cfg: RunConfig) -> None:
         raise ConfigError(f"run_config.backend: must be one of {BACKENDS} or null, got {cfg.backend!r}")
     if cfg.split not in SPLITS:
         raise ConfigError(f"run_config.split: must be one of {SPLITS}, got {cfg.split!r}")
+    from workloads.registry import REGISTRY
+    if cfg.source_path is None and cfg.workload_id not in REGISTRY:
+        raise ConfigError(f"run_config.workload_id: unknown workload {cfg.workload_id!r}; "
+                          f"choose from {sorted(REGISTRY)}")
     if cfg.runner not in RUNNERS:
         raise ConfigError(f"run_config.runner: must be one of {RUNNERS}, got {cfg.runner!r}")
     if cfg.context_condition not in CONTEXT_CONDITIONS:

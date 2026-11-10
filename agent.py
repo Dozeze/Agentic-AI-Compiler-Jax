@@ -115,6 +115,11 @@ def build_controller(client, max_iterations=DEFAULT_ITERATIONS, source_path=None
     )
 
 
+def _registry():
+    from workloads import registry
+    return registry
+
+
 def output_dir_of(cfg):
     return Path(cfg.output_dir)
 
@@ -152,7 +157,9 @@ def _build_parser():
                         help=f"maximum candidate evaluations (budgets.max_candidates; default {DEFAULT_ITERATIONS})")
     parser.add_argument("--model", default=None,
                         help=f"model id (default: $CLAUDE_MODEL, else the config value, else {DEFAULT_MODEL})")
-    parser.add_argument("--source", type=Path, help="trusted Python workload file to optimize")
+    parser.add_argument("--workload", default=None, choices=sorted(_registry().REGISTRY),
+                        help="registered workload to optimize (default: example_add); --source overrides it")
+    parser.add_argument("--source", type=Path, help="trusted Python workload file to optimize (not scientific)")
     parser.add_argument("--function", default=None, help="function name in --source (default: bad_func)")
     parser.add_argument(
         "--output-dir",
@@ -182,6 +189,7 @@ def _cli_overrides(args):
         "budgets.max_candidates": args.iterations,
         # CLAUDE_MODEL keeps its legacy precedence: below --model, above the config file.
         "model.model_id": args.model or os.getenv("CLAUDE_MODEL") or None,
+        "workload_id": args.workload,
         "source_path": str(args.source) if args.source is not None else None,
         "function_name": args.function,
         "output_dir": str(args.output_dir) if args.output_dir is not None else None,

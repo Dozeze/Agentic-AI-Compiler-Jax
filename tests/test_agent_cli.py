@@ -57,7 +57,7 @@ def _drive(repo_root, env, tmp_path, *extra):
 def test_help_unchanged(repo_root, clean_env, tmp_path):
     proc = _agent(repo_root, clean_env, tmp_path, "--help")
     assert proc.returncode == 0, proc.stderr
-    for option in (*LEGACY, "--backend", "--config", "--runner", "--calibration"):
+    for option in (*LEGACY, "--backend", "--config", "--runner", "--calibration", "--workload"):
         assert option in proc.stdout
     assert not any(tmp_path.iterdir()), "--help must not write anything"
 
@@ -160,3 +160,26 @@ def test_scientific_needs_backend_scientific_workload_and_isolation():
     ok, reasons = agent.scientific_status(SimpleNamespace(backend=None), EXAMPLE_ADD,
                                           SimpleNamespace(isolated=False, name="trusted-subprocess/v1"))
     assert not ok and len(reasons) == 3
+
+
+def test_workload_flag_selects_a_registered_workload(repo_root, clean_env, tmp_path):
+    out = tmp_path / "run"
+    code = DRIVER.format(repo=str(repo_root), tests=str(repo_root / "tests"), key=FAKE_KEY, out=str(out),
+                         argv=["--backend", "cpu", "--workload", "softmax", "--runner", "subprocess",
+                               "--output-dir", str(out), "--iterations", "0"])
+    proc = subprocess.run([sys.executable, "-c", code], cwd=tmp_path, env=clean_env, capture_output=True,
+                          text=True, timeout=300)
+    assert proc.returncode == 0, proc.stderr
+    manifest = json.loads((out / "manifest.json").read_text())
+    assert manifest["workload"]["id"] == "softmax"
+    assert manifest["workload"]["heldout_commitment"]
+    assert manifest["non_scientific_reasons"] == ["runner trusted-subprocess/v1 is not isolated"]
+    history = json.loads((out / "history.json").read_text())
+    assert "def softmax" in history[0]["code"]
+
+
+def test_unknown_workload_in_config_is_rejected(repo_root, clean_env, tmp_path):
+    config = tmp_path / "cfg.json"
+    config.write_text(json.dumps({"workload_id": "nope"}))
+    proc = _agent(repo_root, clean_env, tmp_path, "--config", str(config))
+    assert proc.returncode == 2 and "unknown workload" in proc.stderr
