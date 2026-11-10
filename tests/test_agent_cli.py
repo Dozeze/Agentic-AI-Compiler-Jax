@@ -89,7 +89,12 @@ def test_manifest_written_before_llm(repo_root, clean_env, tmp_path):
     canonical = json.dumps(run_config, sort_keys=True, separators=(",", ":"), allow_nan=False)
     assert manifest["run_config_sha256"] == hashlib.sha256(canonical.encode()).hexdigest()
     assert manifest["schema_version"] == "manifest/v1"
-    assert manifest["scientific"] is True
+    # --source workload, trusted subprocess runner: recorded honestly as not scientific, with every reason.
+    assert manifest["scientific"] is False
+    assert manifest["non_scientific_reasons"] == ["workload 'source:example' is not a scientific workload",
+                                                  "runner trusted-subprocess/v1 is not isolated"]
+    assert run_config["correctness_policy_hash"] == manifest["workload"]["correctness_policy_hash"]
+    assert len(run_config["correctness_policy_hash"]) == 64
     assert manifest["backend_requested"] == "cpu"
     assert manifest["environment"]["devices"][0]["platform"] == "cpu"
     assert manifest["environment"]["repo"]["uv_lock_sha256"]
@@ -143,3 +148,15 @@ def test_unavailable_isolation_stops_before_any_llm_call(repo_root, clean_env, t
     assert proc.returncode == 2
     assert "ISOLATION_UNAVAILABLE" in proc.stderr
     assert not (tmp_path / "run").exists()
+
+
+def test_scientific_needs_backend_scientific_workload_and_isolation():
+    from types import SimpleNamespace
+
+    import agent
+    from workloads.registry import EXAMPLE_ADD, SOFTMAX
+    isolated = SimpleNamespace(isolated=True, name="docker/v1")
+    assert agent.scientific_status(SimpleNamespace(backend="cpu"), SOFTMAX, isolated) == (True, [])
+    ok, reasons = agent.scientific_status(SimpleNamespace(backend=None), EXAMPLE_ADD,
+                                          SimpleNamespace(isolated=False, name="trusted-subprocess/v1"))
+    assert not ok and len(reasons) == 3

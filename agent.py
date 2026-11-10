@@ -1,5 +1,6 @@
 """Run the agentic optimization loop on a trusted JAX workload."""
 import argparse
+import dataclasses
 import inspect
 import json
 import os
@@ -114,6 +115,24 @@ def build_controller(client, max_iterations=DEFAULT_ITERATIONS, source_path=None
     )
 
 
+def output_dir_of(cfg):
+    return Path(cfg.output_dir)
+
+
+def scientific_status(cfg, spec, runner):
+    """(scientific, reasons): a run supports a claim only with an explicitly selected backend, a scientific
+    workload (seeded inputs, edge cases, held-out split) and an isolated runner. Every missing condition
+    is recorded, never hidden behind a single flag."""
+    reasons = []
+    if cfg.backend is None:
+        reasons.append("backend not explicitly selected")
+    if not spec.scientific:
+        reasons.append(f"workload {spec.workload_id!r} is not a scientific workload")
+    if not getattr(runner, "isolated", False):
+        reasons.append(f"runner {runner.name} is not isolated")
+    return not reasons, reasons
+
+
 def client_factory():
     """The LLM client for the configured provider. Tests replace anthropic.Anthropic with a fake."""
     return anthropic.Anthropic()
@@ -209,22 +228,6 @@ def main(argv=None):
         print(f"error: ISOLATION_UNAVAILABLE: {reason}", file=sys.stderr)
         sys.exit(2)
 
-    # Record the run before any LLM call.
-    output_dir = Path(cfg.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    manifest = {
-        "schema_version": MANIFEST_SCHEMA,
-        "run_config_sha256": config_hash(cfg),
-        "argv": list(sys.argv[1:] if argv is None else argv),
-        "backend_requested": cfg.backend,
-        "scientific": cfg.backend is not None,
-        "reason": None if cfg.backend is not None else "backend not explicitly selected",
-        "runner": runner.identity(),
-        "environment": collect_environment(REPO, devices),
-    }
-    atomic_write_json(output_dir / "run_config.json", to_dict(cfg))
-    atomic_write_json(output_dir / "manifest.json", manifest)
-
     from benchmark import Calibration
     from controller import BaselineFailed
     controller = build_controller(
@@ -232,7 +235,7 @@ def main(argv=None):
         max_iterations=cfg.budgets.max_candidates,
         source_path=Path(cfg.source_path) if cfg.source_path is not None else None,
         function_name=cfg.function_name,
-        output_dir=output_dir,
+        output_dir=output_dir_of(cfg),
         workload_id=None if cfg.source_path is not None else cfg.workload_id,
         runner=runner,
         selected_backend=cfg.backend,
@@ -240,6 +243,31 @@ def main(argv=None):
         calibration=Calibration.load(cfg.calibration_path) if cfg.calibration_path else None,
         context_condition=cfg.context_condition,
     )
+    evaluator = controller.evaluator
+    # The correctness policy is known once the workload is: record it in the resolved config (AIC-002).
+    cfg = dataclasses.replace(cfg, workload_id=evaluator.spec.workload_id,
+                              correctness_policy_hash=evaluator.policy_hash)
+
+    # Record the run before any LLM call.
+    output_dir = output_dir_of(cfg)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    scientific, reasons = scientific_status(cfg, evaluator.spec, runner)
+    manifest = {
+        "schema_version": MANIFEST_SCHEMA,
+        "run_config_sha256": config_hash(cfg),
+        "argv": list(sys.argv[1:] if argv is None else argv),
+        "backend_requested": cfg.backend,
+        "scientific": scientific,
+        "non_scientific_reasons": reasons,
+        "workload": {"id": evaluator.spec.workload_id, "reference_sha256": evaluator.spec.reference_sha256,
+                     "correctness_policy_hash": evaluator.policy_hash,
+                     "heldout_commitment": evaluator.spec.heldout_commitment},
+        "runner": runner.identity(),
+        "environment": collect_environment(REPO, devices),
+    }
+    atomic_write_json(output_dir / "run_config.json", to_dict(cfg))
+    atomic_write_json(output_dir / "manifest.json", manifest)
+
     try:
         controller.start()
     except BaselineFailed as error:
