@@ -35,6 +35,7 @@ Sergio Medina Hernandez (`SergioMedinaH`), Weizhuo "Harry" Sun.
 | `main` | Base for all AIC-1.1 work. Flat Python modules, Anthropic client, JAX 0.4.38. |
 | `harry/batch-01` | Harry's batch 01: AIC-001, 031, 002, 003, 004. Harry's plan is local only (`docs/plans/` is git-ignored). |
 | `sergio/batch-02` | Sergio's batch 02: AIC-005, 006, 007, 008, 009 (from `harry/batch-01`). |
+| `sergio/batch-03` | Sergio's batch 03: AIC-010, AIC-018, G-01 gaps, P8 providers (from `sergio/batch-02`). |
 | `claude-experiment` | Sergio's separate HALO prototype (Gemini/Vertex, JAX 0.11, 18 tasks, results). Shares no code with `main`; AIC-1.1 does not use it. Reference only. |
 | `new_ver` | Stale ancestor of `main`. Ignore. |
 
@@ -59,9 +60,9 @@ scratch scripts — **never import them from tests**.
 ## 5. Status (update every push)
 | Milestone | Tasks | Owner | Status |
 |---|---|---|---|
-| M1 Foundations & target | AIC-001, 031, 002, 003 | Harry | batch 01 AWAITING_ACCEPTANCE, pushed to `origin/harry/batch-01` (D-07; report: `docs/IMPLEMENTATION_PROGRESS.md`): AIC-001 done locally (offline pytest suite, fake Anthropic client, CI); AIC-031 Mac part done (`environment.py`, `scripts/probe_target.py`, `evidence/targets/mac-cpu.json`, `docs/TARGET_DECISION.md` **DRAFT**) — NV-host probe (phase B) pending; AIC-002 done locally (`contracts.py` RunConfig v1, `--backend`/`--config`, `run_config.json` + `manifest.json`); AIC-003 done locally (`workloads/registry.py` WorkloadSpec v1, seeded `softmax`, float64 oracle, legacy `example_add`); dual-backend rules D-06 + guard tests (`tests/test_backend_portability.py`) |
+| M1 Foundations & target | AIC-001, 031, 002, 003 | Harry | batch 01 AWAITING_ACCEPTANCE (Harry) + G-01 gaps closed in batch 03 (Sergio: honest scientific flag, policy hash recorded, `--workload`). AIC-031 phase B still pending on the NV host (`scripts/phase_b.sh`); `docs/TARGET_DECISION.md` DRAFT |
 | M2 Reliable, isolated evaluation | AIC-004 … 009 | AIC-004: Harry; AIC-005 … 009: Sergio | batch 02 AWAITING_ACCEPTANCE on `sergio/batch-02` (report: `docs/IMPLEMENTATION_PROGRESS.md`): AIC-004 done (Harry); AIC-005 timing protocol + A/A calibration, AIC-006 decision rule, AIC-007 contracts + source policy, AIC-008 worker/runner, AIC-009 Docker containment + controller integration done on the Mac (CPU). Pending on the NV host: GPU containment and the official δ (`scripts/phase_b.sh`) |
-| M3 – M8 | AIC-010 … 033 | AIC-010: Sergio; rest TBD | AIC-010 in progress on `sergio/batch-03` (Sergio); the rest not started |
+| M3 – M8 | AIC-010 … 033 | AIC-010: Sergio; rest TBD | batch 03 AWAITING_ACCEPTANCE on `sergio/batch-03`: AIC-010 compiler feedback done (Mac CPU); AIC-018 held-out (from M4) done, softmax split v1 frozen; the rest not started |
 
 Course deadlines (fixed by KTH, not by AIC-1.1): report draft **2026-11-20 17:00**; presentation + final report
 **2026-12-15 … 21**.
@@ -86,7 +87,7 @@ Course deadlines (fixed by KTH, not by AIC-1.1): report draft **2026-11-20 17:00
 - P5 Softmax large-offset edge case: 200 or 1e4? Must be fixed **before any search**. [200: still catches a non-stabilised softmax; offsets ≥ 1000 reject the valid `exp(x - logsumexp(x))` rewrite at rtol 1e-5; implemented as `workloads/registry.OFFSET = 200.0`, re-confirmed on the Mac by `test_logsumexp_rewrite_admitted` / `test_edge_cases_have_teeth`]
 - P6 New flat module `environment.py` (backend selection + env capture)? [yes; added by AIC-031 — merge into `contracts.py` if the team objects, interface unchanged]
 - P7 What must be done by the 2026-11-20 report draft? [unset]
-- P8 LLM provider and money cap (no live calls without a cap, AIC-1.1 §7). [Anthropic; cap unset → live disabled]
+- P8 LLM provider and money cap (no live calls without a cap, AIC-1.1 §7). [default `anthropic` unchanged; `--provider anthropic-vertex|gemini-vertex` bill the GCP project (`providers.py`, `gemini.py`); cap still unset and not enforced (AIC-013)]
 - P9 What to do with `claude-experiment` results (Sergio). [reference only]
 - P10 Move root scratch scripts into `scratch/`? [leave them; AIC-001 isolates them with `testpaths = ["tests"]`]
 - P11 Record the hostname in run manifests? [yes (`environment.platform.node`); hash it if anyone objects]
@@ -97,6 +98,8 @@ Course deadlines (fixed by KTH, not by AIC-1.1): report draft **2026-11-20 17:00
 - P14 When is δ calibrated? [lazily, before the first candidate measurement, unless a frozen `--calibration` file is given;
   official files come from `scripts/calibrate_aa.py` on the NV host]
 - P15 New flat modules `source_policy.py` and `array_io.py`? [yes; each is tested on its own]
+- P16 Who holds the held-out salts (AIC-018)? [Sergio holds `heldout/softmax-v1.salt`; share it privately with whoever runs the final evaluation on the NV host; publish it only with the final results]
+- P17 Is Claude on Vertex covered by the education credits? [unverified: check the GCP billing report after a first small `anthropic-vertex` run; `gemini-vertex` is a Google model]
 
 ## 7. Rules for code changes
 - One branch per person/batch; never push straight to `main`. One task per commit/PR; message starts with the task ID (`AIC-001: ...`).
@@ -204,7 +207,17 @@ Evaluation pipeline (AIC-005 … 009):
   stops with "no usable A/A calibration" instead of guessing a threshold. That is the protocol working.
 - A measurement population is device + JAX version + runner/image: a change mid-run stops the run (INTERRUPTED).
 
+Compiler feedback, held-out, providers (batch 03):
+- `feedback.py` runs in the worker (it is in the image): summaries per level + estimates, never measurements.
+  The agent sees them only under C3/C4/K; C2 runs still record them.
+- Held-out: `scripts/heldout.py init|verify|evaluate|reveal`. Without the salt file the split cannot be used
+  (by design). A failed held-out evaluation burns the split version in `evidence/heldout/ledger.jsonl`.
+- `--provider gemini-vertex` / `anthropic-vertex` need `GOOGLE_CLOUD_PROJECT` + ADC; `CLAUDE_MODEL` only applies
+  to `--provider anthropic`. On Vertex a dated Claude id uses `@` (`claude-haiku-4-5@20251001`).
+- google-genai 3.0.0 prints two harmless `SyntaxWarning: invalid escape sequence` lines on first import.
+
 ## 9. Change log (newest first, one line per push)
+- 2026-11-10 Sergio — batch 03 report in `docs/IMPLEMENTATION_PROGRESS.md`; P8 default updated, P16 (held-out salt holder), P17 (Vertex Claude credits); README / how_to_run: isolated runs, `--workload`, `--calibration`, providers and GCP setup.
 - 2026-11-10 Sergio — P8: per-request usage (model, stop reason, input/output tokens, latency) in `requests.json` and each Attempt's `provider`; totals printed by agent.py (enforcing a money cap stays AIC-013).
 - 2026-11-10 Sergio — P8: `gemini.py` (Gemini on Vertex AI behind the Anthropic Messages surface: request/response translation, function responses named by call id, thought signatures kept, 429/5xx retried); `google-genai` dependency; controller loop runs unchanged on it.
 - 2026-11-10 Sergio — P8: `providers.py` + `--provider anthropic|anthropic-vertex|gemini-vertex`, `model.project/region`; anthropic (default) unchanged; anthropic-vertex = `anthropic.AnthropicVertex` billed to the GCP project via ADC; per-provider default model; `.env.example` GCP variables.

@@ -3,6 +3,62 @@
 Evidence log: what each task did, the commands run, their actual output, and deviations.
 The current-state snapshot is `AI_CONTEXT.md`.
 
+## Batch 03 (AIC-010, AIC-018, G-01 gaps, P8) · 2026-11-10 · owner: Sergio · status: AWAITING_ACCEPTANCE
+
+Branch `sergio/batch-03` (from `sergio/batch-02` at `7c6d745`). Same Mac and tools as batch 02; `google-genai`
+3.0.0 added. Every commit passed the offline suite (`-m "not needs_docker"`); the Docker tests were run again at
+the end of the batch because Docker Desktop on this Mac restarts on its own every few minutes (it also runs two
+unrelated Supabase stacks), which stalled whole-suite runs.
+
+### Summary
+- AIC-010 (G-05): `feedback.py` summarises jaxpr, StableHLO, pre-optimisation HLO and compiled HLO (op totals,
+  dots/reductions/transposes/broadcasts/custom calls/fusions, top ops, parser version, provenance), keeps XLA's
+  cost and memory estimates in their own namespaces (null + reason when unavailable), writes capped raw text.
+  The worker produces it for the measurement case in the same run as correctness; it is recorded for the
+  baseline and every candidate and shown to the agent only under C3/C4/K.
+- AIC-018 (G-02): `heldout.py` + `scripts/heldout.py`: commit-reveal split (secret salt in git-ignored
+  `heldout/`, sha256 committed), 20 seeds disjoint from the search and edge seeds × 2 unseen shapes, host-side
+  verdict, burn ledger. Softmax split v1 frozen: commitment `b2871080…` (salt held by Sergio).
+- G-01 gaps: honest `scientific` flag (explicit backend + scientific workload + isolated runner, reasons listed),
+  `correctness_policy_hash` recorded (AIC-002); `--workload` (AIC-003).
+- P8: `--provider anthropic|anthropic-vertex|gemini-vertex`. The Anthropic API stays the default and unchanged;
+  Claude on Vertex through `anthropic.AnthropicVertex`; Gemini on Vertex through `gemini.py`, an adapter with the
+  Anthropic Messages surface, so the loop and the fakes are provider-neutral; usage per request in `requests.json`.
+
+### Commits
+| task | commit | element |
+|---|---|---|
+| AIC-010 | `5da1206` | compiler feedback at every lowering level |
+| AIC-010 | `0a5d63c` | feedback for baseline and candidates, C3-only visibility |
+| AIC-018 | `dfe0d35` | held-out split, commit-reveal, burn ledger |
+| AIC-018 | `7ff40ab` | softmax split v1 frozen |
+| AIC-002 | `6bfafab` | honest scientific flag, policy hash in the record |
+| AIC-003 | `ffc893f` | `--workload` |
+| P8 | `28c7ce7` | provider setting; Claude on Vertex |
+| P8 | `14a2723` | Gemini on Vertex adapter |
+| P8 | `6a2dadd` | per-request usage |
+
+### Gates (Mac)
+- `env -u ANTHROPIC_API_KEY uv run --locked pytest -q -m "not needs_docker"` → `374 passed, 1 skipped`.
+- With Docker Desktop: `uv run --locked python scripts/build_worker_image.py` (new tag after `uv.lock` and
+  `feedback.py`), then `pytest -q -m needs_docker` → `11 passed, 1 skipped` (the skip: `needs_gpu`). The
+  end-to-end test now also produces the compiler feedback inside the container.
+- `scripts/heldout.py verify --workload softmax` → salt matches the commitment, 40 held-out cases, not burned.
+- New test files: feedback 6, heldout 6, providers 13, gemini 5 (stand-in client, no network).
+
+### Deviations and decisions (defaults recorded in `AI_CONTEXT.md` §6)
+- P8 default: provider `anthropic` unchanged; two GCP providers added (P8, P16). Claude on Vertex is a partner
+  model: whether the education credits cover it is not verified; `gemini-vertex` is billed as a Google model.
+- AIC-018 lands before M4 because G-02 lists it; held-out evaluation is a separate entry point that the search
+  loop and its tools cannot reach (asserted by a test).
+- Calibration dtype and the IR are taken on the primary development shape only (`development_shapes[-1]`).
+
+### Known limitations
+- No live provider call was made in this batch (offline fakes and a stand-in genai client only).
+- The runtime trace (AIC-011) is reported as `UNAVAILABLE`; budgets beyond candidates, deadlines and sizes, and
+  the money cap, are still not enforced (AIC-013).
+- GPU evidence (phase B, GPU containment, official δ, IR on CUDA) is still `scripts/phase_b.sh` on the NV host.
+
 ## Batch 02 (AIC-005, 006, 007, 008, 009) · 2026-11-09 · owner: Sergio · status: AWAITING_ACCEPTANCE
 
 Branch `sergio/batch-02` (from `harry/batch-01` at `bff744d`). Implemented on Sergio's Mac (macOS, arm64, Python

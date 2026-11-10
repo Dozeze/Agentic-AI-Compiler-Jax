@@ -83,6 +83,37 @@ och sparas i JSON.
 uv run --locked python agent.py --backend cpu --source workloads/example.py --function bad_func --iterations 1
 ```
 
+## Isolated evaluation, workloads and providers (batches 02–03)
+
+Model-written code only ever runs in the worker container. Start Docker, build the image once per harness
+change (the tag is a content hash), then run:
+
+```bash
+uv run --locked python scripts/build_worker_image.py                 # --variant cuda12 on the NV host
+uv run --locked python agent.py --backend cpu --workload softmax --iterations 2
+```
+
+- `--workload softmax|example_add` picks a registered workload; `--source/--function` still works (not scientific).
+- `--runner docker` (default) or `--runner subprocess` (no Docker: the baseline runs, model candidates are refused).
+- `--calibration FILE` reuses a frozen A/A calibration from `scripts/calibrate_aa.py`; otherwise the run
+  calibrates δ before its first measurement and stops if the host is too noisy.
+- `--provider` chooses the LLM:
+  - `anthropic` (default): `ANTHROPIC_API_KEY` in `.env.local`, as before.
+  - `anthropic-vertex`: Claude on Vertex AI, billed to the GCP project.
+  - `gemini-vertex`: Gemini on Vertex AI (default `gemini-2.5-flash`), billed to the GCP project.
+
+  For both Vertex providers: `gcloud auth application-default login` once, then
+  `export GOOGLE_CLOUD_PROJECT=<project>` (optionally `CLOUD_ML_REGION`, default `global`).
+
+```bash
+uv run --locked python agent.py --backend cpu --workload softmax --provider gemini-vertex --iterations 1
+```
+
+Each run directory holds `run_config.json`, `manifest.json` (with `scientific` and its reasons), `history.json`
+(Attempt v1 records with raw timing blocks and compiler feedback), `requests.json` (tokens per request) and
+`work/` (every worker request, the calibration and the raw IR text). The final held-out check of a frozen
+winner is `scripts/heldout.py evaluate` (see `heldout.py`); its salt is shared privately, never committed.
+
 ## Tests
 
 ```bash
