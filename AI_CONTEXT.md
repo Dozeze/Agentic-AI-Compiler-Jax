@@ -217,6 +217,7 @@ Compiler feedback, held-out, providers (batch 03):
 - google-genai 3.0.0 prints two harmless `SyntaxWarning: invalid escape sequence` lines on first import.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-10 Sergio — P8: provider errors (quota, auth, network) end the run as a recorded request event instead of a traceback; `requests.json` lists the tools called per request. Found in the first live runs.
 - 2026-11-10 Sergio — batch 03 report in `docs/IMPLEMENTATION_PROGRESS.md`; P8 default updated, P16 (held-out salt holder), P17 (Vertex Claude credits); README / how_to_run: isolated runs, `--workload`, `--calibration`, providers and GCP setup.
 - 2026-11-10 Sergio — P8: per-request usage (model, stop reason, input/output tokens, latency) in `requests.json` and each Attempt's `provider`; totals printed by agent.py (enforcing a money cap stays AIC-013).
 - 2026-11-10 Sergio — P8: `gemini.py` (Gemini on Vertex AI behind the Anthropic Messages surface: request/response translation, function responses named by call id, thought signatures kept, 429/5xx retried); `google-genai` dependency; controller loop runs unchanged on it.

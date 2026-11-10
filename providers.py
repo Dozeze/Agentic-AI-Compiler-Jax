@@ -68,3 +68,21 @@ def make_client(settings):
         from gemini import GeminiVertex
         return GeminiVertex(project=gcp_project(settings), location=gcp_region(settings))
     raise ProviderError(f"unknown provider {settings.provider!r}; choose from {PROVIDERS}")
+
+
+def provider_errors() -> tuple[type[BaseException], ...]:
+    """Exceptions that mean "the provider request failed" (quota, auth, network, server), for every provider.
+    They end a run as a request event; they never become a candidate (AIC-1.1 §3)."""
+    import anthropic
+    errors: list[type[BaseException]] = [anthropic.APIError]
+    try:
+        from google.genai import errors as genai_errors
+        errors.append(genai_errors.APIError)
+    except ImportError:
+        pass
+    try:
+        from google.auth import exceptions as auth_errors
+        errors.append(auth_errors.GoogleAuthError)
+    except ImportError:
+        pass
+    return tuple(errors)

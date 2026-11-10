@@ -28,6 +28,7 @@ from contracts import (ACCEPTED, COMPILE_FAILED, CORRECTNESS_FAILED, DUPLICATE, 
                        MEASUREMENT_UNSTABLE, POLICY_REJECTED, PROPOSAL_INVALID, RESOURCE_LIMIT, TIMEOUT,
                        VALID_NO_CHANGE, VALID_SLOWER, Attempt, Budgets, ContractError, Evaluation,
                        parse_proposal)
+from providers import provider_errors
 from source_policy import check_source
 
 
@@ -583,11 +584,13 @@ class Controller:
             "changes": self.changesPython(self.best_code, code) if code else None,
             "error": reason if failed else None, "attempt": attempt.to_json()})
 
-    def _record_request(self, model, response, latency_s):
+    def _record_request(self, model, response, latency_s, error=None):
         """Usage of one provider request (AIC-1.1 §8 reports actual tokens, not candidate counts)."""
         usage = getattr(response, "usage", None)
         record = {"request": len(self.requests) + 1, "model": model, "client": type(self.client).__name__,
+                  "error": f"{type(error).__name__}: {str(error)[:500]}" if error else None,
                   "stop_reason": getattr(response, "stop_reason", None),
+                  "tool_calls": [b.name for b in getattr(response, "content", []) if getattr(b, "type", None) == "tool_use"],
                   "input_tokens": getattr(usage, "input_tokens", None),
                   "output_tokens": getattr(usage, "output_tokens", None),
                   "latency_s": round(latency_s, 3), "utc": _utc()}
@@ -637,13 +640,19 @@ class Controller:
 
         for _ in range(max_turns):
             started = time.monotonic()
-            response = self.client.messages.create(
-                model=model,
-                max_tokens=max_tokens,
-                system=self.init_prompt,
-                tools=self.provideTools(),
-                messages=messages,
-            )
+            try:
+                response = self.client.messages.create(
+                    model=model,
+                    max_tokens=max_tokens,
+                    system=self.init_prompt,
+                    tools=self.provideTools(),
+                    messages=messages,
+                )
+            except provider_errors() as error:
+                # A failed request is a request event, never a candidate: record it and stop the run.
+                self._record_request(model, None, time.monotonic() - started, error=error)
+                self.stop_reason = f"provider request failed: {type(error).__name__}: {str(error)[:300]}"
+                break
             self._record_request(model, response, time.monotonic() - started)
             messages.append({"role": "assistant", "content": response.content})
 

@@ -240,3 +240,27 @@ def test_usage_is_recorded_per_request(no_key, repo_root):
     assert history[-1]["attempt"]["provider"]["request"] == 1
     recorded = json.loads((no_key / "run" / "requests.json").read_text())
     assert [r["stop_reason"] for r in recorded] == ["tool_use", "end_turn"]
+    assert [r["tool_calls"] for r in recorded] == [["benchmark_code"], []]
+
+
+def test_provider_error_is_a_request_event_not_a_crash(no_key, repo_root):
+    import anthropic
+    import httpx2
+
+    class QuotaExceeded(FakeAnthropic):
+        def __init__(self):
+            super().__init__([])
+
+            def create(**_kwargs):
+                request = httpx2.Request("POST", "https://example.invalid/v1/messages")
+                raise anthropic.RateLimitError("Quota exceeded", response=httpx2.Response(429, request=request),
+                                               body=None)
+            self.messages.create = create
+
+    _, controller = _build(repo_root, [], no_key / "run")
+    controller.client = QuotaExceeded()
+    history = controller.agent_loop(model="fake-model")
+    assert len(history) == 1                                   # the baseline only: no fabricated candidate
+    assert controller.stop_reason.startswith("provider request failed: RateLimitError")
+    recorded = json.loads((no_key / "run" / "requests.json").read_text())
+    assert recorded[0]["error"].startswith("RateLimitError") and recorded[0]["input_tokens"] is None
