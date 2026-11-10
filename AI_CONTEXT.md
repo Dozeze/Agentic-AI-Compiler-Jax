@@ -205,6 +205,7 @@ Evaluation pipeline (AIC-005 … 009):
 - A measurement population is device + JAX version + runner/image: a change mid-run stops the run (INTERRUPTED).
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-10 Sergio — P8: `providers.py` + `--provider anthropic|anthropic-vertex|gemini-vertex`, `model.project/region`; anthropic (default) unchanged; anthropic-vertex = `anthropic.AnthropicVertex` billed to the GCP project via ADC; per-provider default model; `.env.example` GCP variables.
 - 2026-11-10 Sergio — AIC-003: `agent.py --workload softmax|example_add` (→ `RunConfig.workload_id`; `--source` overrides); unknown workload id is a config error.
 - 2026-11-10 Sergio — AIC-002: manifest `scientific` only with explicit backend + scientific workload + isolated runner (`non_scientific_reasons` lists what is missing); `run_config.json` carries `correctness_policy_hash`; manifest records workload hashes and held-out commitment.
 - 2026-11-10 Sergio — AIC-018: softmax held-out split v1 frozen (commitment b2871080… in `workloads/registry.py`; salt kept outside the repo until the final results).

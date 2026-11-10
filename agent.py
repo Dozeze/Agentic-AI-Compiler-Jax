@@ -138,9 +138,11 @@ def scientific_status(cfg, spec, runner):
     return not reasons, reasons
 
 
-def client_factory():
+def client_factory(settings=None):
     """The LLM client for the configured provider. Tests replace anthropic.Anthropic with a fake."""
-    return anthropic.Anthropic()
+    from contracts import ModelSettings
+    from providers import make_client
+    return make_client(settings or ModelSettings())
 
 
 def atomic_write_json(path, obj):
@@ -155,8 +157,12 @@ def _build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--iterations", type=int, default=None,
                         help=f"maximum candidate evaluations (budgets.max_candidates; default {DEFAULT_ITERATIONS})")
+    parser.add_argument("--provider", default=None, choices=("anthropic", "anthropic-vertex", "gemini-vertex"),
+                        help="LLM provider: anthropic (API key, default), anthropic-vertex (Claude on Vertex AI) or "
+                             "gemini-vertex (Gemini on Vertex AI); both Vertex providers bill the GCP project")
     parser.add_argument("--model", default=None,
-                        help=f"model id (default: $CLAUDE_MODEL, else the config value, else {DEFAULT_MODEL})")
+                        help="model id (default: $CLAUDE_MODEL for --provider anthropic, else the config value, "
+                             f"else the provider default, e.g. {DEFAULT_MODEL})")
     parser.add_argument("--workload", default=None, choices=sorted(_registry().REGISTRY),
                         help="registered workload to optimize (default: example_add); --source overrides it")
     parser.add_argument("--source", type=Path, help="trusted Python workload file to optimize (not scientific)")
@@ -187,8 +193,11 @@ def _cli_overrides(args):
     return {
         "backend": args.backend,
         "budgets.max_candidates": args.iterations,
-        # CLAUDE_MODEL keeps its legacy precedence: below --model, above the config file.
-        "model.model_id": args.model or os.getenv("CLAUDE_MODEL") or None,
+        "model.provider": args.provider,
+        # CLAUDE_MODEL keeps its legacy precedence (below --model, above the config file) for the Anthropic
+        # API only: a first-party Claude id means nothing to the Vertex providers.
+        "model.model_id": args.model or (os.getenv("CLAUDE_MODEL") if args.provider in (None, "anthropic")
+                                         else None) or None,
         "workload_id": args.workload,
         "source_path": str(args.source) if args.source is not None else None,
         "function_name": args.function,
@@ -225,8 +234,11 @@ def main(argv=None):
         parser.error(f"--require-gpu was requested, but JAX only sees: {devices}")
     print(f"JAX devices: {devices}")
 
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        raise RuntimeError("ANTHROPIC_API_KEY is missing; put it in .env.local or the environment")
+    from providers import ProviderError, preflight
+    try:
+        preflight(cfg.model)
+    except ProviderError as error:
+        raise RuntimeError(str(error)) from error
 
     # Where code runs. Model-written code needs isolation; without it the run stops before any LLM call.
     from runner import DockerRunner, TrustedSubprocessRunner
@@ -239,7 +251,7 @@ def main(argv=None):
     from benchmark import Calibration
     from controller import BaselineFailed
     controller = build_controller(
-        client_factory(),
+        client_factory(cfg.model),
         max_iterations=cfg.budgets.max_candidates,
         source_path=Path(cfg.source_path) if cfg.source_path is not None else None,
         function_name=cfg.function_name,

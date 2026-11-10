@@ -108,8 +108,11 @@ class MeasurementProtocol:
 
 @dataclass(frozen=True)
 class ModelSettings:
-    provider: str = "anthropic"
-    model_id: str = "claude-haiku-4-5-20251001"   # AIC-1.1: "a starting suggestion, not a guarantee"
+    provider: str = "anthropic"                    # anthropic | anthropic-vertex | gemini-vertex (providers.py)
+    model_id: str = "claude-haiku-4-5-20251001"   # AIC-1.1: "a starting suggestion, not a guarantee";
+                                                   # when not given, resolved to the provider's default
+    project: str | None = None                     # Vertex only; falls back to $GOOGLE_CLOUD_PROJECT
+    region: str | None = None                      # Vertex only; falls back to $CLOUD_ML_REGION, then "global"
     max_tokens: int = 2048
 
 
@@ -233,6 +236,9 @@ def validate(cfg: RunConfig) -> None:
     for name in ("num_runs", "num_tests"):
         if getattr(cfg.benchmark, name) <= 0:
             raise ConfigError(f"run_config.benchmark.{name}: must be positive")
+    from providers import PROVIDERS
+    if cfg.model.provider not in PROVIDERS:
+        raise ConfigError(f"run_config.model.provider: must be one of {PROVIDERS}, got {cfg.model.provider!r}")
     if cfg.model.max_tokens <= 0:
         raise ConfigError("run_config.model.max_tokens: must be positive")
     validate_protocol(cfg.measurement, path="run_config.measurement")
@@ -320,6 +326,7 @@ def from_dict(data: dict) -> RunConfig:
 def resolve_run_config(cli: dict[str, Any], config_path: Path | None) -> RunConfig:
     """Resolve once: documented defaults, then the JSON config file, then explicit CLI values (None = not given)."""
     merged = to_dict(RunConfig())                                    # 1. defaults
+    merged["model"]["model_id"] = None                               #    (model: per provider, filled below)
     if config_path is not None:                                      # 2. file (JSON)
         try:
             file_data = json.loads(Path(config_path).read_text(encoding="utf-8"))
@@ -329,6 +336,9 @@ def resolve_run_config(cli: dict[str, Any], config_path: Path | None) -> RunConf
             raise ConfigError(f"config: {config_path} is not valid JSON: {exc}") from exc
         _deep_merge(merged, file_data, path="config")
     _deep_merge(merged, {k: v for k, v in cli.items() if v is not None}, path="cli")  # 3. explicit CLI only
+    if merged["model"]["model_id"] is None:                          # no model given: the provider's default
+        from providers import DEFAULT_MODELS
+        merged["model"]["model_id"] = DEFAULT_MODELS.get(merged["model"]["provider"], ModelSettings().model_id)
     return _build(RunConfig, merged, path="run_config")
 
 
