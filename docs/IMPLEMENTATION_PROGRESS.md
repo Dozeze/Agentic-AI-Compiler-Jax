@@ -53,8 +53,27 @@ unrelated Supabase stacks), which stalled whole-suite runs.
   loop and its tools cannot reach (asserted by a test).
 - Calibration dtype and the IR are taken on the primary development shape only (`development_shapes[-1]`).
 
+### Live provider runs · 2026-11-10 (GCP project `dd2430-508012`, Docker runner, Mac CPU)
+- `gemini-vertex` (`gemini-2.5-flash`), softmax, `--iterations 2`: 2 requests (the first called `get_current_code`
+  and `get_history`, the second `benchmark_code`), 847 input / 498 output tokens. Proposal: replace the
+  implementation with `jax.nn.softmax`. It passed the source policy and all 16 correctness cases (edge cases
+  included) inside the container, and its compiler feedback was recorded (compiled HLO: 39 ops, 4 reductions,
+  2 fusions). The run then stopped as designed: the A/A calibration on the Mac was unstable (one session at
+  IQR/median 0.112 > 0.10), so nothing was measured or accepted. All Gemini runs that day used about
+  2.3k input / 2.7k output tokens, under one US cent at list price.
+- With `--iterations 1` the inherited turn limit (3 × iterations) was spent on reading tools before any proposal;
+  `requests.json` now lists the tools called per request so this is visible (the loop itself is AIC-015).
+- Re-calibrating on the Mac with 40 ms blocks, and with a declared development limit of IQR/median 0.15, still
+  failed (IQR 0.107, then baseline drift 0.126): the interactive Mac (WindowServer, desktop apps, the Docker VM) is
+  not a measurement host. Not loosened further: timing evidence comes from the NV host (D-06).
+- `anthropic-vertex` (`claude-haiku-4-5@20251001`): authentication and routing work, but Vertex returns 429
+  "Quota exceeded … base model: anthropic-claude-haiku-4-5" on `global` (quota 0) and 404 on `us-east5` and
+  `europe-west1` (model not available to the project there). This needs a quota increase request in the GCP
+  console (P17). The 429 used to crash agent.py; since `e90fb64` it ends the run as a recorded request event.
+- Docker Desktop on macOS refused a bind mount of a directory that had been deleted and recreated under the same
+  name ("bind source path does not exist"); a new run directory name avoids it.
+
 ### Known limitations
-- No live provider call was made in this batch (offline fakes and a stand-in genai client only).
 - The runtime trace (AIC-011) is reported as `UNAVAILABLE`; budgets beyond candidates, deadlines and sizes, and
   the money cap, are still not enforced (AIC-013).
 - GPU evidence (phase B, GPU containment, official δ, IR on CUDA) is still `scripts/phase_b.sh` on the NV host.
