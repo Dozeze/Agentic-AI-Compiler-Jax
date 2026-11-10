@@ -99,4 +99,4 @@ uv run --locked python agent.py --backend cpu --workload softmax --provider gemi
 Each run directory holds `run_config.json`, `manifest.json` (with `scientific` and its reasons), `history.json`
 (Attempt v1 records with raw timing blocks and compiler feedback), `requests.json` (tokens per request) and
 `work/` (every worker request, the calibration and the raw IR text). The final held-out check of a frozen
-winner is `scripts/heldout.py evaluate` (see `heldout.py`); its salt is shared privately, never committed.
+winner is `scripts/heldout.py evaluate` (see `heldout.py`); its seeds are in the registry and never reach the search.

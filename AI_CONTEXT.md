@@ -98,7 +98,7 @@ Course deadlines (fixed by KTH, not by AIC-1.1): report draft **2026-11-20 17:00
 - P14 When is δ calibrated? [lazily, before the first candidate measurement, unless a frozen `--calibration` file is given;
   official files come from `scripts/calibrate_aa.py` on the NV host]
 - P15 New flat modules `source_policy.py` and `array_io.py`? [yes; each is tested on its own]
-- P16 Who holds the held-out salts (AIC-018)? [Sergio holds `heldout/softmax-v1.salt`; share it privately with whoever runs the final evaluation on the NV host; publish it only with the final results]
+- P16 How is the held-out split kept from the search (AIC-018)? [fixed `heldout_seeds` in the registry, public and committed before any search (the commit is the freeze evidence); the search never receives them. A salted commit-reveal scheme was tried first and removed as unnecessary for this threat model]
 - P17 Is Claude on Vertex usable with the education credits? [not yet: on 2026-11-10 project `dd2430-508012` had quota 0 for `anthropic-claude-haiku-4-5` on `global` (429) and no access on `us-east5` / `europe-west1` (404). Request a quota increase in the GCP console (Vertex AI → Quotas), then check billing. `gemini-vertex` works today]
 
 ## 7. Rules for code changes
@@ -210,8 +210,9 @@ Evaluation pipeline (AIC-005 … 009):
 Compiler feedback, held-out, providers (batch 03):
 - `feedback.py` runs in the worker (it is in the image): summaries per level + estimates, never measurements.
   The agent sees them only under C3/C4/K; C2 runs still record them.
-- Held-out: `scripts/heldout.py init|verify|evaluate|reveal`. Without the salt file the split cannot be used
-  (by design). A failed held-out evaluation burns the split version in `evidence/heldout/ledger.jsonl`.
+- Held-out: `scripts/heldout.py check|evaluate`. Seeds and shapes are in `workloads/registry.py`; never pass them to
+  the search. A failed held-out evaluation burns the split version in `evidence/heldout/ledger.jsonl`: a new split
+  needs new seeds and `heldout_version + 1`.
 - `--provider gemini-vertex` / `anthropic-vertex` need `GOOGLE_CLOUD_PROJECT` + ADC; `CLAUDE_MODEL` only applies
   to `--provider anthropic`. On Vertex a dated Claude id uses `@` (`claude-haiku-4-5@20251001`).
 - google-genai 3.0.0 prints two harmless `SyntaxWarning: invalid escape sequence` lines on first import.
@@ -222,6 +223,7 @@ Compiler feedback, held-out, providers (batch 03):
   `--output-dir`.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-10 Sergio — AIC-018: docs for the simplified held-out split (P16 answered: fixed public seeds, never passed to the search; report and run instructions updated).
 - 2026-11-10 Sergio — AIC-018: held-out split simplified to fixed `heldout_seeds` in the registry (softmax v1: seeds 1000–1019 × 2 unseen shapes, frozen before any search); salt, commit-reveal and `init/verify/reveal` removed; `scripts/heldout.py check|evaluate`; burn ledger kept.
 - 2026-11-10 Sergio — P8: P17 updated (Claude on Vertex needs a quota increase; gemini-vertex works) and live-run pitfalls in §8.
 - 2026-11-10 Sergio — P8: first live runs recorded: `gemini-vertex` works end to end up to measurement (proposal correct 16/16 in Docker; Mac A/A too noisy, as designed; < 1 cent); `anthropic-vertex` needs a GCP quota increase (P17).

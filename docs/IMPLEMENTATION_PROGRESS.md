@@ -16,9 +16,11 @@ unrelated Supabase stacks), which stalled whole-suite runs.
   cost and memory estimates in their own namespaces (null + reason when unavailable), writes capped raw text.
   The worker produces it for the measurement case in the same run as correctness; it is recorded for the
   baseline and every candidate and shown to the agent only under C3/C4/K.
-- AIC-018 (G-02): `heldout.py` + `scripts/heldout.py`: commit-reveal split (secret salt in git-ignored
-  `heldout/`, sha256 committed), 20 seeds disjoint from the search and edge seeds × 2 unseen shapes, host-side
-  verdict, burn ledger. Softmax split v1 frozen: commitment `b2871080…` (salt held by Sergio).
+- AIC-018 (G-02): `heldout.py` + `scripts/heldout.py`: fixed `heldout_seeds` (≥ 20, disjoint from the search and
+  edge seeds) × ≥ 2 unseen shapes in the registry, a final-evaluation entry point the search cannot reach, host-side
+  verdict, burn ledger. Softmax split v1: seeds 1000–1019 × (64, 257), (256, 2048), frozen before any search.
+  (First implemented as a salted commit-reveal scheme, then simplified in `4143f54`: the model never reads the
+  repository, so public seeds are not given to it, and the commit already proves the freeze.)
 - G-01 gaps: honest `scientific` flag (explicit backend + scientific workload + isolated runner, reasons listed),
   `correctness_policy_hash` recorded (AIC-002); `--workload` (AIC-003).
 - P8: `--provider anthropic|anthropic-vertex|gemini-vertex`. The Anthropic API stays the default and unchanged;
@@ -31,7 +33,8 @@ unrelated Supabase stacks), which stalled whole-suite runs.
 | AIC-010 | `5da1206` | compiler feedback at every lowering level |
 | AIC-010 | `0a5d63c` | feedback for baseline and candidates, C3-only visibility |
 | AIC-018 | `dfe0d35` | held-out split, commit-reveal, burn ledger |
-| AIC-018 | `7ff40ab` | softmax split v1 frozen |
+| AIC-018 | `7ff40ab` | softmax split v1 frozen (salted) |
+| AIC-018 | `4143f54` | split simplified to fixed seeds in the registry |
 | AIC-002 | `6bfafab` | honest scientific flag, policy hash in the record |
 | AIC-003 | `ffc893f` | `--workload` |
 | P8 | `28c7ce7` | provider setting; Claude on Vertex |
@@ -43,7 +46,7 @@ unrelated Supabase stacks), which stalled whole-suite runs.
 - With Docker Desktop: `uv run --locked python scripts/build_worker_image.py` (new tag after `uv.lock` and
   `feedback.py`), then `pytest -q -m needs_docker` → `11 passed, 1 skipped` (the skip: `needs_gpu`). The
   end-to-end test now also produces the compiler feedback inside the container.
-- `scripts/heldout.py verify --workload softmax` → salt matches the commitment, 40 held-out cases, not burned.
+- `scripts/heldout.py check --workload softmax` → 40 cases (20 seeds × 2 unseen shapes), not burned.
 - New test files: feedback 6, heldout 6, providers 13, gemini 5 (stand-in client, no network).
 
 ### Deviations and decisions (defaults recorded in `AI_CONTEXT.md` §6)
