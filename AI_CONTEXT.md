@@ -99,7 +99,7 @@ Course deadlines (fixed by KTH, not by AIC-1.1): report draft **2026-11-20 17:00
   official files come from `scripts/calibrate_aa.py` on the NV host]
 - P15 New flat modules `source_policy.py` and `array_io.py`? [yes; each is tested on its own]
 - P16 Who holds the held-out salts (AIC-018)? [Sergio holds `heldout/softmax-v1.salt`; share it privately with whoever runs the final evaluation on the NV host; publish it only with the final results]
-- P17 Is Claude on Vertex covered by the education credits? [unverified: check the GCP billing report after a first small `anthropic-vertex` run; `gemini-vertex` is a Google model]
+- P17 Is Claude on Vertex usable with the education credits? [not yet: on 2026-11-10 project `dd2430-508012` had quota 0 for `anthropic-claude-haiku-4-5` on `global` (429) and no access on `us-east5` / `europe-west1` (404). Request a quota increase in the GCP console (Vertex AI → Quotas), then check billing. `gemini-vertex` works today]
 
 ## 7. Rules for code changes
 - One branch per person/batch; never push straight to `main`. One task per commit/PR; message starts with the task ID (`AIC-001: ...`).
@@ -215,8 +215,14 @@ Compiler feedback, held-out, providers (batch 03):
 - `--provider gemini-vertex` / `anthropic-vertex` need `GOOGLE_CLOUD_PROJECT` + ADC; `CLAUDE_MODEL` only applies
   to `--provider anthropic`. On Vertex a dated Claude id uses `@` (`claude-haiku-4-5@20251001`).
 - google-genai 3.0.0 prints two harmless `SyntaxWarning: invalid escape sequence` lines on first import.
+- First live `gemini-vertex` run worked end to end up to measurement (proposal `jax.nn.softmax`, 16/16 correct in the
+  container). On the Mac the A/A calibration is unstable even with 40 ms blocks: timing only on the NV host (D-06).
+- With `--iterations 1` a model can spend the 3 allowed turns on `get_current_code` / `get_history`; use at least 2.
+- Docker Desktop (macOS) can refuse to bind a directory that was deleted and recreated with the same name; use a new
+  `--output-dir`.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-10 Sergio — P8: P17 updated (Claude on Vertex needs a quota increase; gemini-vertex works) and live-run pitfalls in §8.
 - 2026-11-10 Sergio — P8: first live runs recorded: `gemini-vertex` works end to end up to measurement (proposal correct 16/16 in Docker; Mac A/A too noisy, as designed; < 1 cent); `anthropic-vertex` needs a GCP quota increase (P17).
 - 2026-11-10 Sergio — P8: provider errors (quota, auth, network) end the run as a recorded request event instead of a traceback; `requests.json` lists the tools called per request. Found in the first live runs.
 - 2026-11-10 Sergio — batch 03 report in `docs/IMPLEMENTATION_PROGRESS.md`; P8 default updated, P16 (held-out salt holder), P17 (Vertex Claude credits); README / how_to_run: isolated runs, `--workload`, `--calibration`, providers and GCP setup.
