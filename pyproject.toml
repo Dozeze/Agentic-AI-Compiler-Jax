@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "anthropic[vertex]>=1.3.0",
     "claude-agent-sdk>=0.2.151",
+    "google-genai>=1.0",
     "jax==0.4.38",
     "matplotlib>=3.10",
     "python-dotenv>=1.2.3",
