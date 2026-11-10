@@ -1,95 +1,50 @@
-"""Held-out evaluation (AIC-018, AIC-1.1 §4): frozen before search, unseen by the search, revealed at the end.
+"""Held-out evaluation (AIC-018, AIC-1.1 §4): frozen before search, never seen by the search.
 
-The repository is public, so the held-out seeds cannot simply live in it. They are derived from a secret
-salt (commit-reveal):
+Each research workload declares its held-out split in workloads/registry.py: at least 20 `heldout_seeds`,
+disjoint from the search seeds and the edge-case seed, and two `heldout_shapes` the search never uses.
+Committing them before any search freezes the split: the commit is the evidence. They are public, which
+also satisfies AIC-1.1's "release them with the final results". What keeps them held out is that nothing
+in the search ever receives them: the model only sees the prompt and the tool results the controller
+builds from the development cases, and this module is not reachable from the search loop or its tools.
 
-  init     a random salt is written to heldout/<workload>-v<version>.salt (git-ignored); its sha256 goes into
-           the workload's `heldout_commitment` in workloads/registry.py and is committed - the freeze evidence.
-  verify   the harness refuses held-out work unless sha256(salt) equals the committed commitment.
-  reveal   with the final results, the salt is published so anyone can re-derive the seeds and re-run.
-
-The seeds (at least 20, disjoint from the search seeds and the edge-case seed) never enter a prompt, a
-candidate's source or the search's artifacts. Held-out results never go back into the agent's context. A
-failed held-out evaluation burns its split version in the ledger: the scope's generalisation claim is
-invalid, and a later attempt on the same split is not called held out - debugging needs a new version.
+A failed held-out evaluation burns its split version in the ledger: the scope's generalisation claim is
+invalid, and a later attempt on the same split is not called held out. Debugging needs a new split
+(new seeds and `heldout_version + 1`).
 """
 from __future__ import annotations
 
 import hashlib
 import json
-import os
-import secrets
 import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent
-N_SEEDS = 20
+MIN_SEEDS = 20
+MIN_SHAPES = 2
 EDGE_SEED = 12345
 LEDGER = REPO / "evidence" / "heldout" / "ledger.jsonl"
 
 
 class HeldoutError(RuntimeError):
-    """No usable held-out split: missing or wrong salt, no commitment, or a burned split version."""
+    """No usable held-out split: too few or overlapping seeds or shapes, or a burned split version."""
 
 
-def salt_dir() -> Path:
-    return Path(os.environ.get("AIC_HELDOUT_DIR", REPO / "heldout"))
+def check_split(spec) -> None:
+    """The split meets AIC-1.1 §4: enough seeds and shapes, none shared with the search."""
+    seeds, shapes = spec.heldout_seeds, spec.heldout_shapes
+    if len(set(seeds)) < MIN_SEEDS or len(set(seeds)) != len(seeds):
+        raise HeldoutError(f"{spec.workload_id}: needs at least {MIN_SEEDS} distinct held-out seeds")
+    if set(seeds) & (set(spec.search_seeds) | {EDGE_SEED}):
+        raise HeldoutError(f"{spec.workload_id}: held-out seeds overlap the search or edge-case seeds")
+    if len(set(shapes)) < MIN_SHAPES or set(shapes) & set(spec.development_shapes):
+        raise HeldoutError(f"{spec.workload_id}: needs at least {MIN_SHAPES} shapes the search never uses")
 
 
-def salt_path(spec) -> Path:
-    return salt_dir() / f"{spec.workload_id}-v{spec.heldout_version}.salt"
-
-
-def commitment(salt: str) -> str:
-    return hashlib.sha256(salt.encode("ascii")).hexdigest()
-
-
-def init(spec) -> str:
-    """Create the secret salt for `spec` (never overwrites one) and return its commitment."""
-    path = salt_path(spec)
-    if path.exists():
-        raise HeldoutError(f"{path} already exists; a split is frozen once")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    salt = secrets.token_hex(32)
-    path.write_text(salt + "\n", encoding="ascii")
-    os.chmod(path, 0o600)
-    return commitment(salt)
-
-
-def load_salt(spec) -> str:
-    """The salt, checked against the committed commitment."""
-    if not spec.heldout_commitment:
-        raise HeldoutError(f"{spec.workload_id} has no committed held-out commitment (run scripts/heldout.py init)")
-    path = salt_path(spec)
-    if not path.is_file():
-        raise HeldoutError(f"{path} is missing: get the salt from whoever froze the split")
-    salt = path.read_text(encoding="ascii").strip()
-    if commitment(salt) != spec.heldout_commitment:
-        raise HeldoutError(f"{path} does not match the committed commitment for {spec.workload_id} "
-                           f"v{spec.heldout_version}")
-    return salt
-
-
-def derive_seeds(salt: str, spec, n: int = N_SEEDS) -> tuple[int, ...]:
-    """`n` distinct seeds from the salt, disjoint from the search seeds and the edge-case seed."""
-    excluded = set(spec.search_seeds) | {EDGE_SEED}
-    seeds, counter = [], 0
-    while len(seeds) < n:
-        digest = hashlib.sha256(f"{salt}:{spec.workload_id}:v{spec.heldout_version}:{counter}".encode()).digest()
-        seed = int.from_bytes(digest[:4], "big") & 0x7FFFFFFF
-        if seed not in excluded and seed not in seeds:
-            seeds.append(seed)
-        counter += 1
-    return tuple(seeds)
-
-
-def cases(spec, salt: str):
-    """[(name, args)] for every held-out shape x held-out seed. Names do not reveal the seeds."""
-    if len(spec.heldout_shapes) < 2:
-        raise HeldoutError(f"{spec.workload_id}: AIC-1.1 needs at least two unseen shapes")
-    seeds = derive_seeds(salt, spec)
-    return [(f"heldout{list(shape)}/#{i}", spec.make_inputs(seed, shape))
-            for shape in spec.heldout_shapes for i, seed in enumerate(seeds)]
+def cases(spec):
+    """[(name, args)] for every held-out shape x held-out seed."""
+    check_split(spec)
+    return [(f"heldout{list(shape)}/seed{seed}", spec.make_inputs(seed, shape))
+            for shape in spec.heldout_shapes for seed in spec.heldout_seeds]
 
 
 def _ledger(path: Path) -> list[dict]:
@@ -103,12 +58,12 @@ def check_not_burned(spec, ledger: Path = LEDGER) -> None:
         if (entry["workload"], entry["version"]) == (spec.workload_id, spec.heldout_version) and not entry["passed"]:
             raise HeldoutError(f"{spec.workload_id} held-out split v{spec.heldout_version} is burned: it failed for "
                                f"candidate {entry['candidate_sha256'][:12]} on {entry['utc']}. A new evaluation "
-                               "needs a new split version (heldout_version + 1, new salt, new commitment)")
+                               "needs a new split (new seeds, heldout_version + 1)")
 
 
 def record(spec, candidate_source: str, report, ledger: Path = LEDGER) -> dict:
     entry = {"utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "workload": spec.workload_id,
-             "version": spec.heldout_version, "commitment": spec.heldout_commitment,
+             "version": spec.heldout_version,
              "candidate_sha256": hashlib.sha256(candidate_source.encode()).hexdigest(),
              "passed": report.passed, "category": report.category,
              "n_cases": len(report.cases), "n_failed": sum(not c.passed for c in report.cases)}
@@ -126,19 +81,10 @@ def evaluate(spec, candidate_source: str, runner, workdir, *, selected_backend, 
     """
     from contracts import MeasurementProtocol
     from controller import Evaluator
-    salt = load_salt(spec)
+    split = cases(spec)
     check_not_burned(spec, ledger)
     evaluator = Evaluator(spec, runner, MeasurementProtocol(), workdir, selected_backend=selected_backend,
-                          cases=cases(spec, salt))
+                          cases=split)
     evaluator.reference_outputs()
     report, _, _ = evaluator.correctness(candidate_source)
     return report, record(spec, candidate_source, report, ledger)
-
-
-def reveal(spec, out_dir: Path = REPO / "evidence" / "heldout") -> Path:
-    """Publish the salt with the final results, so the split can be re-derived and re-run by anyone."""
-    salt = load_salt(spec)
-    path = out_dir / f"{spec.workload_id}-v{spec.heldout_version}.salt"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(salt + "\n", encoding="ascii")
-    return path

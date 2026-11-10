@@ -44,7 +44,7 @@ class WorkloadSpec:
     static_params: dict                   # e.g. {"axis": -1}; recorded, not passed to the function
     development_shapes: tuple[tuple[int, ...], ...]
     heldout_shapes: tuple[tuple[int, ...], ...]
-    search_seeds: tuple[int, ...]         # 0-4; held-out seeds are frozen by AIC-018, not defined here
+    search_seeds: tuple[int, ...]         # 0-4; the held-out seeds are `heldout_seeds` below
     input_factory: Callable[[int, tuple[int, ...], str], tuple[np.ndarray, ...]]
     oracle: Callable[..., np.ndarray] | None
     output_contract: str                  # human-readable, e.g. "single array, same shape as x, float32"
@@ -52,7 +52,7 @@ class WorkloadSpec:
     edge_cases: tuple[EdgeCase, ...]
     max_input_bytes: int
     scientific: bool                      # False for example_add
-    heldout_commitment: str | None = None # sha256 of the secret held-out salt (AIC-018, commit-reveal)
+    heldout_seeds: tuple[int, ...] = ()   # AIC-018: >= 20 seeds the search never uses (see heldout.py)
     heldout_version: int = 1              # a new split after a held-out failure gets a new version
 
     @property
@@ -123,8 +123,8 @@ SOFTMAX = WorkloadSpec(
     edge_cases=SOFTMAX_EDGE_CASES,
     max_input_bytes=8 << 20,                             # largest input (256, 2048) float32 is 2 MiB
     scientific=True,
-    # AIC-018: sha256 of the secret salt in heldout/softmax-v1.salt, frozen 2026-11-10 before any search.
-    heldout_commitment="b28710803712e14252ad98db8bb684ba1d008307228f37bdf7399dd2ef2d80e2",
+    # AIC-018: held-out split v1, frozen 2026-11-10 before any search. Never passed to the search loop.
+    heldout_seeds=tuple(range(1000, 1020)),
 )
 
 

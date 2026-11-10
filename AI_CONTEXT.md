@@ -222,6 +222,7 @@ Compiler feedback, held-out, providers (batch 03):
   `--output-dir`.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-10 Sergio — AIC-018: held-out split simplified to fixed `heldout_seeds` in the registry (softmax v1: seeds 1000–1019 × 2 unseen shapes, frozen before any search); salt, commit-reveal and `init/verify/reveal` removed; `scripts/heldout.py check|evaluate`; burn ledger kept.
 - 2026-11-10 Sergio — P8: P17 updated (Claude on Vertex needs a quota increase; gemini-vertex works) and live-run pitfalls in §8.
 - 2026-11-10 Sergio — P8: first live runs recorded: `gemini-vertex` works end to end up to measurement (proposal correct 16/16 in Docker; Mac A/A too noisy, as designed; < 1 cent); `anthropic-vertex` needs a GCP quota increase (P17).
 - 2026-11-10 Sergio — P8: provider errors (quota, auth, network) end the run as a recorded request event instead of a traceback; `requests.json` lists the tools called per request. Found in the first live runs.

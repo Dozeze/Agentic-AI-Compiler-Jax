@@ -1,4 +1,4 @@
-"""Held-out evaluation (AIC-018): commit-reveal, disjoint seeds, host-side verdict, burned splits."""
+"""Held-out evaluation (AIC-018): a frozen split, unreachable from the search, burned on failure."""
 import dataclasses
 
 import pytest
@@ -6,70 +6,56 @@ import pytest
 import heldout
 from fixtures.softmax_candidates import OVERFIT_SHAPE, REFERENCE
 from runner import TrustedSubprocessRunner
-from workloads.registry import SOFTMAX
+from workloads.registry import REGISTRY, SOFTMAX
 
 
-@pytest.fixture
-def frozen(tmp_path, monkeypatch):
-    """A softmax spec with a freshly frozen split in a temporary salt directory."""
-    monkeypatch.setenv("AIC_HELDOUT_DIR", str(tmp_path / "salts"))
-    spec = dataclasses.replace(SOFTMAX, heldout_commitment=None)
-    spec = dataclasses.replace(spec, heldout_commitment=heldout.init(spec))
-    return spec, tmp_path / "ledger.jsonl"
+@pytest.mark.parametrize("workload", [w for w, s in REGISTRY.items() if s.scientific])
+def test_every_scientific_workload_has_a_valid_split(workload):
+    heldout.check_split(REGISTRY[workload])
 
 
-def test_seeds_are_many_disjoint_and_reproducible(frozen):
-    spec, _ = frozen
-    salt = heldout.load_salt(spec)
-    seeds = heldout.derive_seeds(salt, spec)
-    assert len(set(seeds)) == heldout.N_SEEDS >= 20
-    assert not set(seeds) & (set(spec.search_seeds) | {heldout.EDGE_SEED})
-    assert heldout.derive_seeds(salt, spec) == seeds
-    cases = heldout.cases(spec, salt)
-    assert len(cases) == 2 * heldout.N_SEEDS
-    assert all(str(seed) not in name for name, _ in cases for seed in seeds)    # names do not reveal seeds
-    assert {args[0].shape for _, args in cases} == set(spec.heldout_shapes)
+def test_split_has_enough_disjoint_seeds_and_unseen_shapes():
+    cases = heldout.cases(SOFTMAX)
+    assert len(cases) == len(SOFTMAX.heldout_seeds) * len(SOFTMAX.heldout_shapes) >= 40
+    assert {args[0].shape for _, args in cases} == set(SOFTMAX.heldout_shapes)
 
 
-def test_salt_must_match_the_commitment(frozen):
-    spec, _ = frozen
-    with pytest.raises(heldout.HeldoutError, match="does not match"):
-        heldout.load_salt(dataclasses.replace(spec, heldout_commitment="0" * 64))
-    with pytest.raises(heldout.HeldoutError, match="no committed"):
-        heldout.load_salt(dataclasses.replace(spec, heldout_commitment=None))
-    with pytest.raises(heldout.HeldoutError, match="frozen once"):
-        heldout.init(spec)
+@pytest.mark.parametrize("change, message", [
+    ({"heldout_seeds": tuple(range(1000, 1019))}, "at least 20"),
+    ({"heldout_seeds": tuple(range(0, 20))}, "overlap"),
+    ({"heldout_seeds": tuple(range(1000, 1019)) + (1000,)}, "distinct"),
+    ({"heldout_shapes": ((64, 257),)}, "never uses"),
+    ({"heldout_shapes": ((64, 257), (32, 128))}, "never uses"),
+])
+def test_bad_splits_are_refused(change, message):
+    with pytest.raises(heldout.HeldoutError, match=message):
+        heldout.check_split(dataclasses.replace(SOFTMAX, **change))
 
 
-def test_split_needs_two_unseen_shapes(frozen):
-    spec, _ = frozen
-    with pytest.raises(heldout.HeldoutError, match="two unseen shapes"):
-        heldout.cases(dataclasses.replace(spec, heldout_shapes=((64, 257),)), heldout.load_salt(spec))
-
-
-def test_evaluation_passes_the_reference_and_burns_on_failure(frozen, tmp_path):
-    spec, ledger = frozen
+def test_evaluation_passes_the_reference_and_burns_on_failure(tmp_path):
+    ledger = tmp_path / "ledger.jsonl"
     runner = TrustedSubprocessRunner(reviewed_fixtures=True)
-    report, entry = heldout.evaluate(spec, REFERENCE, runner, tmp_path / "w1", selected_backend="cpu", ledger=ledger)
+    report, entry = heldout.evaluate(SOFTMAX, REFERENCE, runner, tmp_path / "w1", selected_backend="cpu",
+                                     ledger=ledger)
     assert report.passed and entry["n_cases"] == 40 and entry["passed"]
 
-    report, entry = heldout.evaluate(spec, OVERFIT_SHAPE, runner, tmp_path / "w2", selected_backend="cpu",
+    report, entry = heldout.evaluate(SOFTMAX, OVERFIT_SHAPE, runner, tmp_path / "w2", selected_backend="cpu",
                                      ledger=ledger)
     assert not report.passed and entry["category"] == "NUMERIC_MISMATCH"
     with pytest.raises(heldout.HeldoutError, match="burned"):
-        heldout.evaluate(spec, REFERENCE, runner, tmp_path / "w3", selected_backend="cpu", ledger=ledger)
-    newer = dataclasses.replace(spec, heldout_version=2, heldout_commitment=None)
-    newer = dataclasses.replace(newer, heldout_commitment=heldout.init(newer))
-    heldout.check_not_burned(newer, ledger)                    # a new version is a new split
+        heldout.evaluate(SOFTMAX, REFERENCE, runner, tmp_path / "w3", selected_backend="cpu", ledger=ledger)
+    heldout.check_not_burned(dataclasses.replace(SOFTMAX, heldout_version=2), ledger)   # a new split
 
 
-def test_reveal_publishes_the_salt(frozen, tmp_path):
-    spec, _ = frozen
-    path = heldout.reveal(spec, tmp_path / "public")
-    assert heldout.commitment(path.read_text().strip()) == spec.heldout_commitment
-
-
-def test_search_tools_cannot_reach_the_heldout_split():
-    import controller
+def test_search_never_receives_the_heldout_split(no_key, repo_root):
+    """The search's cases and everything the controller can send to the model come from development data."""
     import inspect
+
+    import agent
+    import controller
     assert "heldout" not in inspect.getsource(controller)
+    built = agent.build_controller(None, workload_id="softmax", output_dir=no_key / "run", selected_backend="cpu",
+                                   runner=TrustedSubprocessRunner())
+    names = built.evaluator.case_names
+    assert names and not any(name.startswith("heldout") for name in names)
+    assert not any(f"seed{s}" in name for name in names for s in SOFTMAX.heldout_seeds)

@@ -281,7 +281,8 @@ def main(argv=None):
         "non_scientific_reasons": reasons,
         "workload": {"id": evaluator.spec.workload_id, "reference_sha256": evaluator.spec.reference_sha256,
                      "correctness_policy_hash": evaluator.policy_hash,
-                     "heldout_commitment": evaluator.spec.heldout_commitment},
+                     "heldout_version": evaluator.spec.heldout_version,
+                     "heldout_cases": len(evaluator.spec.heldout_seeds) * len(evaluator.spec.heldout_shapes)},
         "runner": runner.identity(),
         "environment": collect_environment(REPO, devices),
     }

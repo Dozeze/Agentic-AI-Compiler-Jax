@@ -172,7 +172,7 @@ def test_workload_flag_selects_a_registered_workload(repo_root, clean_env, tmp_p
     assert proc.returncode == 0, proc.stderr
     manifest = json.loads((out / "manifest.json").read_text())
     assert manifest["workload"]["id"] == "softmax"
-    assert manifest["workload"]["heldout_commitment"]
+    assert manifest["workload"]["heldout_cases"] == 40
     assert manifest["non_scientific_reasons"] == ["runner trusted-subprocess/v1 is not isolated"]
     history = json.loads((out / "history.json").read_text())
     assert "def softmax" in history[0]["code"]
