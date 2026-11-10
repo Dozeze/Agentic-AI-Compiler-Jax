@@ -205,6 +205,7 @@ Evaluation pipeline (AIC-005 … 009):
 - A measurement population is device + JAX version + runner/image: a change mid-run stops the run (INTERRUPTED).
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-10 Sergio — AIC-018: softmax held-out split v1 frozen (commitment b2871080… in `workloads/registry.py`; salt kept outside the repo until the final results).
 - 2026-11-10 Sergio — AIC-018: `heldout.py` + `scripts/heldout.py` (commit-reveal: secret salt in git-ignored `heldout/`, sha256 committed; ≥ 20 seeds disjoint from search/edge seeds × 2 unseen shapes; host-side verdict; burn ledger `evidence/heldout/ledger.jsonl`); `WorkloadSpec.heldout_commitment/heldout_version`.
 - 2026-11-10 Sergio — AIC-010: worker outputs run returns compiler feedback for the measurement case (raw levels in `ir/`); recorded for baseline and candidates; shown to the agent only under C3/C4/K; `feedback.py` added to the worker image.
 - 2026-11-09 Sergio — AIC-010: `feedback.py` (jaxpr / StableHLO / HLO / compiled op counts and groups, versioned parser, provenance; cost and memory estimates in separate namespaces; null + reason when unavailable; capped raw artifacts).

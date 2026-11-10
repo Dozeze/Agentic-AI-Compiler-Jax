@@ -123,6 +123,8 @@ SOFTMAX = WorkloadSpec(
     edge_cases=SOFTMAX_EDGE_CASES,
     max_input_bytes=8 << 20,                             # largest input (256, 2048) float32 is 2 MiB
     scientific=True,
+    # AIC-018: sha256 of the secret salt in heldout/softmax-v1.salt, frozen 2026-11-10 before any search.
+    heldout_commitment="b28710803712e14252ad98db8bb684ba1d008307228f37bdf7399dd2ef2d80e2",
 )
 
 
