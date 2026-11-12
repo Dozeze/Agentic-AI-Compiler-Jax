@@ -179,7 +179,7 @@ class TrustedSubprocessRunner:
         if not trusted and not self.reviewed_fixtures:
             return RunOutcome(ISOLATION_UNAVAILABLE, None, "", "", 0.0,
                               "model-written code runs only in an isolated runner (--runner docker)")
-        workdir = Path(workdir)
+        workdir = Path(workdir).resolve()  # the worker runs with cwd=workdir, so a relative path would double
         _write_request(workdir, request)
         status, out, err, wall_s = execute([sys.executable, str(WORKER), str(workdir)], cwd=workdir,
                                            env=worker_env(workdir), timeout_s=timeout_s,

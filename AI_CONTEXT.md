@@ -223,6 +223,7 @@ Compiler feedback, held-out, providers (batch 03):
   `--output-dir`.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-12 Sergio — AIC-008: `TrustedSubprocessRunner` resolves the work directory, so a relative `--output-dir` with `--runner subprocess` no longer fails with EXECUTION_FAILED (the worker ran with cwd=workdir and got the relative path again); regression test added.
 - 2026-11-10 Sergio — AIC-018: docs for the simplified held-out split (P16 answered: fixed public seeds, never passed to the search; report and run instructions updated).
 - 2026-11-10 Sergio — AIC-018: held-out split simplified to fixed `heldout_seeds` in the registry (softmax v1: seeds 1000–1019 × 2 unseen shapes, frozen before any search); salt, commit-reveal and `init/verify/reveal` removed; `scripts/heldout.py check|evaluate`; burn ledger kept.
 - 2026-11-10 Sergio — P8: P17 updated (Claude on Vertex needs a quota increase; gemini-vertex works) and live-run pitfalls in §8.

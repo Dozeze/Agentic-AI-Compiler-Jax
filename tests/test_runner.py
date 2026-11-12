@@ -5,6 +5,7 @@ import os
 import sys
 import textwrap
 import time
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -32,6 +33,13 @@ def test_trusted_code_runs_in_a_fresh_process(tmp_path):
     assert outcome.status == runner.OK, outcome.detail
     assert outcome.result["cases"][0]["status"] == "ok"
     assert outcome.result["device"]["platform"] == "cpu"
+
+
+def test_relative_workdir_is_resolved(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    request = _prepare(tmp_path / "w", REFERENCE)
+    outcome = runner.TrustedSubprocessRunner().run(Path("w"), request, trusted=True, timeout_s=120)
+    assert outcome.status == runner.OK, outcome.detail
 
 
 def test_model_code_is_refused_without_isolation(tmp_path):
