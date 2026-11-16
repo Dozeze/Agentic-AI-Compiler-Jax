@@ -12,62 +12,60 @@ its history and the offline fakes stay provider-neutral:
             count as output, which is how they are billed)
 
 Gemini 2.5 returns a thought signature with its function calls and needs it back to keep its reasoning; it
-rides on our tool_use block and is re-attached when the conversation is sent again. Transient Vertex errors
-(429, 500, 503) are retried with backoff, as in the claude-experiment prototype; anything else raises.
+rides on our tool_use block and is re-attached when a conversation is sent again. The structured provider
+boundary uses a fresh context per call. Transport retries are disabled; only the budget boundary retries.
 """
 from __future__ import annotations
 
 import json
-import time
 from types import SimpleNamespace
 
-RETRY_STATUS = frozenset({429, 500, 503})
-RETRY_DELAYS_S = (5, 15, 30, 60)
-
-
 class GeminiVertex:
-    def __init__(self, *, project: str, location: str, client=None, sleep=time.sleep):
+    def __init__(self, *, project: str, location: str, client=None, request_timeout_s=30.0):
         """`client` is a google.genai.Client; tests pass a stand-in. Credentials: Application Default."""
         if client is None:
             from google import genai
             client = genai.Client(vertexai=True, project=project, location=location)
         self.project, self.location = project, location
-        self.messages = _Messages(client, sleep)
+        from providers import OfflineClient
+        self.offline_transport = isinstance(client, OfflineClient)
+        self.messages = _Messages(client, request_timeout_s)
+
+    def with_options(self, *, max_retries, timeout):
+        if max_retries != 0:
+            raise ValueError("Gemini transport retries must be disabled")
+        return GeminiVertex(project=self.project, location=self.location, client=self.messages._client,
+                            request_timeout_s=timeout)
 
 
 class _Messages:
-    def __init__(self, client, sleep):
-        self._client, self._sleep = client, sleep
+    def __init__(self, client, timeout):
+        self._client, self._timeout = client, timeout
         self._calls = 0
 
-    def create(self, *, model, max_tokens, messages, system=None, tools=None, **_ignored):
+    def create(self, *, model, max_tokens, messages, system=None, tools=None, temperature=None,
+               tool_choice=None, **_ignored):
         from google.genai import types
         config = types.GenerateContentConfig(
+            http_options=types.HttpOptions(timeout=max(1, int(self._timeout * 1000)),
+                                           retry_options=types.HttpRetryOptions(attempts=1)),
             system_instruction=system or None,
             max_output_tokens=max_tokens,
+            temperature=temperature,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
             tools=[types.Tool(function_declarations=[
                 types.FunctionDeclaration(name=t["name"], description=t.get("description", ""),
                                           parameters_json_schema=t["input_schema"]) for t in tools])] if tools else None,
             # The controller drives the loop one call at a time; the SDK must not run tools by itself.
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
-            tool_config=types.ToolConfig(function_calling_config=types.FunctionCallingConfig(mode="AUTO"))
+            tool_config=types.ToolConfig(function_calling_config=types.FunctionCallingConfig(
+                mode="ANY" if tool_choice else "AUTO",
+                allowed_function_names=[tool_choice["name"]] if tool_choice else None))
             if tools else None,
         )
         contents = to_contents(messages)
-        response = self._with_retry(lambda: self._client.models.generate_content(
-            model=model, contents=contents, config=config))
+        response = self._client.models.generate_content(model=model, contents=contents, config=config)
         return self._to_message(response, model)
-
-    def _with_retry(self, call):
-        from google.genai import errors
-        for delay in RETRY_DELAYS_S:
-            try:
-                return call()
-            except errors.APIError as error:
-                if error.code not in RETRY_STATUS:
-                    raise
-                self._sleep(delay)
-        return call()
 
     def _to_message(self, response, model):
         candidate = response.candidates[0] if response.candidates else None
@@ -82,12 +80,16 @@ class _Messages:
             elif part.text and not part.thought:
                 blocks.append(SimpleNamespace(type="text", text=part.text))
         meta = response.usage_metadata
-        usage = SimpleNamespace(
-            input_tokens=getattr(meta, "prompt_token_count", 0) or 0,
-            output_tokens=(getattr(meta, "candidates_token_count", 0) or 0)
-            + (getattr(meta, "thoughts_token_count", 0) or 0))
-        return SimpleNamespace(content=blocks, model=model, usage=usage,
-                               stop_reason="tool_use" if any(b.type == "tool_use" for b in blocks) else "end_turn",
+        out, thoughts = getattr(meta, "candidates_token_count", None), getattr(meta, "thoughts_token_count", None)
+        usage = SimpleNamespace(input_tokens=getattr(meta, "prompt_token_count", None),
+                                output_tokens=out + (thoughts or 0) if out is not None else None,
+                                cache_read_input_tokens=getattr(meta, "cached_content_token_count", None))
+        finish = str(getattr(candidate, "finish_reason", "") or "")
+        stop = ("max_tokens" if "MAX_TOKENS" in finish else "refusal" if any(
+            word in finish for word in ("SAFETY", "BLOCKLIST", "PROHIBITED_CONTENT", "RECITATION")) else
+            "tool_use" if any(b.type == "tool_use" for b in blocks) else "end_turn")
+        return SimpleNamespace(content=blocks, model=model, id=getattr(response, "response_id", None), usage=usage,
+                               stop_reason=stop,
                                finish_reason=str(getattr(candidate, "finish_reason", "") or ""))
 
 

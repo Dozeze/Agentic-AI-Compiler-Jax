@@ -22,13 +22,18 @@ import numpy as np
 
 import array_io
 import benchmark
+import feedback
+import storage
 import runner as runners
 import worker
 from contracts import (ACCEPTED, COMPILE_FAILED, CORRECTNESS_FAILED, DUPLICATE, EXECUTION_FAILED, INTERRUPTED,
                        MEASUREMENT_UNSTABLE, POLICY_REJECTED, PROPOSAL_INVALID, RESOURCE_LIMIT, TIMEOUT,
                        VALID_NO_CHANGE, VALID_SLOWER, Attempt, Budgets, ContractError, Evaluation,
                        parse_proposal)
-from providers import provider_errors
+from contracts import ModelSettings
+from providers import ProposalFailure, ProposalProvider, proposal_tool
+from context_builder import (build_context, workload_contract, check_development_cases,
+                             compiler_view, COMPILER_CONTEXT, ContextError)
 from source_policy import check_source
 
 
@@ -107,7 +112,7 @@ def read_python_source(source_path):
         raise ValueError(f"Expected a .py source file, got: {path}")
     if not path.is_file():
         raise FileNotFoundError(f"Python source file does not exist: {path}")
-    return path.read_text(encoding="utf-8")
+    return path.read_bytes().decode("utf-8")
 
 
 def same_program(a, b):
@@ -168,11 +173,13 @@ class Evaluator:
         """`cases` overrides the search cases (the held-out evaluation of AIC-018 passes its own)."""
         self.spec, self.runner, self.protocol, self.backend = spec, runner, protocol, selected_backend
         self.budgets = budgets or Budgets()
+        self._baseline_source = spec.reference_source
+        self.baseline_sha256 = storage.sha256(self._baseline_source.encode("utf-8"))
         self.workdir = Path(workdir)
         self.cases = list(cases) if cases is not None else benchmark.build_cases(spec)
         self.case_names = [name for name, _ in self.cases]
         self.policy_hash = benchmark.policy_hash(spec.tolerance, self.case_names, spec.workload_id,
-                                                 spec.reference_sha256)
+                                                 self.baseline_sha256)
         shape = spec.development_shapes[-1]
         self.measure_case = f"dev{benchmark._shape_name(shape)}/seed{spec.search_seeds[0]}"
         self.measure_shape = tuple(shape)
@@ -184,15 +191,18 @@ class Evaluator:
         self.timer_resolution_s = None
         self.reference = None
         self.baseline_ir = None
+        self.baseline_trace = None
         self._requests = 0
 
     @property
     def baseline_source(self):
-        return self.spec.reference_source
+        return self._baseline_source
 
     # -- worker requests --------------------------------------------------------------------------
 
     def _run(self, label, mode, sources, *, trusted, cases, timeout_s, **extra):
+        for source in sources.values():
+            storage.check_source_credentials(source)
         self._requests += 1
         work = self.workdir / f"{self._requests:04d}-{label}"
         work.mkdir(parents=True)
@@ -206,6 +216,15 @@ class Evaluator:
         if mode == "outputs":
             request["analyze_case"] = self.measure_case
         outcome = self.runner.run(work, request, trusted=trusted, timeout_s=timeout_s)
+        try:
+            for name in ("stdout", "stderr"):
+                data = storage.redact(getattr(outcome, name)).encode("utf-8")[-self.budgets.max_log_bytes:]
+                storage.atomic_write_bytes(work / f"{name}.log", data, exclusive=True)
+            storage.atomic_write_json(work / "runner_outcome.json", storage.redact({
+                "schema_version": "runner_outcome/v1", "status": outcome.status, "detail": outcome.detail,
+                "wall_s": outcome.wall_s, "stdout": "stdout.log", "stderr": "stderr.log"}), exclusive=True)
+        except (OSError, ValueError) as error:
+            raise storage.StorageError("cannot retain worker outcome") from error
         if outcome.status != runners.OK:
             raise EvaluationError(_OUTCOME_STATE[outcome.status], outcome.detail or outcome.status)
         if outcome.result.get("status") != "ok":
@@ -244,6 +263,7 @@ class Evaluator:
                     raise BaselineFailed(f"reference produced non-finite values in {name}{path}")
         self.reference = outputs
         self.baseline_ir = result.get("ir")
+        self.baseline_trace = self.profile(self.baseline_source, trusted=True, label="baseline-profile")
         return result
 
     def correctness(self, source, *, trusted=False):
@@ -261,6 +281,33 @@ class Evaluator:
                               protocol=dataclasses.asdict(self.protocol), repeats=repeats)
         session = benchmark.PairedSession.from_json(result["session"])
         return session, benchmark.analyze_session(session, self.protocol)
+
+    def profile(self, source, *, trusted, label="incumbent-profile"):
+        """Collect optional observations in a fresh worker, outside all benchmark sessions."""
+        import hashlib
+        from contracts import RuntimeTrace
+
+        provenance = {"candidate_sha256": hashlib.sha256(source.encode()).hexdigest(),
+                      "backend_requested": self.backend, "fingerprint": self.fingerprint}
+        cases = [(name, args) for name, args in self.cases if name == self.measure_case]
+        if not cases:
+            return feedback.unavailable_trace("no development measurement case in this evaluation split", provenance)
+        try:
+            result, work = self._run(label, "profile", {"candidate": source}, trusted=trusted, cases=cases,
+                                     timeout_s=self.budgets.compile_timeout_s + self.budgets.correctness_case_timeout_s,
+                                     case=self.measure_case)
+            trace = RuntimeTrace(**result["runtime_trace"]).to_json()
+            if trace["provenance"].get("candidate_sha256") != provenance["candidate_sha256"]:
+                raise ValueError("profile source identity differs from the requested source")
+            trace["provenance"].update(provenance)
+            if trace.get("artifact"):
+                path = array_io.checked_path(work / trace["artifact"], work, feedback.MAX_TRACE_BYTES)
+                if hashlib.sha256(path.read_bytes()).hexdigest() != trace["artifact_sha256"]:
+                    raise ValueError("profile artifact hash mismatch")
+                trace["artifact"] = str(Path(self.workdir.name) / path.relative_to(self.workdir.resolve()))
+            return trace
+        except (EvaluationError, ValueError, TypeError, KeyError, OSError) as error:
+            return feedback.unavailable_trace(f"profile unavailable: {type(error).__name__}: {error}", provenance)
 
     def calibrate(self):
         """The frozen minimum effect delta for this population (AIC-005)."""
@@ -318,7 +365,9 @@ class Evaluator:
 
         def measure():
             session, analysis = self.session(incumbent_source, candidate_source, trusted=False)
-            sessions.append({"against": "incumbent", "raw": session.to_json(), "analysis": analysis.to_json()})
+            sessions.append({"against": "incumbent", "a_sha256": storage.sha256(incumbent_source.encode()),
+                             "b_sha256": storage.sha256(candidate_source.encode()),
+                             "raw": session.to_json(), "analysis": analysis.to_json()})
             return analysis
 
         try:
@@ -332,27 +381,17 @@ class Evaluator:
         if decision.state == ACCEPTED and not same_program(incumbent_source, self.baseline_source):
             # Recorded for the report, never used to rank: the decision is against the incumbent.
             session, analysis = self.session(self.baseline_source, candidate_source, trusted=False)
-            sessions.append({"against": "baseline", "raw": session.to_json(), "analysis": analysis.to_json()})
+            sessions.append({"against": "baseline", "a_sha256": self.baseline_sha256,
+                             "b_sha256": storage.sha256(candidate_source.encode()),
+                             "raw": session.to_json(), "analysis": analysis.to_json()})
         first = analyses[0].b
-        return Verdict(decision.state, decision.reason, Evaluation(**evaluation, sessions=tuple(sessions)),
+        trace = (self.profile(candidate_source, trusted=False) if decision.state == ACCEPTED
+                 else feedback.unavailable_trace("profiles retained for baseline and promoted incumbents"))
+        stages["profile"] = "skipped" if trace["coverage"] == "UNAVAILABLE" else "ok"
+        unavailable = {"runtime_trace": trace["reason"]} if trace["coverage"] == "UNAVAILABLE" else {}
+        return Verdict(decision.state, decision.reason,
+                       Evaluation(**evaluation, sessions=tuple(sessions), runtime_trace=trace, unavailable=unavailable),
                        output_correct=True, latency_s=first.median_s, latency_std_s=first.std_s)
-
-
-#: Context conditions (AIC-1.1 §8) in which the agent sees the compiler summary.
-COMPILER_CONTEXT = ("C3", "C4", "K")
-
-
-def compiler_view(ir):
-    """The bounded compiler summary the agent may see: op totals and groups per level, and XLA's estimates."""
-    if not ir:
-        return None
-    cost = ir.get("compiler_cost_estimates") or {}
-    memory = ir.get("compiler_memory_estimates") or {}
-    return {"levels": {level: {"total_ops": s["total_ops"], "groups": s["groups"]}
-                       for level, s in ir.get("levels", {}).items()},
-            "estimates (not measurements)": {"flops": cost.get("flops"), "bytes_accessed": cost.get("bytes accessed"),
-                                             "temp_bytes": memory.get("temp_size_in_bytes")},
-            "unavailable": sorted(ir.get("unavailable", {}))}
 
 
 def _compact(entry, context_condition="C2"):
@@ -363,6 +402,11 @@ def _compact(entry, context_condition="C2"):
     evaluation = attempt.get("evaluation") or {}
     if context_condition in COMPILER_CONTEXT:
         view["compiler"] = compiler_view(evaluation.get("ir"))
+    if context_condition == "C4":
+        trace = evaluation.get("runtime_trace") or feedback.unavailable_trace("this attempt has no profile evidence")
+        view["runtime_trace"] = {key: trace.get(key) for key in
+                                 ("coverage", "reason", "provenance", "artifact", "hotspots", "parser_version",
+                                  "invalid_events", "ignored_events", "omitted_lanes")}
     correctness = evaluation.get("correctness")
     if correctness:
         failing = [c for c in correctness["cases"] if not c["passed"]][:1]
@@ -377,7 +421,7 @@ def _compact(entry, context_condition="C2"):
 
 class Controller:
     def __init__(self, agent: str, prompt, evaluator, client=None, function_name="kernel", max_iterations=3,
-                 output_dir=None, source_path=None, context_condition="C2"):
+                 output_dir=None, source_path=None, context_condition="C2", store=None, model_settings=None):
         """Store the agent, prompt and evaluator. No side effects: start() evaluates the baseline."""
         self.agent = agent
         self.init_prompt = prompt
@@ -391,9 +435,17 @@ class Controller:
         self.best_runtime = None
         self.best_iteration = None
         self.stop_reason = None
+        self._storage_failed = False
+        self.model_settings = model_settings or ModelSettings()
+        self._provider = None
+        self._started = time.monotonic()
         self.requests = []          # one record per provider request: model, stop reason, tokens, latency
         self.context_condition = context_condition
-        self.output_dir = Path(output_dir) if output_dir is not None else None
+        self.store = store or storage.RunStore(output_dir, budgets=evaluator.budgets)
+        self.output_dir = self.store.path
+        if evaluator._requests:
+            raise storage.StorageError("a new run requires an unused evaluator")
+        self.evaluator.workdir = self.output_dir / "work"
         self.source_path = str(source_path) if source_path is not None else None
 
     @property
@@ -404,85 +456,39 @@ class Controller:
         """Evaluate the immutable baseline once. Raises BaselineFailed before any proposal is requested."""
         if self.history:
             return
+        if not self.store.initialized:
+            from environment import collect_environment
+            self.store.initialize(self.initial_code, config={
+                "schema_version": "direct_run_config/v1", "output_dir": str(self.output_dir),
+                "function_name": self.function_name, "context_condition": self.context_condition,
+                "max_iterations": self.max_iterations, "backend": self.evaluator.backend,
+                "model_settings_at_construction": dataclasses.asdict(self.model_settings),
+                "measurement": dataclasses.asdict(self.evaluator.protocol),
+                "budgets": dataclasses.asdict(self.evaluator.budgets)}, manifest={
+                "scientific": False, "non_scientific_reasons": ["direct API; no resolved CLI RunConfig"],
+                "workload": {"id": self.evaluator.spec.workload_id,
+                             "reference_sha256": self.evaluator.baseline_sha256,
+                             "correctness_policy_hash": self.evaluator.policy_hash,
+                             "split": "development", "cases": self.evaluator.case_names},
+                "runner": self.evaluator.runner.identity(),
+                "environment": collect_environment(Path(__file__).resolve().parent)})
         self.evaluator.reference_outputs()
-        self.best_code, self.best_iteration = self.initial_code, 0
         import hashlib
+        trace = self.evaluator.baseline_trace
+        profile_available = trace["coverage"] != "UNAVAILABLE"
         evaluation = Evaluation(candidate_sha256=hashlib.sha256(self.initial_code.encode()).hexdigest(),
-                                stages={"reference": "ok"}, ir=self.evaluator.baseline_ir)
+                                stages={"reference": "ok", "profile": "ok" if profile_available else "skipped"},
+                                ir=self.evaluator.baseline_ir, runtime_trace=trace,
+                                unavailable={} if profile_available else {"runtime_trace": trace["reason"]})
         attempt = Attempt(attempt_id=0, state=ACCEPTED, reason="immutable baseline: the frozen reference",
                           evaluation=evaluation, started_utc=_utc(), finished_utc=_utc())
         self._append({"iteration": 0, "state": ACCEPTED, "reason": attempt.reason, "code": self.initial_code,
                       "runtime_mean": None, "runtime_std": None, "syntax_correct": True, "output_correct": True,
                       "accepted": True, "changes": "No changes", "error": None, "attempt": attempt.to_json()})
+        self.best_code, self.best_iteration = self.initial_code, 0
 
     def provideTools(self):
-        return [
-            {
-                "name": "get_history",
-                "description": (
-                    "Get the complete optimization history. "
-                    "Use this to see previous candidate implementations, "
-                    "their correctness, runtime, and whether they were accepted."
-                ),
-                "input_schema": {
-                    "type": "object",
-                    "properties": {},
-                    "required": [],
-                    "additionalProperties": False,
-                },
-            },
-            {
-                "name": "get_current_code",
-                "description": (
-                    "Get the current best JAX implementation being optimized."
-                ),
-                "input_schema": {
-                    "type": "object",
-                    "properties": {},
-                    "required": [],
-                    "additionalProperties": False,
-                },
-            },
-            {
-                "name": "benchmark_code",
-                "description": (
-                    "Submit one proposal: a hypothesis and a complete candidate source. The harness "
-                    "checks the source against its policy (pure JAX only), then for correctness, and "
-                    "only then measures it. A correct candidate becomes the current best only when it "
-                    "is faster than the incumbent."
-                ),
-                "input_schema": {
-                    "type": "object",
-                    "properties": {
-                        "hypothesis": {"type": "string",
-                                       "description": "Why this change should be faster."},
-                        "transformation": {"type": "string",
-                                           "description": "The single change made, e.g. 'vectorise the loop'."},
-                        "rationale": {"type": "string",
-                                      "description": "The evidence (code, history) behind the hypothesis."},
-                        "expected_effect": {"type": "string",
-                                            "description": "Predicted effect; a hypothesis, not a measurement."},
-                        "candidate_source": {
-                            "type": "string",
-                            "description": (
-                                "Complete Python source of the candidate module: imports from jax, "
-                                "jax.numpy, jax.lax, jax.nn, jax.scipy, math or functools only, and the "
-                                "function itself. Raw source without Markdown fences, escaped quotes or "
-                                "@jax.jit decorators; the evaluator applies JIT."
-                            ),
-                        },
-                        "parent_id": {"type": "integer",
-                                      "description": "Iteration this builds on (default: current best)."},
-                        "constraints": {"type": "array", "items": {"type": "string"},
-                                        "description": "Semantics the rewrite preserves."},
-                        "notes": {"type": "string"},
-                    },
-                    "required": ["hypothesis", "transformation", "rationale", "expected_effect",
-                                 "candidate_source"],
-                    "additionalProperties": False,
-                },
-            },
-        ]
+        return [proposal_tool(self.evaluator.budgets.max_source_bytes)]
 
 
     def changesPython(self, old_code, new_code):
@@ -503,29 +509,24 @@ class Controller:
             timing = f"median {runtime * 1e6:.2f} µs ± {(result['runtime_std'] or 0) * 1e6:.2f} µs"
         print(f"Iteration {result['iteration']}: {timing}; {result['state']}: {result['reason']}")
 
-    def _write_iteration_json(self, result):
-        """Persist each attempt and the complete history as JSON artifacts."""
-        if self.output_dir is None:
-            return
-
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        iteration_path = self.output_dir / f"iteration_{result['iteration']:04d}.json"
-        history_path = self.output_dir / "history.json"
-        for path, value in ((iteration_path, result), (history_path, self.history)):
-            temporary_path = path.with_suffix(path.suffix + ".tmp")
-            temporary_path.write_text(json.dumps(value, indent=2, default=str) + "\n", encoding="utf-8")
-            temporary_path.replace(path)
-
-    def _append(self, entry):
+    def _append(self, entry, *, submitted_proposal=None):
         entry.update(source_path=self.source_path, function_name=self.function_name)
+        if entry.get("code") is not None:
+            storage.check_source_credentials(entry["code"])
+        entry = storage.redact(entry)
+        try:
+            self.store.commit_attempt(entry, submitted_proposal=submitted_proposal)
+        except storage.StorageError:
+            self._storage_failed = True
+            raise
         self.history.append(entry)
+        self.iteration = entry["iteration"]
         self._report_runtime(entry)
-        self._write_iteration_json(entry)
         return entry
 
     def provide_hist(self):
-        """The history as the agent sees it: compact, without raw timing blocks or per-case lists."""
-        return [_compact(entry, self.context_condition) for entry in deepcopy(self.history)]
+        """The bounded history supplied to a proposal, with measured summaries and explicit omissions."""
+        return self.proposal_context()["history"] if self.history else []
 
     def provide_prompt(self):
         """ Provides all prompts to agent """
@@ -546,12 +547,18 @@ class Controller:
         the history, and the candidate's code is never executed.
         """
         started = _utc()
+        if self._storage_failed:
+            raise storage.StorageError("run stopped after a storage failure; execution cannot resume")
         max_source_bytes = self.evaluator.budgets.max_source_bytes
         try:
             proposal = parse_proposal(tool_input, max_source_bytes=max_source_bytes)
         except ContractError as error:
-            return self._record(PROPOSAL_INVALID, str(error), None, None, None, started)
+            return self._record(PROPOSAL_INVALID, str(error), None, None, None, started, submitted_proposal=tool_input)
+        if proposal.parent_id is not None and proposal.parent_id not in {e["iteration"] for e in self.history}:
+            return self._record(PROPOSAL_INVALID, "proposal.parent_id must reference an earlier attempt",
+                                None, None, None, started, submitted_proposal=tool_input)
         source = proposal.candidate_source
+        storage.check_source_credentials(source)
         policy = check_source(source, self.function_name, max_source_bytes=max_source_bytes)
         if not policy.ok:
             return self._record(POLICY_REJECTED, policy.summary(), source, proposal, None, started)
@@ -567,124 +574,101 @@ class Controller:
             self.stop_reason = verdict.reason
         return entry
 
-    def _record(self, state, reason, code, proposal, verdict, started):
-        self.iteration += 1
+    def _record(self, state, reason, code, proposal, verdict, started, *, submitted_proposal=None):
+        number = self.iteration + 1
         parent = proposal.parent_id if proposal and proposal.parent_id is not None else self.best_iteration
-        attempt = Attempt(attempt_id=self.iteration, state=state, reason=reason, proposal=proposal, parent_id=parent,
+        attempt = Attempt(attempt_id=number, state=state, reason=reason, proposal=proposal, parent_id=parent,
                           evaluation=verdict.evaluation if verdict else None,
                           provider=self.requests[-1] if self.requests else None, started_utc=started,
                           finished_utc=_utc())
         failed = state not in (ACCEPTED, VALID_NO_CHANGE, VALID_SLOWER)
         return self._append({
-            "iteration": self.iteration, "state": state, "reason": reason, "code": code,
+            "iteration": number, "state": state, "reason": reason, "code": code,
             "runtime_mean": verdict.latency_s if verdict else None,
             "runtime_std": verdict.latency_std_s if verdict else None,
             "syntax_correct": state != PROPOSAL_INVALID and "syntax error" not in reason,
             "output_correct": bool(verdict and verdict.output_correct), "accepted": state == ACCEPTED,
             "changes": self.changesPython(self.best_code, code) if code else None,
-            "error": reason if failed else None, "attempt": attempt.to_json()})
+            "error": reason if failed else None, "attempt": attempt.to_json()}, submitted_proposal=submitted_proposal)
 
-    def _record_request(self, model, response, latency_s, error=None):
-        """Usage of one provider request (AIC-1.1 §8 reports actual tokens, not candidate counts)."""
-        usage = getattr(response, "usage", None)
-        record = {"request": len(self.requests) + 1, "model": model, "client": type(self.client).__name__,
-                  "error": f"{type(error).__name__}: {str(error)[:500]}" if error else None,
-                  "stop_reason": getattr(response, "stop_reason", None),
-                  "tool_calls": [b.name for b in getattr(response, "content", []) if getattr(b, "type", None) == "tool_use"],
-                  "input_tokens": getattr(usage, "input_tokens", None),
-                  "output_tokens": getattr(usage, "output_tokens", None),
-                  "latency_s": round(latency_s, 3), "utc": _utc()}
+    def _persist_request(self, record):
+        """Only the provider boundary dispatches calls; persist its reconciled outcome."""
+        try:
+            record = self.store.record_request(record)
+        except storage.StorageError:
+            self._storage_failed = True
+            raise
         self.requests.append(record)
-        if self.output_dir is not None:
-            self.output_dir.mkdir(parents=True, exist_ok=True)
-            (self.output_dir / "requests.json").write_text(json.dumps(self.requests, indent=2) + "\n",
-                                                           encoding="utf-8")
+        return record
 
     def usage_totals(self):
         def total(key):
             return sum(r[key] or 0 for r in self.requests)
         return {"requests": len(self.requests), "input_tokens": total("input_tokens"),
-                "output_tokens": total("output_tokens")}
+                "output_tokens": total("output_tokens"),
+                "accounted_tokens": sum((r.get("input_tokens_accounted") or 0) +
+                                         (r.get("output_tokens_accounted") or 0) for r in self.requests),
+                "unknown_usage_requests": sum(bool(r.get("usage_uncertain")) for r in self.requests)}
 
-    def _dispatch_tool(self, name, tool_input):
-        """Run one model-requested tool and return JSON-serializable data."""
-        if name == "get_history":
-            return {"history": self.provide_hist()}
+    def proposal_context(self, *, with_selection=False):
+        """Select bounded measured evidence; never discard rules or the latest outcome to fit."""
+        snapshot = self.store.context_inputs()
+        remaining = self._provider.remaining_budget() if self._provider else None
+        if remaining is not None:
+            remaining["candidates"] = min(remaining["candidates"], max(0, self.max_iterations - self.iteration))
+        try:
+            check_development_cases(self.evaluator.spec, self.evaluator.case_names)
+            snapshot["measurement_population"] = self.evaluator.fingerprint
+            context = build_context(function_name=self.function_name, workload=workload_contract(self.evaluator.spec),
+                baseline_sha256=self.evaluator.baseline_sha256, current_source=self.best_code,
+                current_parent_id=self.best_iteration, history=self.history,
+                environment=snapshot.pop("environment"), selected_backend=self.evaluator.backend, evidence=snapshot,
+                context_condition=self.context_condition, max_source_bytes=self.evaluator.budgets.max_source_bytes,
+                remaining_budgets=remaining,
+                fits=self._provider.context_fits if self._provider else None,
+                redact=self._provider._redact if self._provider else storage.redact)
+        except ContextError as error:
+            raise ProposalFailure("CONTEXT_BLOCKED", str(error)) from error
+        return context if with_selection else context.payload
 
-        if name == "get_current_code":
-            return {"code": self.get_current_code()}
-
-        if name == "benchmark_code":
-            return _compact(self.submit_proposal(tool_input), self.context_condition)
-
-        return {"error": f"Unknown tool: {name}"}
-
-    def agent_loop(self, model="claude-haiku-4-5-20251001", max_tokens=2048):
-        """Ask the model for bounded candidates and keep only measured, confirmed improvements."""
+    def agent_loop(self, model=None, max_tokens=None):
+        """Request one locally validated proposal at a time; the host alone invokes evaluation."""
+        if self._storage_failed:
+            raise storage.StorageError("run stopped after a storage failure; execution cannot resume")
+        if min(self.max_iterations, self.evaluator.budgets.max_candidates) == 0:
+            self.start()
+            return deepcopy(self.history)
         if self.client is None:
-            raise RuntimeError("An Anthropic client is required for agent_loop")
+            raise RuntimeError("A provider client is required for agent_loop")
+        settings = dataclasses.replace(self.model_settings,
+                                       model_id=model if model is not None else self.model_settings.model_id,
+                                       max_tokens=max_tokens if max_tokens is not None else self.model_settings.max_tokens)
+        if self._provider is None:
+            self._provider = ProposalProvider(self.client, settings, self.evaluator.budgets, system=self.init_prompt,
+                                               reserve=self.store.reserve_request, record=self._persist_request,
+                                               started=self._started)
+        elif self._provider.settings != settings:
+            raise RuntimeError("provider parameters cannot change during a run")
         self.start()
-
-        messages = [{
-            "role": "user",
-            "content": (
-                "Start the optimization run. Inspect the current implementation and "
-                "history with the tools. Propose a complete replacement source file "
-                f"for `{self.function_name}` and call benchmark_code to evaluate it. "
-                "Only measured, correct candidates can become the best implementation. "
-                f"You may make at most {self.max_iterations} candidate evaluations."
-            ),
-        }]
-        max_turns = max(1, self.max_iterations * 3)
-        candidate_count = 0
-
-        for _ in range(max_turns):
-            started = time.monotonic()
+        while self.iteration < min(self.max_iterations, self.evaluator.budgets.max_candidates) and not self.stop_reason:
             try:
-                response = self.client.messages.create(
-                    model=model,
-                    max_tokens=max_tokens,
-                    system=self.init_prompt,
-                    tools=self.provideTools(),
-                    messages=messages,
-                )
-            except provider_errors() as error:
-                # A failed request is a request event, never a candidate: record it and stop the run.
-                self._record_request(model, None, time.monotonic() - started, error=error)
-                self.stop_reason = f"provider request failed: {type(error).__name__}: {str(error)[:300]}"
-                break
-            self._record_request(model, response, time.monotonic() - started)
-            messages.append({"role": "assistant", "content": response.content})
-
-            tool_results = []
-            evaluated_this_turn = False
-            for block in response.content:
-                if getattr(block, "type", None) != "tool_use":
+                proposal = self._provider.propose(self.proposal_context(with_selection=True))
+            except ProposalFailure as error:
+                if error.status == PROPOSAL_INVALID:
+                    self._record(PROPOSAL_INVALID, str(error), None, None, None, _utc(),
+                                 submitted_proposal=error.submitted)
                     continue
-
-                name = block.name
-                if name == "benchmark_code" and (evaluated_this_turn or self.stop_reason):
-                    result = {"error": "Only one benchmark_code call is allowed per turn"
-                              if evaluated_this_turn else f"run stopped: {self.stop_reason}"}
-                else:
-                    result = self._dispatch_tool(name, block.input)
-                    if name == "benchmark_code":       # every submission spends a candidate slot
-                        evaluated_this_turn = True
-                        candidate_count += 1
-
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": json.dumps(result, default=str),
-                })
-
-            if not tool_results:
+                self.stop_reason = storage.redact(str(error))
+                try:
+                    self.store.record_provider_stop(error.status, self.stop_reason, self._provider.summary())
+                except storage.StorageError:
+                    self._storage_failed = True
+                    raise
                 break
-
-            messages.append({"role": "user", "content": tool_results})
-            if candidate_count >= self.max_iterations or self.stop_reason:
-                break
-
+            except storage.StorageError:
+                self._storage_failed = True
+                raise
+            self.submit_proposal(dataclasses.asdict(proposal))
         return deepcopy(self.history)
 
     def graph_it(self):

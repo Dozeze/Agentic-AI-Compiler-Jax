@@ -2,7 +2,6 @@
 import argparse
 import dataclasses
 import inspect
-import json
 import os
 import sys
 from pathlib import Path
@@ -15,6 +14,7 @@ from dotenv import load_dotenv
 from contracts import Budgets, ConfigError, ModelSettings, config_hash, resolve_run_config, to_dict
 from controller import Controller, read_python_source
 from environment import BACKENDS, BackendUnavailable, collect_environment, has_gpu, select_backend
+from storage import RunStore, StorageError, atomic_write_json
 
 REPO = Path(__file__).resolve().parent
 MANIFEST_SCHEMA = "manifest/v1"
@@ -68,13 +68,12 @@ def _load_source_workload(source_path, function_name):
 
 def build_controller(client, max_iterations=DEFAULT_ITERATIONS, source_path=None, function_name="bad_func",
                      output_dir=None, *, workload_id=None, runner=None, selected_backend=None, protocol=None,
-                     calibration=None, context_condition="C2"):
+                     calibration=None, context_condition="C2", budgets=None, model_settings=None):
     """Build the controller for a registered workload (`workload_id`) or a trusted --source file.
 
     Without either, the registered `example_add` workload (the original x + y example) is used. The
     default runner is the isolated DockerRunner; pass another runner explicitly.
     """
-    import tempfile
     from contracts import MeasurementProtocol
     from controller import Evaluator
     from runner import DockerRunner
@@ -91,17 +90,18 @@ def build_controller(client, max_iterations=DEFAULT_ITERATIONS, source_path=None
         "You optimize pure JAX functions through the existing evaluator. "
         "Preserve the function signature and numerical behavior. Do not use "
         "CUDA-only libraries, custom kernels, approximations, or changes to "
-        "precision. Submit each candidate with benchmark_code as a proposal: a "
+        "precision. Return each candidate with submit_proposal as a proposal: a "
         "hypothesis, the single transformation, its rationale, the expected effect "
         "and the complete candidate source (raw Python, no Markdown fences or "
         "escaped quotes). The evaluator applies jax.jit itself, so do not add "
         "@jax.jit or call jax.jit in the candidate. Inspect the current code "
-        "and history before proposing a candidate."
+        "and the measured history provided in context before proposing a candidate."
     )
-    workdir = Path(output_dir) / "work" if output_dir is not None else Path(tempfile.mkdtemp(prefix="aic-run-"))
+    store = RunStore(output_dir, budgets=budgets)
+    workdir = store.path / "work"
     evaluator = Evaluator(spec, runner or DockerRunner(selected_backend=selected_backend),
                           protocol or MeasurementProtocol(), workdir, selected_backend=selected_backend,
-                          calibration=calibration)
+                          calibration=calibration, budgets=budgets)
     return Controller(
         agent="Claude",
         prompt=prompt,
@@ -109,9 +109,11 @@ def build_controller(client, max_iterations=DEFAULT_ITERATIONS, source_path=None
         client=client,
         function_name=function_name,
         max_iterations=max_iterations,
-        output_dir=output_dir,
+        output_dir=store.path,
+        store=store,
         source_path=source_path,
         context_condition=context_condition,
+        model_settings=model_settings,
     )
 
 
@@ -121,7 +123,7 @@ def _registry():
 
 
 def output_dir_of(cfg):
-    return Path(cfg.output_dir)
+    return Path(cfg.output_dir) if cfg.output_dir is not None else None
 
 
 def scientific_status(cfg, spec, runner):
@@ -145,14 +147,6 @@ def client_factory(settings=None):
     return make_client(settings or ModelSettings())
 
 
-def atomic_write_json(path, obj):
-    """Write strict JSON (no NaN/inf) atomically: write a temporary file, then replace."""
-    path = Path(path)
-    temporary_path = path.with_suffix(path.suffix + ".tmp")
-    temporary_path.write_text(json.dumps(obj, indent=2, allow_nan=False) + "\n", encoding="utf-8")
-    temporary_path.replace(path)
-
-
 def _build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--iterations", type=int, default=None,
@@ -171,7 +165,7 @@ def _build_parser():
         "--output-dir",
         type=Path,
         default=None,
-        help="directory for per-iteration JSON artifacts (default: runs/latest)",
+        help="new artifact directory; must not exist (default: unique runs/<run-id>)",
     )
     parser.add_argument("--plot", action="store_true", help="show the runtime history plot")
     parser.add_argument("--require-gpu", action="store_true", help="fail if JAX cannot use a GPU")
@@ -185,6 +179,10 @@ def _build_parser():
                              "subprocess (trusted code only: the baseline runs, model candidates are refused)")
     parser.add_argument("--calibration", type=Path, default=None,
                         help="frozen A/A calibration JSON; without it the run calibrates before its first measurement")
+    parser.add_argument("--offline-responses", type=Path, default=None,
+                        help="replay an array of local Messages-shaped responses; no credentials or network")
+    parser.add_argument("--proposal-only", action="store_true", default=None,
+                        help="save one validated proposal without loading or evaluating source code")
     return parser
 
 
@@ -204,7 +202,53 @@ def _cli_overrides(args):
         "output_dir": str(args.output_dir) if args.output_dir is not None else None,
         "runner": args.runner,
         "calibration_path": str(args.calibration) if args.calibration is not None else None,
+        "model.offline_responses_path": str(args.offline_responses) if args.offline_responses is not None else None,
+        "proposal_only": args.proposal_only,
     }
+
+
+def _proposal_only(cfg, argv, devices, client):
+    """Read reference text and save an unverified proposal. No workload import, runner or evaluator."""
+    from providers import ProposalFailure, ProposalProvider
+    from context_builder import build_context, workload_contract, ContextError
+    if cfg.budgets.max_candidates == 0:
+        raise ProposalFailure("BUDGET_BLOCKED", "proposal-only mode requires a positive candidate budget")
+    if cfg.source_path:
+        source = read_python_source(cfg.source_path)
+        workload_id, function = f"source:{Path(cfg.source_path).stem}", cfg.function_name
+        workload = {"id": workload_id, "split": "development", "output_contract": "not evaluated in proposal-only mode",
+                    "tolerance": None}
+    else:
+        spec = _registry().get(cfg.workload_id)
+        source, workload_id, function = spec.reference_source, spec.workload_id, spec.function_name
+        workload = workload_contract(spec)
+    store = RunStore(output_dir_of(cfg), budgets=cfg.budgets)
+    cfg = dataclasses.replace(cfg, output_dir=str(store.path), workload_id=workload_id, function_name=function)
+    store.initialize(source, config=to_dict(cfg), manifest={
+        "argv": list(argv), "mode": "proposal_only", "scientific": False,
+        "non_scientific_reasons": ["proposal only; no correctness or performance evaluation"],
+        "workload": {"id": workload_id, "reference_sha256": __import__("hashlib").sha256(source.encode()).hexdigest()},
+        "environment": collect_environment(REPO, devices)})
+    provider = ProposalProvider(client, cfg.model, cfg.budgets, reserve=store.reserve_request,
+                                record=store.record_request)
+    try:
+        snapshot = store.context_inputs()
+        try:
+            context = build_context(function_name=function, workload=workload,
+                baseline_sha256=__import__("hashlib").sha256(source.encode()).hexdigest(),
+                current_source=source, current_parent_id=None, environment=snapshot.pop("environment"),
+                evidence=snapshot, selected_backend=cfg.backend, context_condition=cfg.context_condition,
+                max_source_bytes=cfg.budgets.max_source_bytes, remaining_budgets=provider.remaining_budget(),
+                fits=provider.context_fits, redact=provider._redact)
+        except ContextError as error:
+            raise ProposalFailure("CONTEXT_BLOCKED", str(error)) from error
+        proposal = provider.propose(context)
+    except ProposalFailure as error:
+        store.record_provider_stop(error.status, str(error), provider.summary())
+        raise
+    store.save_proposal(proposal, provider.events[-1]["request"])
+    print(f"Unverified proposal saved to {store.path / 'proposed.py'}; no code was evaluated.")
+    return store
 
 
 def main(argv=None):
@@ -234,11 +278,23 @@ def main(argv=None):
         parser.error(f"--require-gpu was requested, but JAX only sees: {devices}")
     print(f"JAX devices: {devices}")
 
-    from providers import ProviderError, preflight
+    from providers import ProviderError, preflight, require_live_budget
+    client = None
     try:
-        preflight(cfg.model)
+        if cfg.budgets.max_candidates > 0:
+            preflight(cfg.model, cfg.budgets)
+            client = client_factory(cfg.model)
+            require_live_budget(cfg.model, cfg.budgets, client)
     except ProviderError as error:
-        raise RuntimeError(str(error)) from error
+        print(f"error: {error}", file=sys.stderr)
+        sys.exit(2)
+
+    if cfg.proposal_only:
+        try:
+            return _proposal_only(cfg, sys.argv[1:] if argv is None else argv, devices, client)
+        except (ProviderError, StorageError) as error:
+            print(f"error: {error}", file=sys.stderr)
+            sys.exit(2)
 
     # Where code runs. Model-written code needs isolation; without it the run stops before any LLM call.
     from runner import DockerRunner, TrustedSubprocessRunner
@@ -251,7 +307,7 @@ def main(argv=None):
     from benchmark import Calibration
     from controller import BaselineFailed
     controller = build_controller(
-        client_factory(cfg.model),
+        client,
         max_iterations=cfg.budgets.max_candidates,
         source_path=Path(cfg.source_path) if cfg.source_path is not None else None,
         function_name=cfg.function_name,
@@ -262,15 +318,15 @@ def main(argv=None):
         protocol=cfg.measurement,
         calibration=Calibration.load(cfg.calibration_path) if cfg.calibration_path else None,
         context_condition=cfg.context_condition,
+        budgets=cfg.budgets,
+        model_settings=cfg.model,
     )
     evaluator = controller.evaluator
     # The correctness policy is known once the workload is: record it in the resolved config (AIC-002).
     cfg = dataclasses.replace(cfg, workload_id=evaluator.spec.workload_id,
-                              correctness_policy_hash=evaluator.policy_hash)
+                              correctness_policy_hash=evaluator.policy_hash, output_dir=str(controller.output_dir))
 
     # Record the run before any LLM call.
-    output_dir = output_dir_of(cfg)
-    output_dir.mkdir(parents=True, exist_ok=True)
     scientific, reasons = scientific_status(cfg, evaluator.spec, runner)
     manifest = {
         "schema_version": MANIFEST_SCHEMA,
@@ -279,32 +335,40 @@ def main(argv=None):
         "backend_requested": cfg.backend,
         "scientific": scientific,
         "non_scientific_reasons": reasons,
-        "workload": {"id": evaluator.spec.workload_id, "reference_sha256": evaluator.spec.reference_sha256,
+        "workload": {"id": evaluator.spec.workload_id, "reference_sha256": evaluator.baseline_sha256,
                      "correctness_policy_hash": evaluator.policy_hash,
+                     "split": "development", "cases": evaluator.case_names,
                      "heldout_version": evaluator.spec.heldout_version,
                      "heldout_cases": len(evaluator.spec.heldout_seeds) * len(evaluator.spec.heldout_shapes)},
         "runner": runner.identity(),
         "environment": collect_environment(REPO, devices),
     }
-    atomic_write_json(output_dir / "run_config.json", to_dict(cfg))
-    atomic_write_json(output_dir / "manifest.json", manifest)
-
     try:
+        controller.store.initialize(evaluator.baseline_source, config=to_dict(cfg), manifest=manifest)
         controller.start()
     except BaselineFailed as error:
         print(f"error: baseline failed, no proposal requested: {error}", file=sys.stderr)
+        sys.exit(2)
+    except StorageError as error:
+        print(f"error: storage: {error}", file=sys.stderr)
         sys.exit(2)
     if cfg.budgets.max_candidates == 0:
         # A zero candidate budget is valid and means: no provider request at all.
         history = controller.provide_hist()
     else:
-        history = controller.agent_loop(model=cfg.model.model_id, max_tokens=cfg.model.max_tokens)
+        try:
+            history = controller.agent_loop(model=cfg.model.model_id, max_tokens=cfg.model.max_tokens)
+        except StorageError as error:
+            print(f"error: storage: {error}", file=sys.stderr)
+            sys.exit(2)
     if controller.stop_reason:
         print(f"Run stopped: {controller.stop_reason}")
 
     totals = controller.usage_totals()
     print(f"Provider {cfg.model.provider} ({cfg.model.model_id}): {totals['requests']} requests, "
-          f"{totals['input_tokens']} input / {totals['output_tokens']} output tokens.")
+          f"{totals['input_tokens']} known input / {totals['output_tokens']} known output tokens; "
+          f"{totals['accounted_tokens']} conservatively accounted, "
+          f"{totals['unknown_usage_requests']} requests with incomplete usage.")
     print(f"Completed {len(history) - 1} candidate evaluations.")
     print(f"Best runtime: {controller.best_runtime}")
     print(

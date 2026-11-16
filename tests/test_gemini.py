@@ -7,6 +7,8 @@ from google.genai import errors, types
 
 import gemini
 from fakes import proposal
+from providers import OfflineClient
+from contracts import ModelSettings
 
 TOOLS = [{"name": "benchmark_code", "description": "submit",
           "input_schema": {"type": "object", "properties": {"x": {"type": "string"}}, "required": ["x"]}}]
@@ -18,7 +20,7 @@ def _response(*parts, prompt=10, out=3, thoughts=2):
                                                           thoughts_token_count=thoughts))
 
 
-class StandIn:
+class StandIn(OfflineClient):
     """Records what would be sent to Vertex and replays scripted responses."""
 
     def __init__(self, *responses):
@@ -35,7 +37,7 @@ class StandIn:
 
 def _client(*responses):
     stand_in = StandIn(*responses)
-    return gemini.GeminiVertex(project="p", location="global", client=stand_in, sleep=lambda s: None), stand_in
+    return gemini.GeminiVertex(project="p", location="global", client=stand_in), stand_in
 
 
 def test_request_translation():
@@ -78,29 +80,33 @@ def test_history_round_trip_names_responses_and_keeps_signatures():
     assert (reply.name, reply.response) == ("benchmark_code", {"state": "ACCEPTED"})
 
 
-def test_transient_errors_are_retried_and_others_raise():
+def test_transport_never_hides_retries_from_the_budget_boundary():
     busy = errors.APIError(429, {"error": {"message": "busy", "status": "RESOURCE_EXHAUSTED"}})
     client, sent = _client(busy, _response(types.Part(text="ok")))
-    assert client.messages.create(model="m", max_tokens=5, messages=[{"role": "user", "content": "x"}]).content
-    assert len(sent.sent) == 2
+    with pytest.raises(errors.APIError):
+        client.messages.create(model="m", max_tokens=5, messages=[{"role": "user", "content": "x"}])
+    assert len(sent.sent) == 1
+    assert sent.sent[0]["config"].http_options.retry_options.attempts == 1
     bad = errors.APIError(400, {"error": {"message": "bad", "status": "INVALID_ARGUMENT"}})
     client, _ = _client(bad)
     with pytest.raises(errors.APIError):
         client.messages.create(model="m", max_tokens=5, messages=[{"role": "user", "content": "x"}])
 
 
-def test_the_controller_loop_runs_unchanged_on_gemini(no_key, repo_root):
-    """The real controller drives Gemini through the adapter: one proposal, evaluated, result fed back."""
+def test_structured_controller_loop_also_supports_gemini(no_key, repo_root):
+    """The controller validates Gemini's proposal and supplies the measured result in the next context."""
     import agent
     from runner import TrustedSubprocessRunner
     wrong = "import jax.numpy as jnp\n\ndef bad_func(x, y):\n    return x - y\n"
-    call = types.Part(function_call=types.FunctionCall(name="benchmark_code", args=proposal(wrong)))
+    call = types.Part(function_call=types.FunctionCall(name="submit_proposal", args=proposal(wrong)))
     client, sent = _client(_response(call), _response(types.Part(text="done")))
     controller = agent.build_controller(client, max_iterations=2, source_path=repo_root / "workloads/example.py",
                                         function_name="bad_func", output_dir=no_key / "run", selected_backend="cpu",
-                                        runner=TrustedSubprocessRunner(reviewed_fixtures=True))
+                                        runner=TrustedSubprocessRunner(reviewed_fixtures=True),
+                                        model_settings=ModelSettings(provider="gemini-vertex", model_id="gemini-2.5-flash"))
     history = controller.agent_loop(model="gemini-2.5-flash")
     assert history[-1]["state"] == "CORRECTNESS_FAILED"
     second = sent.sent[1]["contents"]
-    assert second[-1].parts[0].function_response.name == "benchmark_code"
-    assert second[-1].parts[0].function_response.response["state"] == "CORRECTNESS_FAILED"
+    context = json.loads(second[-1].parts[0].text)
+    assert context["history"][-1]["state"] == "CORRECTNESS_FAILED"
+    assert sent.sent[0]["config"].tool_config.function_calling_config.mode == "ANY"

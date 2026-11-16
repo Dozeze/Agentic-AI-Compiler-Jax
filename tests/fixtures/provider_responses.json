@@ -1,0 +1,22 @@
+[
+  {
+    "id": "msg_offline_proposal_fixture",
+    "stop_reason": "tool_use",
+    "content": [
+      {
+        "type": "tool_use",
+        "id": "tool_offline_proposal_fixture",
+        "name": "submit_proposal",
+        "input": {
+          "hypothesis": "An explicit JAX add is a simple protocol fixture.",
+          "transformation": "Express addition with jnp.add.",
+          "rationale": "Exercise the proposal schema without contacting a model.",
+          "expected_effect": "No measured effect; offline fixture only.",
+          "candidate_source": "import jax.numpy as jnp\n\ndef bad_func(x, y):\n    return jnp.add(x, y)\n",
+          "notes": "Deterministic offline response with synthetic usage; correctness and performance are unverified."
+        }
+      }
+    ],
+    "usage": {"input_tokens": 10, "output_tokens": 7}
+  }
+]

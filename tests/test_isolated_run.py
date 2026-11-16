@@ -17,8 +17,8 @@ FAST = MeasurementProtocol(warmup_calls=2, min_block_s=0.001, target_block_s=0.0
 def test_softmax_candidates_are_judged_inside_the_container(no_key):
     import agent
     from runner import DockerRunner
-    script = [[tool_use("a", "benchmark_code", proposal(JAX_NN))],
-              [tool_use("b", "benchmark_code", proposal(NAIVE_UNSTABLE))], []]
+    script = [[tool_use("a", "submit_proposal", proposal(JAX_NN))],
+              [tool_use("b", "submit_proposal", proposal(NAIVE_UNSTABLE))], []]
     controller = agent.build_controller(FakeAnthropic(script), max_iterations=2, output_dir=no_key / "run",
                                         workload_id="softmax", runner=DockerRunner(selected_backend="cpu"),
                                         selected_backend="cpu", protocol=FAST)

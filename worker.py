@@ -9,6 +9,7 @@ returns raw outputs and raw timing blocks, and the host compares, analyses and d
 Modes
   outputs  compile one source per input signature and run it on every case; outputs go to outputs.npz
   measure  compile sources `a` and `b` and run one paired-block session on one case
+  profile  compile one source, warm it up and capture annotated calls, without benchmark measurements
 """
 from __future__ import annotations
 
@@ -42,7 +43,7 @@ def _device_info(jax) -> dict:
 def _load(workdir: Path, name: str, function_name: str):
     from benchmark import load_function
     path = workdir / name
-    return load_function(path.read_text(encoding="utf-8"), function_name, filename=name)
+    return load_function(path.read_bytes().decode("utf-8"), function_name, filename=name)
 
 
 def _signature(args) -> str:
@@ -118,7 +119,31 @@ def _measure(request: dict, workdir: Path, jax) -> dict:
             "compile": {side: {"lower_s": c.lower_s, "compile_s": c.compile_s} for side, c in sides.items()}}
 
 
-MODES = {"outputs": _outputs, "measure": _measure}
+def _profile(request: dict, workdir: Path, jax) -> dict:
+    import hashlib
+    import array_io
+    import benchmark
+    import feedback
+
+    source_name = request["sources"]["candidate"]
+    source = (workdir / source_name).read_bytes().decode("utf-8")
+    provenance = {"candidate_sha256": hashlib.sha256(source.encode()).hexdigest(),
+                  "function_name": request["function_name"], "case": request["case"]}
+    try:
+        case = array_io.load(workdir / request["inputs"], base=workdir, max_bytes=MAX_INPUT_BYTES)[request["case"]]
+        args = tuple(jax.device_put(a) for a in case.arrays)
+        jax.block_until_ready(args)
+        fn = _load(workdir, source_name, request["function_name"])
+        compiled = benchmark.compile_timed(fn, args)
+        trace = feedback.capture_runtime_trace(jax, compiled.executable, args, artifacts=workdir / "profile",
+                                               provenance=provenance)
+    except Exception as error:   # noqa: BLE001 - missing optional evidence does not alter a correctness verdict
+        trace = feedback.unavailable_trace(f"profile setup failed: {_error(error)}",
+                                           {**provenance, "jax": jax.__version__, "backend": jax.default_backend()})
+    return {"runtime_trace": trace}
+
+
+MODES = {"outputs": _outputs, "measure": _measure, "profile": _profile}
 
 
 def handle(request: dict, workdir: Path) -> dict:

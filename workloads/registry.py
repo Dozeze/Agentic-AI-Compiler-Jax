@@ -57,7 +57,7 @@ class WorkloadSpec:
 
     @property
     def reference_source(self) -> str:
-        return self.reference_path.read_text(encoding="utf-8")
+        return self.reference_path.read_bytes().decode("utf-8")
 
     @property
     def reference_sha256(self) -> str:

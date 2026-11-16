@@ -55,10 +55,11 @@ def test_cli_help_needs_no_key(repo_root, tmp_path, clean_env):
     assert "--source" in out.stdout
 
 
-def test_missing_key_is_reported(no_key):
+def test_missing_live_cap_is_reported(no_key):
     import agent
-    with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
+    with pytest.raises(SystemExit) as caught:
         agent.main(["--iterations", "1"])
+    assert caught.value.code == 2
 
 
 def test_require_gpu_fails_on_cpu(no_key):
@@ -114,22 +115,29 @@ def test_evaluate_rejects_missing_function(example):
 
 def _history_script():
     return [
-        [tool_use("t1", "get_current_code", {})],
-        [tool_use("t2", "benchmark_code", proposal(ORIGINAL))],
-        [tool_use("t3", "benchmark_code", proposal(WRONG))],
+        [tool_use("t2", "submit_proposal", proposal(ORIGINAL))],
+        [tool_use("t3", "submit_proposal", proposal(WRONG))],
         [],
     ]
 
 
-def test_fake_loop_records_history(no_key, repo_root):
+def test_fake_loop_records_history(no_key, repo_root, monkeypatch):
+    import benchmark
+    from contracts import protocol_hash
     out_dir = no_key / "run"
     _, controller = _build(repo_root, _history_script(), out_dir)
+    # Real workers check correctness; deterministic timing keeps this provider/storage test independent
+    # of CPU contention. Calibration and decision tests separately cover noisy/stable timing evidence.
+    blocks = tuple(benchmark.Block(i, "AB", 1, 1_000_000, 1_000_000, 2 * i, 2 * i + 1)
+                   for i in range(FAST.n_blocks))
+    session = benchmark.PairedSession(protocol_hash(FAST), 1, blocks)
+    monkeypatch.setattr(controller.evaluator, "session", lambda *args, **kwargs:
+                        (session, benchmark.analyze_session(session, FAST)))
     history = controller.agent_loop(model="fake-model")
     assert len(history) == 3
     assert history[0]["state"] == "ACCEPTED" and "baseline" in history[0]["reason"]
-    # The same computation as the baseline: correct, measured, and never accepted on noise (AIC-006).
     assert history[1]["output_correct"] is True
-    assert history[1]["state"] in ("VALID_NO_CHANGE", "VALID_SLOWER", "MEASUREMENT_UNSTABLE")
+    assert history[1]["state"] == "VALID_NO_CHANGE"
     sessions = history[1]["attempt"]["evaluation"]["sessions"]
     assert sessions and len(sessions[0]["raw"]["blocks"]) == FAST.n_blocks
     assert (out_dir / "work" / "calibration.json").is_file()
@@ -140,25 +148,28 @@ def test_fake_loop_records_history(no_key, repo_root):
     assert len(json.loads((out_dir / "history.json").read_text())) == 3
 
 
-def test_fake_loop_feeds_tool_results_back(no_key, repo_root):
-    script = [[tool_use("t1", "get_current_code", {})], [tool_use("t2", "benchmark_code", proposal(WRONG))], []]
+def test_fake_loop_supplies_measured_results_in_next_context(no_key, repo_root):
+    script = [[tool_use("t2", "submit_proposal", proposal(WRONG))], []]
     client, controller = _build(repo_root, script, no_key / "run")
     controller.agent_loop(model="fake-model")
     last = client.messages.calls[1]["messages_snapshot"][-1]
     assert last["role"] == "user"
-    assert any(block["type"] == "tool_result" for block in last["content"])
+    context = json.loads(last["content"])
+    assert context["history"][-1]["state"] == "CORRECTNESS_FAILED"
+    assert context["current_source"] == controller.best_code
+    assert [tool["name"] for tool in client.messages.calls[0]["tools"]] == ["submit_proposal"]
 
 
-def test_one_benchmark_per_turn(no_key, repo_root):
-    script = [[tool_use("a", "benchmark_code", proposal(WRONG)),
-               tool_use("b", "benchmark_code", proposal(ORIGINAL))], []]
+def test_multiple_proposals_in_one_response_are_refused_before_evaluation(no_key, repo_root):
+    script = [[tool_use("a", "submit_proposal", proposal(WRONG)),
+               tool_use("b", "submit_proposal", proposal(ORIGINAL))], []]
     client, controller = _build(repo_root, script, no_key / "run")
     controller.start()
     before = len(controller.history)
     controller.agent_loop(model="fake-model")
-    assert len(controller.history) == before + 1
-    tool_results = client.messages.calls[1]["messages_snapshot"][-1]["content"]
-    assert "Only one benchmark_code call is allowed per turn" in tool_results[1]["content"]
+    assert len(controller.history) == before
+    assert len(client.messages.calls) == 1
+    assert controller.requests[0]["status"] == "MALFORMED"
 
 
 def test_root_scripts_not_collected(repo_root):
@@ -167,7 +178,7 @@ def test_root_scripts_not_collected(repo_root):
 
 
 def test_invalid_proposal_is_recorded_not_run(no_key, repo_root):
-    script = [[tool_use("a", "benchmark_code", {"code": ORIGINAL})], []]
+    script = [[tool_use("a", "submit_proposal", {"code": ORIGINAL})], []]
     _, controller = _build(repo_root, script, no_key / "run")
     history = controller.agent_loop(model="fake-model")
     assert history[-1]["state"] == "PROPOSAL_INVALID"
@@ -177,7 +188,7 @@ def test_invalid_proposal_is_recorded_not_run(no_key, repo_root):
 
 def test_policy_violation_is_recorded_not_run(no_key, repo_root):
     evil = "import os\n\ndef bad_func(x, y):\n    os.system('touch /tmp/pwned')\n    return x + y\n"
-    script = [[tool_use("a", "benchmark_code", proposal(evil))], []]
+    script = [[tool_use("a", "submit_proposal", proposal(evil))], []]
     _, controller = _build(repo_root, script, no_key / "run")
     history = controller.agent_loop(model="fake-model")
     assert history[-1]["state"] == "POLICY_REJECTED"
@@ -192,7 +203,7 @@ def test_constructor_has_no_side_effects(no_key, repo_root):
 
 def test_model_code_is_refused_without_isolation(no_key, repo_root):
     from runner import TrustedSubprocessRunner
-    script = [[tool_use("a", "benchmark_code", proposal(WRONG))], [tool_use("b", "get_history", {})], []]
+    script = [[tool_use("a", "submit_proposal", proposal(WRONG))], []]
     client, controller = _build(repo_root, script, no_key / "run", runner=TrustedSubprocessRunner())
     history = controller.agent_loop(model="fake-model")
     assert history[-1]["state"] == "INTERRUPTED"
@@ -203,7 +214,7 @@ def test_model_code_is_refused_without_isolation(no_key, repo_root):
 def test_duplicate_is_not_measured_again(no_key, repo_root):
     baseline = (repo_root / "workloads/example.py").read_text()
     reformatted = baseline.replace("    return x + y", "    return x+y   # same program")
-    script = [[tool_use("a", "benchmark_code", proposal(reformatted))], []]
+    script = [[tool_use("a", "submit_proposal", proposal(reformatted))], []]
     _, controller = _build(repo_root, script, no_key / "run")
     history = controller.agent_loop(model="fake-model")
     assert history[-1]["state"] == "DUPLICATE" and "iteration 0" in history[-1]["reason"]
@@ -211,7 +222,7 @@ def test_duplicate_is_not_measured_again(no_key, repo_root):
 
 
 def test_history_shown_to_the_model_is_compact(no_key, repo_root):
-    script = [[tool_use("a", "benchmark_code", proposal(WRONG))], []]
+    script = [[tool_use("a", "submit_proposal", proposal(WRONG))], []]
     _, controller = _build(repo_root, script, no_key / "run")
     controller.agent_loop(model="fake-model")
     view = controller.provide_hist()[-1]
@@ -233,14 +244,15 @@ def test_compiler_summary_only_in_compiler_conditions(no_key, repo_root, conditi
 
 
 def test_usage_is_recorded_per_request(no_key, repo_root):
-    script = [[tool_use("a", "benchmark_code", proposal(WRONG))], []]
+    script = [[tool_use("a", "submit_proposal", proposal(WRONG))], []]
     _, controller = _build(repo_root, script, no_key / "run")
     history = controller.agent_loop(model="fake-model")
-    assert controller.usage_totals() == {"requests": 2, "input_tokens": 200, "output_tokens": 20}
+    assert controller.usage_totals() == {"requests": 2, "input_tokens": 200, "output_tokens": 20,
+                                          "accounted_tokens": 220, "unknown_usage_requests": 0}
     assert history[-1]["attempt"]["provider"]["request"] == 1
     recorded = json.loads((no_key / "run" / "requests.json").read_text())
     assert [r["stop_reason"] for r in recorded] == ["tool_use", "end_turn"]
-    assert [r["tool_calls"] for r in recorded] == [["benchmark_code"], []]
+    assert [r["tool_calls"] for r in recorded] == [["submit_proposal"], []]
 
 
 def test_provider_error_is_a_request_event_not_a_crash(no_key, repo_root):

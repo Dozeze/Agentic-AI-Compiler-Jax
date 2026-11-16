@@ -9,7 +9,7 @@
 > Keep this file short: it is the current state, not a history. Detailed evidence goes in
 > `docs/IMPLEMENTATION_PROGRESS.md`; the full plan is `docs/IMPLEMENTATION_PLAN.md`.
 
-Last updated: 2026-11-10 by Sergio (Sergio Medina Hernandez)
+Last updated: 2026-11-16 by Codex (AIC-011 / AIC-012 / AIC-013 / AIC-014)
 
 ---
 
@@ -25,7 +25,8 @@ Sergio Medina Hernandez (`SergioMedinaH`), Weizhuo "Harry" Sun.
 ## 2. Which document wins
 1. Latest explicit team decision (recorded in §6).
 2. `docs/IMPLEMENTATION_PLAN.md` — roadmap **AIC-1.1** (2026-10-12): 8 milestones, 33 tasks, approval gates.
-   *(The plan exists as a PDF; `docs/IMPLEMENTATION_PLAN.md`, the 33-task backlog and the other process documents do not exist yet — §6 P1.)*
+   *(The Markdown plan and companion process documents are present in this working tree; they were untracked
+   before the AIC-011 session. See §6 P1.)*
 3. The 2026-09-04 LaTeX project plan is **design history only** (AIC-1.1 says so). Its dates and task list are
    superseded; the course deliverables it mentions (report, weekly diaries, presentation) still apply.
 
@@ -42,6 +43,9 @@ Sergio Medina Hernandez (`SergioMedinaH`), Weizhuo "Harry" Sun.
 Key files on `main`: `agent.py` (CLI entry), `controller.py` (loop, history, tools), `benchmark.py` (correctness +
 timing), `workloads/example.py`. Root `test*.py`, `testrun.py`, `runningscripts.py`, `utils.py`, `algorithm.py` are
 scratch scripts — **never import them from tests**.
+The current branch also includes `storage.py` (immutable run evidence and artifact-only best verification)
+and `providers.ProposalProvider` (the single structured proposal and accounting boundary), plus
+`context_builder.py` (bounded, deterministic, provenance-tagged development context).
 
 ## 4. Environment and how to run
 - Python 3.12, `uv`, **JAX/jaxlib pinned to 0.4.38**. Always `uv run --locked ...`. Do not upgrade JAX without a team decision.
@@ -53,7 +57,8 @@ scratch scripts — **never import them from tests**.
 - GPU (inside WSL2): `uv sync --locked --extra cuda12 && uv run --locked --extra cuda12 pytest -q --require-gpu`
   (`--require-gpu` turns the `needs_gpu` skip into a setup error, non-zero exit, when CUDA is broken).
 - Isolation: start Docker, then `uv run --locked python scripts/build_worker_image.py` (add `--variant cuda12` on the NV host).
-- Run (needs a key in `.env.local`): `uv run --locked python agent.py --backend cpu --source workloads/example.py --function bad_func --iterations 1` (`--config run.json` for a RunConfig v1 file; `--runner subprocess` without Docker: baseline only)
+- Offline proposal smoke (no key/network/Docker/code execution): `uv run --locked python agent.py --backend cpu --proposal-only --offline-responses tests/fixtures/provider_responses.json`.
+- Live runs need an explicit money cap/currency and matching dated `model.prices` in `--config run.json`, plus credentials. None is enabled by default. `--runner subprocess --iterations 0` runs the trusted baseline without a provider; model-written code still requires Docker.
 - Freeze δ: `uv run --locked python scripts/calibrate_aa.py --workload softmax --backend cpu --runner docker --label <population>`, then `--calibration <file>`.
 - NV host, everything GPU in one go: `scripts/phase_b.sh`.
 
@@ -62,7 +67,7 @@ scratch scripts — **never import them from tests**.
 |---|---|---|---|
 | M1 Foundations & target | AIC-001, 031, 002, 003 | Harry | batch 01 AWAITING_ACCEPTANCE (Harry) + G-01 gaps closed in batch 03 (Sergio: honest scientific flag, policy hash recorded, `--workload`). AIC-031 phase B still pending on the NV host (`scripts/phase_b.sh`); `docs/TARGET_DECISION.md` DRAFT |
 | M2 Reliable, isolated evaluation | AIC-004 … 009 | AIC-004: Harry; AIC-005 … 009: Sergio | batch 02 AWAITING_ACCEPTANCE on `sergio/batch-02` (report: `docs/IMPLEMENTATION_PROGRESS.md`): AIC-004 done (Harry); AIC-005 timing protocol + A/A calibration, AIC-006 decision rule, AIC-007 contracts + source policy, AIC-008 worker/runner, AIC-009 Docker containment + controller integration done on the Mac (CPU). Pending on the NV host: GPU containment and the official δ (`scripts/phase_b.sh`) |
-| M3 – M8 | AIC-010 … 033 | AIC-010: Sergio; rest TBD | batch 03 AWAITING_ACCEPTANCE on `sergio/batch-03`: AIC-010 compiler feedback done (Mac CPU); AIC-018 held-out (from M4) done, softmax split v1 frozen; the rest not started |
+| M3 – M8 | AIC-010 … 033 | AIC-010: Sergio; rest TBD | batch 03 AWAITING_ACCEPTANCE on `sergio/batch-03`: AIC-010 compiler feedback and AIC-018 softmax held-out implemented. AIC-011 runtime profiling CPU-verified; CUDA/container acceptance pending. AIC-012 storage core and AIC-013 structured proposals/accounting DONE offline. AIC-014 bounded context DONE: 31 context checks, real CPU failure-feedback artifacts, full suite 568 passed / 16 Docker-CUDA skips. No live provider proof or real prices/cap configured. Next immediate task: AIC-015 controller integration. Recovery/reporting and other later tasks remain unfinished. |
 
 Course deadlines (fixed by KTH, not by AIC-1.1): report draft **2026-11-20 17:00**; presentation + final report
 **2026-12-15 … 21**.
@@ -79,15 +84,23 @@ Course deadlines (fixed by KTH, not by AIC-1.1): report draft **2026-11-20 17:00
 - D-07 Hand-off: the author verifies locally (full suite + phase A on the Mac), then pushes their own branch;
   the rest of the team runs it from there (CI, and phase B on the NV host). Nobody pushes to `main` directly.
 
+**Current task authorization (2026-11-16):** the user requested "continue with the next task" after AIC-013:
+AIC-014 bounded compiler/runtime/history context. This authorizes
+implementation and offline checks, not paid provider calls, later tasks, hardware provisioning or acceptance
+of pending M1/M2/AIC-011 target checks. SDK tests use local HTTP mocks with explicitly synthetic prices;
+these do not configure a real money cap or establish live provider availability. Live proof remains AIC-016.
+
 **Pending** (default in brackets — used until the team decides)
-- P1 `docs/IMPLEMENTATION_PLAN.md`, the 33-task backlog, `CODEBASE_AUDIT.md`, `CODEX_WORKFLOW.md` do not exist yet; the team creates and maintains them from now on. Batch 01 creates `docs/IMPLEMENTATION_PROGRESS.md` (its first entry is the batch-01 report).
+- P1 The plan, backlog, audit, workflow and requirements matrix are present as pre-existing untracked files in
+  this working tree. The team maintains them alongside `docs/IMPLEMENTATION_PROGRESS.md`; their older audit
+  statuses do not establish the current implementation or waive selected-target acceptance.
 - P2 Who is the "owner" who approves milestones? [whole team]
 - P3 Keep WSL2, or dual-boot Ubuntu on the NV host? [WSL2; revisit only if a hard requirement fails]
 - P4 `--iterations` default 10 → 3 per AIC-1.1 §7? [3; implemented in AIC-002 as `Budgets.max_candidates = 3` — set it back to 10 if the team disagrees]
 - P5 Softmax large-offset edge case: 200 or 1e4? Must be fixed **before any search**. [200: still catches a non-stabilised softmax; offsets ≥ 1000 reject the valid `exp(x - logsumexp(x))` rewrite at rtol 1e-5; implemented as `workloads/registry.OFFSET = 200.0`, re-confirmed on the Mac by `test_logsumexp_rewrite_admitted` / `test_edge_cases_have_teeth`]
 - P6 New flat module `environment.py` (backend selection + env capture)? [yes; added by AIC-031 — merge into `contracts.py` if the team objects, interface unchanged]
 - P7 What must be done by the 2026-11-20 report draft? [unset]
-- P8 LLM provider and money cap (no live calls without a cap, AIC-1.1 §7). [default `anthropic` unchanged; `--provider anthropic-vertex|gemini-vertex` bill the GCP project (`providers.py`, `gemini.py`); cap still unset and not enforced (AIC-013)]
+- P8 LLM provider and money cap (no live calls without a cap, AIC-1.1 §7). [default `anthropic` unchanged; Vertex providers remain available. AIC-013 enforces the live cap/currency/dated-price gate. Real prices and cap remain unset, so default live requests are disabled. Offline replay is explicit and credential-free.]
 - P9 What to do with `claude-experiment` results (Sergio). [reference only]
 - P10 Move root scratch scripts into `scratch/`? [leave them; AIC-001 isolates them with `testpaths = ["tests"]`]
 - P11 Record the hostname in run manifests? [yes (`environment.platform.node`); hash it if anyone objects]
@@ -100,6 +113,31 @@ Course deadlines (fixed by KTH, not by AIC-1.1): report draft **2026-11-20 17:00
 - P15 New flat modules `source_policy.py` and `array_io.py`? [yes; each is tested on its own]
 - P16 How is the held-out split kept from the search (AIC-018)? [fixed `heldout_seeds` in the registry, public and committed before any search (the commit is the freeze evidence); the search never receives them. A salted commit-reveal scheme was tried first and removed as unnecessary for this threat model]
 - P17 Is Claude on Vertex usable with the education credits? [not yet: on 2026-11-10 project `dd2430-508012` had quota 0 for `anthropic-claude-haiku-4-5` on `global` (429) and no access on `us-east5` / `europe-west1` (404). Request a quota increase in the GCP console (Vertex AI → Quotas), then check billing. `gemini-vertex` works today]
+- P18 Runtime profiling policy (AIC-011)? [separate profile workers for baseline and promoted incumbents, after
+  compilation and five warmups; five annotated synchronized calls. Record in `Evaluation.runtime_trace`, expose
+  only under C4. Unsupported capture gives explicit coverage/reason and no invented hotspots; CUDA acceptance
+  still requires actual device events on the NV host. CPU evidence does not establish a profiling-benefit claim.]
+- P19 Durable storage policy (AIC-012)? [unique timestamp/UUID run IDs by default; explicit output directories
+  must be new. Freeze exact source bytes, publish immutable evidence before each attempt's `record.json`,
+  derive history/best afterward and verify hashes when reading exports. Baseline is the fallback. Known
+  credential values are redacted from metadata and refused in executable source. Host publication checks
+  source/artifact caps and retains decision evidence; there is no active-worker filesystem quota or automatic
+  execution resume. Direct API runs record a distinct config schema; final/held-out checks remain separate.]
+- P20 Provider policy (AIC-013)? [one `submit_proposal` value through `propose(context)`, locally validated
+  before evaluation; no model-controlled inspection/evaluation tools. SDK retries disabled, application
+  retries default 0; each attempt is durably reserved first. Input reservation = serialized UTF-8 bytes
+  + 4096 framing tokens, output = configured ceiling, money = declared price ceilings using Decimal.
+  Unknown usage keeps its debit; overrun/unpriced billing stops. This is a conservative policy, not a
+  vendor-certified token or billing guarantee. Transport timeout default 30 s per I/O operation; complete
+  run/worker deadlines remain AIC-015. No real prices are invented. Proposal-only output is unverified.]
+- P21 Context policy (AIC-014)? [deterministic development-only allowlists, newest five nonpromoted
+  attempts and up to three accepted transformations, plus baseline/incumbent/latest summaries. Cap
+  serialized metadata at 24 KiB and current source separately at the configured source ceiling (64 KiB
+  default); full request must also fit remaining provider reservations. Historical snippets <= 2 KiB
+  are removed first, then older optional outcomes; required context that cannot fit stops dispatch.
+  Save exact context bytes and selection manifest before each SDK attempt. Compiler C3/C4/K and
+  runtime C4 ablations remain intact. Timing identities/provenance accompany measured summaries;
+  missing measurements remain unavailable. No split inputs, raw logs or credentials enter context.]
 
 ## 7. Rules for code changes
 - One branch per person/batch; never push straight to `main`. One task per commit/PR; message starts with the task ID (`AIC-001: ...`).
@@ -144,12 +182,15 @@ JAX 0.4.38:
 - On macOS `os.sched_getaffinity` does not exist: recorded under `unavailable`, never guessed.
 
 Run configuration (AIC-002):
-- `agent.main()` order matters: resolve config → select backend → `--require-gpu` check → key check → write
-  `run_config.json` + `manifest.json` → build controller (execs the workload) → loop. Building the controller first
-  would initialise JAX and make the backend selection silently ineffective.
+- `agent.main()` order matters: resolve config → select backend/GPU check → provider authorization/client
+  (only for a positive candidate budget) → runner preflight → build trusted workload/controller → initialize
+  run artifacts → baseline → structured proposals. Proposal-only reads source text and skips runner/evaluation.
+  Backend selection must precede workload execution because JAX ignores a late selection.
 - `bool` is a subclass of `int`: `contracts._coerce` rejects it (and floats) for int fields.
-- Budgets are recorded, not enforced (AIC-013/015); only `max_candidates` (= `--iterations`) changes behaviour.
-  `max_candidates = 0` makes no provider request.
+- Provider request/candidate/output/total-token/money ceilings are enforced before dispatch; source/artifact
+  limits are checked by the host. Unknown usage is conservatively accounted, not converted to free tokens.
+  Full optimizer/stage deadline integration remains AIC-015. Both CLI and direct-loop zero candidates make
+  no provider request; CLI zero candidates do not construct a client or require credentials/prices.
 - `CLAUDE_MODEL` sits between `--model` and the config file in precedence.
 
 Workloads (AIC-003):
@@ -172,10 +213,14 @@ Correctness (AIC-004):
 - Since AIC-004, `benchmark.evaluate` rejects non-finite output even when the reference is non-finite too
   (`error` = "reference produced non-finite values; …"), and supports PyTree outputs; timing now uses
   `jax.block_until_ready(out)` so tuple/dict outputs can be timed. The five legacy result keys keep their meaning;
-  a size-bounded `correctness` key is added (it reaches the LLM via `get_history`; never inputs or seeds).
+  a size-bounded `correctness` summary reaches the LLM in selected context; input arrays and the held-out
+  split are excluded. Development case names may identify the failing search seed.
 - `exp(x - logsumexp(x))` is a valid softmax rewrite but fails rtol 1e-5 when logits are offset by ≥ 1000.
-- `controller.agent_loop` passes the **same** `messages` list object on every API call (mutated in place);
-  `tests/fakes.py` stores a snapshot per call.
+- Each proposal request carries fresh bounded context with current source, fixed constraints and selected
+  measured history. Exact context bytes, included fields and omitted IDs are retained before dispatch and
+  hash-linked to request/attempt evidence. Metadata is capped at 24 KiB, source separately capped, and the
+  complete encoded request must fit provider byte/token/money reservations. Required context that cannot
+  fit stops with `CONTEXT_BLOCKED` rather than dropping constraints or the latest outcome.
 
 Tests (AIC-001):
 - Only `tests/` is collected (`testpaths`). Importing a root `test*.py` creates an Anthropic client and blocks on `input()`.
@@ -210,6 +255,11 @@ Evaluation pipeline (AIC-005 … 009):
 Compiler feedback, held-out, providers (batch 03):
 - `feedback.py` runs in the worker (it is in the image): summaries per level + estimates, never measurements.
   The agent sees them only under C3/C4/K; C2 runs still record them.
+- Runtime profiles use a separate worker mode, outside every paired measurement session. Bounded Perfetto gzip
+  (8 MiB compressed, 32 MiB decoded, 100,000 events) is retained with a SHA256 and source/device provenance.
+  Summaries clip to harness call annotations and report inclusive interval unions per lane/name, with no
+  percentages or sums across lanes. C4 sees observed coverage and hotspots; C2/C3/K do not. HOST_ONLY and
+  UNAVAILABLE have empty hotspot lists. Baseline and promoted-incumbent raw paths are relative to the run directory.
 - Held-out: `scripts/heldout.py check|evaluate`. Seeds and shapes are in `workloads/registry.py`; never pass them to
   the search. A failed held-out evaluation burns the split version in `evidence/heldout/ledger.jsonl`: a new split
   needs new seeds and `heldout_version + 1`.
@@ -218,11 +268,26 @@ Compiler feedback, held-out, providers (batch 03):
 - google-genai 3.0.0 prints two harmless `SyntaxWarning: invalid escape sequence` lines on first import.
 - First live `gemini-vertex` run worked end to end up to measurement (proposal `jax.nn.softmax`, 16/16 correct in the
   container). On the Mac the A/A calibration is unstable even with 40 ms blocks: timing only on the NV host (D-06).
-- With `--iterations 1` a model can spend the 3 allowed turns on `get_current_code` / `get_history`; use at least 2.
+- The locked Anthropic SDK 1.3.0 has no `temperature` parameter. Anthropic requests use provider sampling
+  defaults; only Gemini accepts an explicit `model.temperature`. The real SDK is tested using local HTTP mocks.
+- Model tools are limited to `submit_proposal`; `get_current_code` / `get_history` are no longer provider tools.
+  Missing IDs, refusal/empty/malformed responses, partial usage and provider errors are recorded explicitly.
+  SDK/application retries cannot bypass request reservations. The Gemini adapter also disables SDK retries.
 - Docker Desktop (macOS) can refuse to bind a directory that was deleted and recreated with the same name; use a new
   `--output-dir`.
+- AIC-012: `output_dir: null` creates `runs/<run-id>`; an existing explicit directory is always refused.
+  `attempts/NNNN/record.json` is the commit marker. Partial directories do not enter history or best.
+  `best.py` / `best.json` are derived exports: use `storage.verified_best(path)` to verify their source,
+  committed evidence and scope without executing Python. Multi-file indexes are individually atomic; an
+  interrupted update can leave stale indexes, which verification rejects. `RunStore.derive_indexes()` repairs
+  indexes from valid commits but does not resume execution (AIC-019). Artifact limits stop publication rather
+  than prune acceptance evidence; an active worker can exceed that limit before the host checks its files.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-16 Codex — AIC-014 DONE: bounded deterministic context, source/protocol/evaluation provenance, separate baseline/incumbent timing and identities, exact pre-dispatch context/selection artifacts, enforced byte/token/money fit and credential/split exclusion; 31 context tests, full suite 568 passed / 16 Docker-CUDA skips; real C4 CPU failure-feedback evidence, no paid calls. Next AIC-015.
+- 2026-11-16 Codex — AIC-013 DONE offline: single locally validated proposal boundary, live cap/dated-price gate, pre-dispatch reservations and conservative retry/usage accounting, bounded redacted evidence, offline replay and proposal-only CLI; real SDK HTTP-mock proof, 67 provider checks, full suite 537 passed / 16 Docker-CUDA skips; no paid calls, live proof remains AIC-016.
+- 2026-11-16 Codex — AIC-012 DONE: unique run directories, strict atomic storage, frozen exact source bytes, hashed immutable requests/attempts/raw evidence, commit-last records and validated best export with baseline fallback; 47 storage tests, full suite 470 passed / 16 Docker-CUDA skips, real CPU artifact evidence verified; no live provider calls.
+- 2026-11-16 Codex — AIC-011: bounded runtime trace capture/parser, separate profile workers for baseline and promoted incumbents, source/artifact validation and C4-only context; real CPU trace verified, CUDA/container acceptance pending; no live provider calls.
 - 2026-11-12 Sergio — AIC-008: `TrustedSubprocessRunner` resolves the work directory, so a relative `--output-dir` with `--runner subprocess` no longer fails with EXECUTION_FAILED (the worker ran with cwd=workdir and got the relative path again); regression test added.
 - 2026-11-10 Sergio — AIC-018: docs for the simplified held-out split (P16 answered: fixed public seeds, never passed to the search; report and run instructions updated).
 - 2026-11-10 Sergio — AIC-018: held-out split simplified to fixed `heldout_seeds` in the registry (softmax v1: seeds 1000–1019 × 2 unseen shapes, frozen before any search); salt, commit-reveal and `init/verify/reveal` removed; `scripts/heldout.py check|evaluate`; burn ledger kept.

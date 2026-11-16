@@ -54,8 +54,15 @@ TERMINAL_STATES = (PROPOSAL_INVALID, POLICY_REJECTED, COMPILE_FAILED, EXECUTION_
 
 
 @dataclass(frozen=True)
+class ContextLimits:
+    """AIC-014 prompt policy; source has the separate Budgets.max_source_bytes ceiling."""
+    max_metadata_bytes: int = 24 << 10
+    max_snippet_bytes: int = 2048
+
+
+@dataclass(frozen=True)
 class Budgets:
-    """Development ceilings from AIC-1.1 §7. Recorded only in this batch; enforced by AIC-013/015."""
+    """Development ceilings from AIC-1.1 §7. Provider/storage checks are active; stage-wide deadlines are AIC-015."""
     max_candidates: int = 3
     max_provider_requests: int = 6
     max_output_tokens_per_request: int = 2048
@@ -107,6 +114,19 @@ class MeasurementProtocol:
 
 
 @dataclass(frozen=True)
+class ModelPrices:
+    """User-supplied ceilings for standard uncached requests; never fetched or invented."""
+    provider: str
+    model_id: str
+    currency: str
+    input_per_million: float
+    output_per_million: float
+    checked_date: str
+    source_url: str
+    schema_version: str = "model_prices/v1"
+
+
+@dataclass(frozen=True)
 class ModelSettings:
     provider: str = "anthropic"                    # anthropic | anthropic-vertex | gemini-vertex (providers.py)
     model_id: str = "claude-haiku-4-5-20251001"   # AIC-1.1: "a starting suggestion, not a guarantee";
@@ -114,6 +134,13 @@ class ModelSettings:
     project: str | None = None                     # Vertex only; falls back to $GOOGLE_CLOUD_PROJECT
     region: str | None = None                      # Vertex only; falls back to $CLOUD_ML_REGION, then "global"
     max_tokens: int = 2048
+    temperature: float | None = None  # unset: provider default; installed Anthropic SDK has no temperature argument
+    request_timeout_s: float = 30.0
+    max_retries: int = 0             # application retries only; SDK retries are disabled
+    retry_backoff_s: float = 0.25
+    max_payload_bytes: int = 128 << 10
+    prices: ModelPrices | None = None
+    offline_responses_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -129,7 +156,8 @@ class RunConfig:
     context_condition: str = "C2"
     runner: str = "docker"           # docker: isolated containers; subprocess: trusted code only (AIC-009)
     calibration_path: str | None = None   # a frozen A/A calibration; without it the run calibrates at start
-    output_dir: str = "runs/latest"
+    output_dir: str | None = None     # None: unique runs/<run-id>; explicit paths must not already exist
+    proposal_only: bool = False       # save a locally validated proposal; never evaluate its source
     benchmark: BenchmarkSettings = field(default_factory=BenchmarkSettings)
     measurement: MeasurementProtocol = field(default_factory=MeasurementProtocol)
     model: ModelSettings = field(default_factory=ModelSettings)
@@ -177,6 +205,10 @@ def _coerce(hint: Any, value: Any, path: str) -> Any:
     if hint is str:
         if not isinstance(value, str):
             raise ConfigError(f"{path}: expected a string, got {_type_name(value)} {value!r}")
+        return value
+    if hint is bool:
+        if type(value) is not bool:
+            raise ConfigError(f"{path}: expected a boolean, got {_type_name(value)}")
         return value
     raise ConfigError(f"{path}: unsupported field type {hint!r}")
 
@@ -241,7 +273,42 @@ def validate(cfg: RunConfig) -> None:
         raise ConfigError(f"run_config.model.provider: must be one of {PROVIDERS}, got {cfg.model.provider!r}")
     if cfg.model.max_tokens <= 0:
         raise ConfigError("run_config.model.max_tokens: must be positive")
+    validate_model(cfg.model)
     validate_protocol(cfg.measurement, path="run_config.measurement")
+
+
+def validate_model(model: ModelSettings):
+    """Validate transport settings and price identity even for direct Python API callers."""
+    from datetime import date
+    from urllib.parse import urlsplit
+    _build(ModelSettings, dataclasses.asdict(model), path="model")
+    if not model.model_id.strip() or model.max_tokens <= 0:
+        raise ConfigError("model: nonempty model_id and positive max_tokens required")
+    if model.temperature is not None and (model.provider != "gemini-vertex" or not 0 <= model.temperature <= 1):
+        raise ConfigError("model.temperature: only Gemini accepts an explicit temperature in [0, 1]")
+    if not 0 < model.request_timeout_s <= 600:
+        raise ConfigError("model.request_timeout_s: must be in (0, 600]")
+    if type(model.max_retries) is not int or model.max_retries < 0 or not 0 <= model.retry_backoff_s <= 5:
+        raise ConfigError("model: max_retries must be nonnegative and retry_backoff_s in [0, 5]")
+    if type(model.max_payload_bytes) is not int or not 1024 <= model.max_payload_bytes <= 1 << 20:
+        raise ConfigError("model.max_payload_bytes: must be in [1024, 1048576]")
+    if model.prices is not None:
+        p = model.prices
+        if (p.schema_version != "model_prices/v1" or p.provider != model.provider or p.model_id != model.model_id):
+            raise ConfigError("model.prices: schema/provider/model_id must match the configured model")
+        if len(p.currency) != 3 or not p.currency.isascii() or not p.currency.isupper() or not p.currency.isalpha():
+            raise ConfigError("model.prices.currency: expected a three-letter uppercase currency")
+        if any(not math.isfinite(v) or v <= 0 for v in (p.input_per_million, p.output_per_million)):
+            raise ConfigError("model.prices: finite positive input/output rates required")
+        try:
+            checked = date.fromisoformat(p.checked_date)
+            if checked.isoformat() != p.checked_date or checked > date.today():
+                raise ValueError("invalid date")
+        except ValueError as error:
+            raise ConfigError("model.prices.checked_date: ISO date required, not in the future") from error
+        url = urlsplit(p.source_url)
+        if url.scheme != "https" or not url.netloc or url.username or url.password:
+            raise ConfigError("model.prices.source_url: HTTPS provenance URL required, without credentials")
 
 
 def validate_protocol(p: MeasurementProtocol, path: str = "measurement") -> None:
@@ -349,7 +416,43 @@ def resolve_run_config(cli: dict[str, Any], config_path: Path | None) -> RunConf
 PROPOSAL_SCHEMA = "proposal/v1"
 EVALUATION_SCHEMA = "evaluation/v1"
 ATTEMPT_SCHEMA = "attempt/v1"
+RUNTIME_TRACE_SCHEMA = "runtime_trace/v1"
+PROFILE_COVERAGE = ("CPU_EXECUTION_EVENTS", "DEVICE_EXECUTION_EVENTS", "HOST_ONLY", "UNAVAILABLE")
 MAX_PROPOSAL_TEXT_CHARS = 2000          # each free-text field; the source has its own byte limit
+
+
+@dataclass(frozen=True)
+class RuntimeTrace:
+    """Observed profiler data, separate from unprofiled latency and compiler estimates.
+
+    Durations are inclusive interval unions on individual lanes. Different names or lanes may overlap;
+    they are never percentages of benchmark time. An unavailable observation has a reason, not zero time.
+    """
+    coverage: str
+    reason: str
+    provenance: dict
+    artifact: str | None = None
+    artifact_sha256: str | None = None
+    annotation: dict | None = None
+    lanes: tuple = ()
+    hotspots: tuple = ()
+    n_events: int = 0
+    invalid_events: int = 0
+    ignored_events: int = 0
+    omitted_lanes: int = 0
+    parser_version: str = "perfetto_summary/v1"
+    schema_version: str = RUNTIME_TRACE_SCHEMA
+
+    def __post_init__(self):
+        if self.schema_version != RUNTIME_TRACE_SCHEMA:
+            raise ContractError(f"runtime_trace.schema_version: expected {RUNTIME_TRACE_SCHEMA!r}")
+        if self.coverage not in PROFILE_COVERAGE:
+            raise ContractError(f"runtime_trace.coverage: unknown coverage {self.coverage!r}")
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ContractError("runtime_trace.reason: required")
+
+    def to_json(self) -> dict:
+        return dataclasses.asdict(self)
 
 
 @dataclass(frozen=True)
@@ -409,6 +512,7 @@ class Evaluation:
     sessions: tuple = ()                   # [{"raw": PairedSession json, "analysis": SessionAnalysis json}]
     environment: dict | None = None        # worker device info and runner identity
     ir: dict | None = None                 # compiler feedback summary (AIC-010)
+    runtime_trace: dict | None = None      # observed profile, collected outside measurement (AIC-011)
     logs: dict | None = None               # bounded stdout/stderr tails
     failure_category: str | None = None
     unavailable: dict = field(default_factory=dict)

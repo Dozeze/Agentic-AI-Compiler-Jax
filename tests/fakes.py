@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from types import SimpleNamespace
+from providers import OfflineClient
 
 
 def tool_use(block_id: str, name: str, tool_input: dict) -> SimpleNamespace:
@@ -21,15 +22,14 @@ class FakeMessages:
     calls: list[dict] = field(default_factory=list)
 
     def create(self, **kwargs):
-        # The controller passes the SAME messages list object on every call and appends to it in place,
-        # so store a shallow snapshot of what was sent at this moment.
+        # Preserve the message list supplied for each proposal's context.
         self.calls.append({**kwargs, "messages_snapshot": list(kwargs.get("messages", []))})
         blocks = self.script.pop(0) if self.script else []
         return SimpleNamespace(content=blocks, stop_reason="tool_use" if blocks else "end_turn",
                                usage=SimpleNamespace(input_tokens=100, output_tokens=10))
 
 
-class FakeAnthropic:
+class FakeAnthropic(OfflineClient):
     """Replays a fixed script of assistant turns; an exhausted script returns an empty turn."""
 
     def __init__(self, script, **_ignored):
@@ -37,7 +37,7 @@ class FakeAnthropic:
 
 
 def proposal(source: str, **fields) -> dict:
-    """A complete benchmark_code input (Proposal v1) around `source`."""
+    """A complete submit_proposal value (Proposal v1) around `source`."""
     return {"hypothesis": "test hypothesis", "transformation": "test transformation",
             "rationale": "test rationale", "expected_effect": "none expected",
             "candidate_source": source, **fields}

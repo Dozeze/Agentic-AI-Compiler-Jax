@@ -1,21 +1,25 @@
 For Jonathan L:
 
-Install the locked CPU development environment and run a bounded optimization loop:
+Install the locked CPU development environment and run an offline proposal smoke check:
 
 ```bash
 uv sync --locked
-uv run --locked python agent.py --iterations 1
+uv run --locked python agent.py --backend cpu --proposal-only \
+  --offline-responses tests/fixtures/provider_responses.json
 ```
 
-The command reads `ANTHROPIC_API_KEY` from `.env.local`. Increase `--iterations` after
-the first smoke run. Add `--plot` only when a graphical runtime plot is wanted.
+This uses no credential or network and never imports the reference or evaluates the proposed source.
+The output is explicitly unverified. For a live optimizer run, a key alone is insufficient: supply a
+reviewed `--config live_run.json` with a money cap, currency and matching dated model prices/provenance.
+See README's AIC-013 section for the required fields and conservative accounting policy. No cap or real
+prices are configured by default. Add `--plot` only when a graphical runtime plot is wanted.
 
 On Linux with a compatible NVIDIA GPU, use the already locked CUDA 12 extra:
 
 ```bash
 uv sync --locked --extra cuda12
 uv run --locked --extra cuda12 python -c "import jax; print(jax.devices())"
-uv run --locked --extra cuda12 python agent.py --iterations 1 --require-gpu
+uv run --locked --extra cuda12 python agent.py --backend cuda --require-gpu --runner subprocess --iterations 0
 ```
 
 `--require-gpu` stops before calling Claude if JAX only finds a CPU. There is
@@ -41,15 +45,24 @@ Run that file with:
 
 ```bash
 uv run --locked python agent.py --source workloads/example.py \
-  --function bad_func --iterations 3 --output-dir runs/example
+  --function bad_func --iterations 3 --output-dir runs/example --config live_run.json
 ```
 
 On the GPU machine, add `--extra cuda12` after `--locked` and `--require-gpu`
 after `agent.py` to this command.
 
-Each evaluation writes `iteration_0000.json`, `iteration_0001.json`, and so on,
-plus a cumulative `history.json`. The JSON records include the complete candidate
-source, unified source diff, runtime mean/std, correctness, and accept/reject decision.
+Use a new `--output-dir` each time; existing directories are refused before a provider request.
+Omitting it creates a unique `runs/<run-id>`. Each completed attempt saves exact source, proposal,
+evaluation and raw-artifact hashes under `attempts/<id>/`, then publishes `record.json` last.
+`history.json` and `iteration_0000.json`, `iteration_0001.json`, etc. are derived from committed attempts.
+`best.py` contains the latest verified incumbent, or the baseline if no candidate wins; `best.json`
+records its source hash and verification scope. The original workload file is preserved. This export
+does not perform the later final/held-out checks. See README's durable-artifact section for inspection.
+
+Each proposal also saves `contexts/NNNN.json` and `contexts/NNNN.selection.json` before dispatch.
+They contain the exact bounded context, byte accounting, included fields and omitted attempt IDs.
+The 24 KiB feedback cap and full-request budget checks preserve constraints and the latest outcome;
+see README's AIC-014 section for the selection policy and ablation conditions.
 
 ## Backend and run configuration
 
@@ -57,8 +70,8 @@ Select the JAX backend explicitly; the run stops with exit code 2 if it is unava
 falling back to CPU:
 
 ```bash
-uv run --locked python agent.py --backend cpu --source workloads/example.py --function bad_func --iterations 1
-uv run --locked --extra cuda12 python agent.py --backend cuda --require-gpu --iterations 1   # inside WSL2 on the NV host
+uv run --locked python agent.py --backend cpu --source workloads/example.py --function bad_func --iterations 1 --config live_run.json
+uv run --locked --extra cuda12 python agent.py --backend cuda --require-gpu --iterations 1 --config live_run.json   # inside WSL2 on the NV host
 ```
 
 `--config run.json` loads a JSON `RunConfig v1` (fields in `contracts.py`), for example:
@@ -69,6 +82,8 @@ uv run --locked --extra cuda12 python agent.py --backend cuda --require-gpu --it
 
 Precedence is CLI > config file > defaults. `--iterations` defaults to 3 (changed from 10 to match the
 AIC-1.1 §7 development ceiling). Each run directory also contains `run_config.json` and `manifest.json`.
+The small config above illustrates model selection only; live calls also need the money and price fields
+described in README. A zero candidate budget needs no provider client, key or prices.
 
 ## Isolated evaluation, workloads and providers (batches 02–03)
 
@@ -77,7 +92,7 @@ change (the tag is a content hash), then run:
 
 ```bash
 uv run --locked python scripts/build_worker_image.py                 # --variant cuda12 on the NV host
-uv run --locked python agent.py --backend cpu --workload softmax --iterations 2
+uv run --locked python agent.py --backend cpu --workload softmax --iterations 2 --config live_run.json
 ```
 
 - `--workload softmax|example_add` picks a registered workload; `--source/--function` still works (not scientific).
@@ -93,7 +108,7 @@ uv run --locked python agent.py --backend cpu --workload softmax --iterations 2
   `export GOOGLE_CLOUD_PROJECT=<project>` (optionally `CLOUD_ML_REGION`, default `global`).
 
 ```bash
-uv run --locked python agent.py --backend cpu --workload softmax --provider gemini-vertex --iterations 1
+uv run --locked python agent.py --backend cpu --workload softmax --provider gemini-vertex --iterations 1 --config live_run.json
 ```
 
 Each run directory holds `run_config.json`, `manifest.json` (with `scientific` and its reasons), `history.json`

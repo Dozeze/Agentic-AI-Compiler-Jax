@@ -3,6 +3,350 @@
 Evidence log: what each task did, the commands run, their actual output, and deviations.
 The current-state snapshot is `AI_CONTEXT.md`.
 
+## AIC-014 — Bounded proposal context · 2026-11-16 · status: DONE
+
+- Authorization: user requested "continue with the next task" after AIC-013. Implement bounded context
+  selection and offline evidence; no paid calls, provisioning or pending target acceptance.
+- Starting point: AIC-013 full suite 537 passed / 16 Docker-CUDA skips. Preserve previous working-tree
+  changes and planning documents. JAX/jaxlib and dependencies remain unchanged.
+- Policy: 24 KiB serialized metadata plus current source under its separate source cap; the full provider
+  request must also fit remaining conservative token/money reservations. Keep constraints and latest
+  outcome, remove historical snippets first, then optional older outcomes. Save exact prompt bytes,
+  included fields and omitted IDs before dispatch. All four acceptance criteria evidenced below.
+
+### Implemented behavior and scope
+
+- `context_builder.py`: deterministic `proposal_context/v1` and external `context_selection/v1`. Positive
+  allowlists expose the development workload contract, selected host environment/runner and worker population,
+  frozen correctness rules, current source, baseline/incumbent hashes, remaining budgets and measured feedback.
+  Five recent nonpromoted outcomes include slower/no-change rejections; at most three accepted rewrites are
+  selected. Baseline, incumbent and latest result are mandatory. Full history remains in durable artifacts.
+- Paired medians/standard deviations and speedup confidence intervals retain protocol/source identities
+  and hashed evaluation references. Evaluator session records now identify both measured sources explicitly.
+  Baseline/incumbent timing comes only from identified sessions in mandatory evidence, with an explicit
+  unavailable reason otherwise. These are search measurements, not final verification or a gain claim.
+- Compiler summaries preserve parser/backend/signature provenance and label estimates separately from
+  measurements. C3/C4/K receive them; only C4 receives runtime coverage/reasons and per-lane/name union
+  durations, counts and artifact hashes. CPU/device/host-only/unavailable labels are preserved. Raw traces
+  and IR remain in evidence files. No model-generated performance facts or retrieval service is introduced.
+- Serialized metadata is capped at 24 KiB, current source separately at `Budgets.max_source_bytes` (64 KiB
+  default). Historical source snippets are at most 2 KiB; diagnostics are bounded to 2 KiB, proposal text and
+  hotspot labels to 512 bytes. Truncations are recorded. Remove optional snippets before older optional
+  outcomes; preserve mandatory summaries/constraints or stop with `CONTEXT_BLOCKED` before a call.
+  `ProposalProvider.context_fits` checks the exact encoded whole body against payload, remaining token and
+  Decimal money ceilings without consuming a request. The existing reservation check still runs per retry.
+- Known environment/SDK credentials are redacted before accounting; current source containing a credential
+  is refused rather than rewritten. Raw logs, raw IR, raw timing blocks, input arrays and split seeds are
+  excluded. Development-case allowlists and diagnostic split guards refuse other evaluation populations.
+  Source comments, proposal text and diagnostics are untrusted data beneath the provider system policy.
+- `RunStore.reserve_request` publishes exact context bytes and selection manifest under `contexts/NNNN.*`
+  before the reservation and SDK call. The manifest records included field paths, omitted IDs/reasons,
+  truncations, source/metadata/payload bytes and SHA256. Reservations reference both files; committed
+  attempts also hash-link them, so best-artifact verification detects context tampering. Publication or
+  snapshot/hash mismatch stops dispatch. Existing raw evidence is preserved. Proposal-only CLI uses the
+  same bounded context policy without importing/evaluating source.
+
+### Validation and retained evidence
+
+- Focused context suite: `uv run --locked --offline pytest tests/test_context.py -q`:
+  **31 passed in 17.00 s**. Covers actual native compile/correctness failures in subsequent prompts,
+  deterministic window/truncation, a 601-record history, UTF-8/encoded payload/token/money caps, provenance,
+  baseline/incumbent distinction, all context conditions/coverage labels, secret/split exclusion, source
+  injection as data, pre-dispatch publication, publication failure and context tampering.
+- Affected controller/CLI/Gemini/runtime regression run: **109 passed / 3 target skips**, 134.22 s.
+- Final full suite: `uv run --locked --offline pytest -q`: **568 passed / 16 skipped**, 257.57 s.
+  Skips are 12 Docker checks (worker image build unavailable) and 4 CUDA checks (backend unavailable).
+  Two existing google-genai SyntaxWarnings remain. These skips do not waive pending target acceptance.
+- Retained actual C4 CPU run: `runs/aic-014-context-validation-20261116/validation.json` and its three
+  context/selection/reservation files. Offline model fixtures propose reviewed invalid-reshape and wrong
+  subtraction code; real CPU workers produce `COMPILE_FAILED` then `CORRECTNESS_FAILED`. Request 2 sees
+  the compile failure and request 3 sees the correctness failure. The final empty provider response is
+  durably recorded; best remains the verified original baseline. No timing or improvement claim is made.
+- Exact metadata byte counts: **6335 / 7934 / 10817**, all <= 24576. Whole request byte counts:
+  **10293 / 12048 / 15222**; reservations (input bytes + 4096 framing, plus 2048 output) each fit the
+  configured 30000-token ceiling. All context/selection hashes, evaluation provenance and baseline export
+  independently verified. Original source before/after SHA256 is
+  `bd07354a813c3153d69f975a9f445512c4dd3c7b55476c326793932c5e096df3`.
+- The initial evidence driver completed its run/assertions but used the wrong best-index key while writing
+  the final summary; fixed the verification helper and independently read the existing artifacts to publish
+  `validation.json`. No worker/provider execution resumed and no committed evidence was overwritten.
+- Environment-only test prefix is unchanged from AIC-013: Homebrew OpenSSL fallback, temporary UV and
+  Matplotlib caches and `PYTHONDONTWRITEBYTECODE=1`. JAX/jaxlib remain 0.4.38; `uv.lock` is unchanged.
+  CPU reviewed-fixture evidence is not Docker/CUDA acceptance, live provider proof, billing certification
+  or profiling-benefit evidence. No paid calls were made. Full controller budgets remain AIC-015;
+  live proof AIC-016, execution recovery AIC-019, reporting AIC-020.
+- Acceptance: prior outcomes in subsequent requests, size caps, metric provenance and separate original/
+  current-best identities verified. Next immediate task: **AIC-015**, bounded controller integration.
+
+## AIC-013 — Structured proposals and provider budgets · 2026-11-16 · status: DONE (offline software scope)
+
+- Authorization: user requested "proceed with the next task" after AIC-012. Scope is the structured
+  provider boundary, request budgets/accounting, offline replay and proposal-only mode. No paid provider
+  call, provider migration, later task or pending hardware acceptance is authorized by this instruction.
+- Starting baseline: AIC-012 full suite 470 passed / 16 Docker-CUDA skips; preserve all previous changes
+  and pre-existing untracked planning documents. JAX/jaxlib and the lockfile stay unchanged.
+- Prices are explicit configuration with dated provenance; no real rate or money cap is invented or
+  enabled by default. HTTP mock accounting fixtures are explicitly synthetic, with zero remote calls.
+
+### Implemented behavior and scope
+
+- `providers.ProposalProvider.propose(context) -> Proposal` is the sole controller SDK dispatch boundary.
+  Exactly one `submit_proposal` tool value is accepted, with local Proposal v1 validation independent of
+  the tool schema. Unknown/multiple calls, malformed/refused/truncated/oversize responses and unexpected
+  response models stop dispatch. Invalid proposal fields create `PROPOSAL_INVALID` attempts without
+  evaluating source. The host alone applies source policy and invokes the evaluator.
+- `controller.py` removes provider-driven inspection/evaluation tools. Each call gets a fresh context
+  containing current source, compact measured history, constraints and budget summary. Deterministic context
+  selection/trimming remains AIC-014; this task applies hard request byte limits and conservative token checks.
+  CLI and direct-loop zero candidates make no request. CLI zero candidates construct no provider client.
+- `contracts.py`: strict optional `ModelPrices` (`model_prices/v1`), provider/model/currency identity, positive
+  input/output price ceilings, ISO checked date and HTTPS provenance URL; transport/retry/payload settings;
+  `proposal_only` and offline response path. Live mode requires explicit cap, currency and dated matching
+  prices, before client construction in the CLI and before dispatch for injected SDK callers. Default
+  provider/model IDs are unchanged. Real prices/cap remain unset, so default live calls are disabled.
+- Every attempt reserves serialized request bytes + 4096 framing tokens for input, configured output ceiling
+  and Decimal cost at the declared price ceilings. `provider_reservation/v1` is atomically saved under
+  `request_reservations/NNNN.json` before dispatch, with full bounded/redacted structured parameters, SHA256,
+  local ID, retry number, timeout and price provenance. This conservative input policy is not a vendor-certified
+  tokenizer bound or billing guarantee. Overrun is recorded/charged and stops the run, not silently clipped.
+- Known usage reconciles reservations; missing components retain their full debit. Failed/unknown calls
+  retain their debit, including 429/timeouts. Requests, cumulative tokens, money and remaining time are
+  checked before each retry. SDK retries are disabled; `model.max_retries` defaults to 0. Default I/O timeout
+  is 30 s, shortened to remaining time; late responses are rejected. Full optimizer/worker deadlines remain
+  AIC-015, and a client timeout cannot guarantee remote cancellation or final billing.
+- Cached, priority or server-tool billing is not enabled/supported; unexpected usage stops the loop instead
+  of assuming free tokens/features. Bounded outcome records retain IDs or unavailability reasons, normalized
+  redacted payloads, usage, accounting, refusals/errors and timing. Literal SDK keys, environment credentials,
+  sensitive fields and credential-bearing dictionary keys are redacted. Source containing a known credential
+  is refused; other proposal metadata is redacted without modifying executable source bytes.
+- `storage.py`: immutable reservation/outcome references, hashed attempt links and provider stop artifacts.
+  Failed publication prevents another dispatch. Reservations without outcomes remain uncertain, with no
+  automatic replay; recovery is AIC-019. `save_proposal` publishes unverified proposal-only artifacts, with
+  no attempt/best export or implied correctness/performance result.
+- `agent.py`: `--offline-responses FILE` (deterministic local Messages-shaped JSON array) and `--proposal-only`
+  (reads reference text, skips workload import/runner/evaluation, writes `proposed.py`, `proposal.json` and
+  `proposal_only_result.json` with `verified: false`). The live-money gate also applies to live proposal-only.
+  Checked-in `tests/fixtures/provider_responses.json` provides an explicit offline/synthetic protocol example.
+- `gemini.py` keeps the existing provider behind the same boundary, disables hidden SDK/application retries
+  in its transport, applies per-request HTTP options and preserves missing usage rather than inventing zeros.
+  Existing adapter/controller fixtures pass. No provider migration or dependency/lockfile changes.
+- Installed Anthropic SDK 1.3.0 has no `temperature` argument. The real SDK/HTTP-mock test caught this, and
+  Anthropic requests now omit it; an explicit temperature is supported only for Gemini. Thinking is disabled
+  for Anthropic requests and first-party requests explicitly select standard service tier.
+
+### Verification and retained evidence
+
+All commands used the existing host SSL workaround and temporary caches, without changing project dependencies:
+
+```bash
+DYLD_FALLBACK_LIBRARY_PATH=/usr/local/opt/openssl@3/lib \
+UV_CACHE_DIR=/private/tmp/aic-011-uv-cache MPLCONFIGDIR=/private/tmp/aic-011-mpl \
+PYTHONDONTWRITEBYTECODE=1 uv run --locked --offline pytest -q tests/test_provider.py
+```
+
+- Required standalone provider command: **67 passed in 20.15 s**; no secrets, network or skipped cases.
+  Cases cover installed SDK response objects and actual SDK calls through local HTTP mocks, malformed tools,
+  refusals, truncation, timeouts, rate limits/auth failures, partial/unknown/invalid usage, cap exhaustion,
+  missing cap/prices, literal-key redaction, pre-dispatch/outcome storage failures and direct-loop zero budgets.
+- Focused provider/foundation command: **90 passed in 72.97 s**. Earlier affected regression commands passed
+  **200 tests** (CLI/foundation/storage/contracts/provider/Gemini) and **125 tests** (provider/contracts/Gemini).
+- An initial full run had **534 passed, 1 failed, 16 skipped**: CPU contention made an A/A session's
+  IQR/median 1.026 exceed the test protocol's 1.0 limit. The harness correctly stopped. The provider/history
+  integration test now scripts timing while retaining real correctness workers; production calibration,
+  tolerances and decision rules are unchanged, with their independent tests retained. This removes an
+  accidental host-speed dependency rather than weakening production acceptance.
+- Final full-suite command, same prefix: `uv run --locked --offline pytest -q` — **537 passed, 16 skipped,
+  2 warnings in 261.23 s**. Twelve skips require Docker/a buildable worker image; four require CUDA. Two
+  unchanged google-genai SyntaxWarnings. No AIC-013 mandatory test was skipped; earlier target gates remain open.
+- Actual CLI smoke, same prefix: `uv run --locked --offline python agent.py --backend cpu --proposal-only
+  --offline-responses tests/fixtures/provider_responses.json --output-dir runs/aic-013-proposal-only-validation-20261116`.
+  Exit 0; retained unverified source/result, no `work/` or `best.py`, no original import/execution or remote call.
+- Retained SDK/accounting evidence: `runs/aic-013-sdk-validation-20261116-reviewed/validation.json`, generated
+  by `/private/tmp/aic-013-sdk-evidence.py` through the installed Anthropic SDK and `httpx2.MockTransport`.
+  Run ID `20261116T131701.080274Z-141c7d9455fa`. Two local HTTP attempts: 429 then valid proposal; both SDK
+  retry headers `0`, both read timeouts 30 s; server fixture IDs captured. Synthetic prices/provenance are
+  explicitly marked; event `mode: live` exercises the authorization branch, while manifest/validation identify
+  the transport as an offline HTTP mock. This is not a live provider/availability or optimization claim.
+- Accounting fixture: 8961 tokens charged conservatively (8944 reserved for unknown first-call usage + 17
+  reported on success), synthetic debit `0.017181 USD`, **zero actual spend/remote calls**. Redacted
+  request/reservation files are hash-linked and independently rechecked. Original source before/after SHA256:
+  `bd07354a813c3153d69f975a9f445512c4dd3c7b55476c326793932c5e096df3` (343 bytes).
+  Validation fingerprints match all current core files and the unchanged lockfile; original source is preserved.
+- Primary protocol checks: installed SDK `Messages.create`/`with_options` signatures, Usage schema, and
+  google-genai `HttpOptions`/`HttpRetryOptions`; Anthropic's [token-counting docs](https://platform.claude.com/docs/en/build-with-claude/token-counting)
+  describe counting as an estimate, and [prompt-caching docs](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)
+  distinguish cache input categories. No live token-counting endpoint or price lookup is part of dispatch.
+- `git diff --check` passes. Prior changes and pre-existing untracked planning files remain preserved; no
+  commit, push, dependency upgrade, paid provider call, cloud provisioning or milestone acceptance.
+- Acceptance: all five AIC-013 criteria verified offline. G-07 remains partial for AIC-014 context selection
+  and AIC-016 live proof. Stage-wide budgets/deadlines remain AIC-015, recovery AIC-019. Next task: AIC-014.
+
+## AIC-012 — Durable run artifacts · 2026-11-16 · status: DONE (offline storage scope)
+
+- Authorization: the user requested "proceed with the next task" after the AIC-011 implementation report;
+  the next task is AIC-012. This authorizes storage implementation and offline tests, not acceptance of
+  pending Docker/CUDA checks, paid calls, recovery implementation (AIC-019) or later tasks.
+- Starting HEAD `12c805e`, branch `sergio/batch-03`, with all previous AIC-011 source/documentation changes
+  and the six original untracked planning files preserved. The AIC-011 final suite was 421 passed / 16 skipped.
+- Scope: unique non-overwriting runs, shared strict atomic writes, immutable source/request/attempt evidence,
+  commit-record-last persistence, derived history and validated best-source export.
+
+### Implemented behavior
+
+- `storage.py`: default timestamp/UUID run IDs, exclusive run reservation, shared strict JSON/byte writers
+  with file fsync and atomic publication. Immutable artifacts use exclusive publication; collisions never
+  replace existing runs or evidence. Parent-controlled paths reject traversal, symlinks and special files.
+- Manifest/config/environment/baseline have exact SHA256 identities. `manifest/v1` records the run ID,
+  creation time, config hash and references, alongside the existing environment/device/lock provenance.
+  CLI config stays `run_config/v1`; direct Python API snapshots use `direct_run_config/v1` and an explicit
+  non-scientific reason instead of claiming a resolved CLI config.
+- Immutable `provider_request_event/v1` metadata lives in `requests/NNNN.json`; `requests.json` is derived.
+  `attempts/NNNN/` retains `source.py`, proposal/evaluation, raw measurements, feedback and request references
+  as available. Invalid submissions have a bounded `proposal_submission/v1` artifact with an omission reason.
+  `attempt_commit/v1` in `record.json` is published last, with identities/hashes for source, metadata and raw
+  worker artifacts. Sources are never imported during index generation or reporting.
+- `history.json`, compatibility `iteration_NNNN.json`, `best.py` and `best/v1` are derived only after a commit.
+  Source/evaluation/proposal hashes and host acceptance/correctness evidence are checked. Best falls back to
+  the verified baseline. Its scope names the development cases/policy and explicitly leaves final and
+  held-out verification unperformed. `storage.verified_best(path)` rejects corrupt evidence or stale exports.
+- `agent.py` / `controller.py`: lazy construction, reservation before baseline/LLM requests, configured byte
+  budgets forwarded, persistence before in-memory promotion and request append. Publication failure prevents
+  further execution on that controller; no automatic retry/replay. Host-side runner outcome and bounded,
+  redacted stdout/stderr artifacts are retained even for worker failure.
+- Baseline source is frozen in `Evaluator`; `controller.py`, `workloads/registry.py` and `worker.py` preserve
+  UTF-8 bytes including CRLF for consistent source/profile hashes. The user's source is never written.
+- Metadata filters credential fields and known credential values; executable source containing a known
+  credential is refused rather than rewritten. Host source/artifact limits fail closed without deleting
+  correctness/timing evidence. An active worker has no filesystem quota: its files can exceed the host cap
+  before the post-worker publication check. This limitation is recorded, not represented as hard disk isolation.
+- Each derived file is atomic, not a transaction across all indexes. Failure after a commit can leave stale
+  history/best; verification rejects a stale best pointer. Valid commits can regenerate indexes through
+  `RunStore.derive_indexes()`; execution resume/request recovery remains AIC-019, reporting remains AIC-020.
+- README/how_to_run, `AI_CONTEXT.md` sections 5/6/9, task status and the G-09/O-05 entries are updated.
+  Prior AIC-011 changes and the pre-existing untracked planning files remain preserved. No dependency,
+  lockfile, commit, push or live provider changes.
+
+### Verification
+
+Tests use this environment prefix (the same host SSL workaround as AIC-011; no project/dependency changes):
+
+```bash
+DYLD_FALLBACK_LIBRARY_PATH=/usr/local/opt/openssl@3/lib \
+UV_CACHE_DIR=/private/tmp/aic-011-uv-cache MPLCONFIGDIR=/private/tmp/aic-011-mpl \
+PYTHONDONTWRITEBYTECODE=1 uv run --locked --offline pytest -q tests/test_storage.py
+```
+
+- Final storage command: **47 passed in 12.44 s**. Includes real CPU baseline/profile workers, CRLF source
+  hashes, in-run worker ownership and original-byte preservation; no statistical speed assertion.
+- Earlier affected regressions: **99 passed in 81.72 s** (storage, CLI, backend portability and held-out
+  separation). A full run before the final CRLF/direct-API coverage additions was **468 passed / 16 skipped**
+  in 228.17 s.
+- Final full-suite command, with the same prefix: `uv run --locked --offline pytest -q` — **470 passed,
+  16 skipped, 2 warnings in 209.67 s**. Twelve skips require Docker/a built worker image (image build is
+  unavailable here); four require CUDA. Two unchanged google-genai SyntaxWarnings. No storage check is skipped.
+- Retained native CPU evidence: `runs/aic-012-cpu-validation-20261116-final/validation.json`. Generated using
+  `/private/tmp/aic-012-cpu-evidence.py` with the same environment prefix and `uv run --locked --offline python`.
+  One offline `FakeAnthropic` request; real trusted workers; states `ACCEPTED` (baseline),
+  `CORRECTNESS_FAILED` (32/32 numerical mismatches). `best.py` is the baseline, with its verification scope.
+  All commit references and best hashes re-read and verified. Raw artifact inventories: 23 for baseline,
+  37 cumulative after the rejected candidate. The validation file fingerprints the actual core sources and lockfile.
+- Run ID `20261116T122558.389126Z-c6d32432806e`; baseline/best/original-before/original-after SHA256 all equal
+  `bd07354a813c3153d69f975a9f445512c4dd3c7b55476c326793932c5e096df3` (343 bytes).
+  No original source, lockfile or dependency versions changed. Sample artifacts remain ignored under `runs/`.
+- `git diff --check` passed. Docker/CUDA acceptance for earlier tasks remains separate; this task's storage
+  invariants are verified offline on CPU. No live provider call or accelerator performance claim.
+- Acceptance: independent paths/collision refusal, complete committed identity/evidence, validated best
+  source/baseline fallback, and exclusion of partial attempts all verified. AIC-012 is done; G-09 remains
+  partial until AIC-019 recovery and AIC-020 reporting. The next immediate task is AIC-013; no later task
+  or pending target milestone has been marked accepted.
+
+## AIC-011 — Runtime profile feedback · 2026-11-16 · status: BLOCKED for selected-target acceptance
+
+- Authorization: the user requested implementation of the next immediate task after the assessment identifying
+  G-06 / AIC-011. This authorizes this task's implementation and offline verification; it does not accept M1/M2,
+  authorize paid provider calls, or establish CUDA verification.
+- Starting source: `12c805e`, branch `sergio/batch-03`. Six untracked planning documents already existed; they
+  are preserved. AIC-010 compiler feedback is present; selected-target acceptance remains pending on the NV host.
+- Scope: bounded runtime traces in separate worker requests, conservative coverage and overlap accounting,
+  baseline/promoted-incumbent profiles, and profile context under C4. Preserve unprofiled timing and C2/C3.
+- `uv sync --locked` installed the missing locked test dependencies without changing
+  the lockfile. Initial test collection exposed a pre-existing Homebrew Python SSL library path mismatch
+  (`openssl@3/3.6.1` absent, installed `3.6.4`); verification uses
+  `DYLD_FALLBACK_LIBRARY_PATH=/usr/local/opt/openssl@3/lib`, with no system or repository workaround.
+
+### Implemented behavior and files
+
+- `contracts.py`: `runtime_trace/v1`, explicit coverage/reason, source/device provenance, artifact identity and
+  bounded summaries; `Evaluation.runtime_trace` separates observed events from compiler estimates/timing.
+- `feedback.py`: five annotated synchronized calls after five warmups; raw Perfetto gzip capped at 8 MiB,
+  decoded JSON at 32 MiB and 100,000 events. Temporary duplicate exports are discarded. Complete-event
+  timestamps, annotation scope and explicit device metadata are validated. Foreign device lanes are
+  unattributed, host dispatch cannot establish device execution, and CPU observations remain executable-level.
+- Interval unions remove overlap within each lane/name. Inclusive durations across names/lanes may overlap;
+  no percentages, exclusive-duration claims or HLO-op attribution are produced. HOST_ONLY/UNAVAILABLE have no
+  hotspots; corrupt/unsupported/oversize/permission-denied profiles have explicit reasons.
+- `worker.py`: separate `profile` mode; lowering/compilation/warmup precede capture, never benchmark windows.
+- `controller.py`: profile baseline and promoted incumbents in fresh workers, after performance confirmation
+  for a candidate. Verify source hash, raw artifact path and SHA256 on the host. Optional profile failure
+  preserves the correctness/performance decision. Persist run-relative artifacts and expose observations only
+  under C4; C2/C3/K remain profile-blind. Held-out-only evaluation does not launch a development profile.
+- `tests/test_runtime_profile.py`: parser/corruption/bounds/foreign-device/overlap fixtures, capture ordering,
+  real CPU worker and baseline persistence, artifact forgery rejection, promotion/fallback and C4 visibility.
+  Real native CUDA and CPU/CUDA Docker checks are included for the target environment.
+- Updated `AI_CONTEXT.md` sections 5/6/9, README, task status, G-06 and R-06 evidence. The pre-existing untracked
+  planning files remain untracked; no commits, pushes, provider requests or dependency-version changes.
+
+### CPU evidence and verification
+
+Test environment prefix used for the commands below:
+
+```bash
+export DYLD_FALLBACK_LIBRARY_PATH=/usr/local/opt/openssl@3/lib
+export UV_CACHE_DIR=/private/tmp/aic-011-uv-cache
+export MPLCONFIGDIR=/private/tmp/aic-011-mpl
+export PYTHONDONTWRITEBYTECODE=1
+```
+
+- `uv run --locked --offline pytest -q tests/test_runtime_profile.py -m "not needs_docker"`:
+  **42 passed, 1 skipped (CUDA unavailable), 2 deselected (container checks)**, 4.61 s.
+- `uv run --locked --offline pytest -q`: **421 passed, 16 skipped**, 165.19 s, exit 0 on the final source.
+  Skips: 12 Docker checks (daemon unavailable) and 4 CUDA-marked checks (CUDA unavailable, including the GPU
+  container cases). Two existing google-genai invalid-escape SyntaxWarnings remain. These skips are unexecuted
+  acceptance checks, not evidence of containment/device support. `git diff --check` also passes.
+- Trusted CPU reference validation: `uv run --locked --offline python /private/tmp/aic-011-cpu-evidence.py
+  /Users/hej/Agentic-AI-Compiler-Jax runs/aic-011-cpu-validation-20261116` (temporary driver, no provider).
+  Replayable evidence is in `runs/aic-011-cpu-validation-20261116/validation.json` and `history.json`, including
+  environment/JAX/lock identities and SHA256 of all four changed harness modules. Raw trace retained at
+  `work/0002-baseline-profile/profile/perfetto_trace.json.gz` relative to that directory.
+  Coverage **CPU_EXECUTION_EVENTS**, 5 annotated calls, 228 events;
+  raw SHA256 `d49e9e46f07ef54a0ab0bfcbda4d3934bc65c996d7f418073899e83c5b24ba73`;
+  reference SHA256 `74fe461f76bb239bad8f2f5d638ff61dd31b8020bb5232991ee85390776a0c6f`.
+  These are CPU observation/implementation checks, not speedup or official CUDA evidence. The ignored run
+  artifacts are retained locally; tests reproduce them in temporary directories.
+
+### Remaining acceptance checks (not substituted by CPU or mock results)
+
+Docker CLI is installed, but the daemon is not running (also checked outside the filesystem sandbox).
+CUDA is unavailable here. Task implementation is CPU-verified; task acceptance and R-06 remain partial,
+and M1/M2/M3 gates are not passed by this change. A funded C4 live-context demonstration/study belongs to
+AIC-016/022–024; none was run or claimed here. No task beyond AIC-011 was started.
+
+On the NV host, with Docker and NVIDIA Container Toolkit running:
+
+```bash
+uv sync --locked --extra cuda12
+uv run --locked --extra cuda12 pytest -q tests/test_runtime_profile.py -m "not needs_docker" --require-gpu
+uv run --locked python scripts/build_worker_image.py --variant cpu
+uv run --locked python scripts/build_worker_image.py --variant cuda12
+uv run --locked --extra cuda12 pytest -q tests/test_runtime_profile.py -m needs_docker --require-docker --require-gpu
+```
+
+The CUDA checks require actual DEVICE_EXECUTION_EVENTS; missing CUPTI/device coverage fails instead of
+passing a host-only trace. Build hashes automatically include the changed worker, contracts and feedback.
+If the verified target cannot expose execution events, preserve explicit fallback coverage and request
+acceptance of that R-06 scope limitation at the M3 review; do not mark the original target check complete.
+
+
 ## Batch 03 (AIC-010, AIC-018, G-01 gaps, P8) · 2026-11-10 · owner: Sergio · status: AWAITING_ACCEPTANCE
 
 Branch `sergio/batch-03` (from `sergio/batch-02` at `7c6d745`). Same Mac and tools as batch 02; `google-genai`

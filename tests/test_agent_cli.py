@@ -32,7 +32,10 @@ class Recording(FakeAnthropic):
 
 anthropic.Anthropic = Recording
 import agent
-agent.main({argv!r})
+agent.client_factory = lambda settings: Recording()
+replay = __import__('pathlib').Path({out!r}).parent / 'offline-responses.json'
+replay.write_text('[]')
+agent.main([*{argv!r}, '--offline-responses', str(replay)])
 print(json.dumps({{"files_at_first_llm_call": calls[0] if calls else None, "n_calls": len(calls)}}))
 """
 
@@ -71,10 +74,10 @@ def test_backend_unavailable_exits_2_without_traceback(repo_root, clean_env, tmp
     assert "Traceback" not in proc.stderr
 
 
-def test_missing_key_writes_nothing(repo_root, clean_env, tmp_path):
+def test_missing_live_cap_writes_nothing(repo_root, clean_env, tmp_path):
     proc = _agent(repo_root, clean_env, tmp_path, "--backend", "cpu")
     assert proc.returncode != 0
-    assert "ANTHROPIC_API_KEY" in proc.stderr
+    assert "money_cap" in proc.stderr
     assert not (tmp_path / "runs").exists()
 
 
@@ -120,6 +123,43 @@ def test_config_file_is_used(repo_root, clean_env, tmp_path):
 def test_zero_candidates_makes_no_provider_request(repo_root, clean_env, tmp_path):
     _, result, _ = _drive(repo_root, clean_env, tmp_path, "--iterations", "0")
     assert result["n_calls"] == 0
+
+
+def test_existing_output_refused_before_provider_and_preserved(repo_root, clean_env, tmp_path):
+    out, _, _ = _drive(repo_root, clean_env, tmp_path, "--iterations", "0")
+    before = {path.relative_to(out): path.read_bytes() for path in out.rglob("*") if path.is_file()}
+    argv = ["--backend", "cpu", "--runner", "subprocess", "--output-dir", str(out), "--iterations", "1"]
+    code = DRIVER.format(repo=str(repo_root), tests=str(repo_root / "tests"), key=FAKE_KEY, out=str(out), argv=argv)
+    code = code.replace("return create(**kw)", "raise AssertionError('unexpected provider request')")
+    proc = subprocess.run([sys.executable, "-c", code], cwd=tmp_path, env=clean_env,
+                          capture_output=True, text=True, timeout=180)
+    assert proc.returncode == 2
+    assert "cannot create new run" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    after = {path.relative_to(out): path.read_bytes() for path in out.rglob("*") if path.is_file()}
+    assert after == before
+
+
+def test_default_cli_runs_use_independent_directories(repo_root, clean_env, tmp_path):
+    code = f"""
+import os, sys, json
+sys.path.insert(0, {str(repo_root)!r})
+os.environ['ANTHROPIC_API_KEY'] = {FAKE_KEY!r}
+import agent
+runs = [agent.main(['--backend', 'cpu', '--runner', 'subprocess', '--iterations', '0']) for _ in range(2)]
+print(json.dumps([str(run.output_dir) for run in runs]))
+"""
+    proc = subprocess.run([sys.executable, "-c", code], cwd=tmp_path, env=clean_env,
+                          capture_output=True, text=True, timeout=180)
+    assert proc.returncode == 0, proc.stderr
+    from pathlib import Path
+    directories = [tmp_path / Path(path) for path in json.loads(proc.stdout.strip().splitlines()[-1])]
+    assert directories[0] != directories[1]
+    for directory in directories:
+        config = json.loads((directory / "run_config.json").read_bytes())
+        assert tmp_path / config["output_dir"] == directory
+        assert (directory / "best.py").read_bytes() == (directory / "baseline.py").read_bytes()
+        assert not (directory / "requests").exists()
 
 
 def test_bad_config_exits_2(repo_root, clean_env, tmp_path):
