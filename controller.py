@@ -12,6 +12,7 @@ import ast
 import dataclasses
 import difflib
 import json
+import math
 import time
 from copy import deepcopy
 from dataclasses import dataclass
@@ -30,10 +31,11 @@ from contracts import (ACCEPTED, COMPILE_FAILED, CORRECTNESS_FAILED, DUPLICATE, 
                        MEASUREMENT_UNSTABLE, POLICY_REJECTED, PROPOSAL_INVALID, RESOURCE_LIMIT, TIMEOUT,
                        VALID_NO_CHANGE, VALID_SLOWER, Attempt, Budgets, ContractError, Evaluation,
                        parse_proposal)
-from contracts import ModelSettings
+from contracts import ModelSettings, ConfigError, validate_budgets, protocol_hash
 from providers import ProposalFailure, ProposalProvider, proposal_tool
 from context_builder import (build_context, workload_contract, check_development_cases,
-                             compiler_view, COMPILER_CONTEXT, ContextError)
+                             compiler_view, COMPILER_CONTEXT, ContextError, evaluation_commitment,
+                             check_search_access)
 from source_policy import check_source
 
 
@@ -143,6 +145,10 @@ class BaselineFailed(RuntimeError):
     """The frozen reference itself failed: the run stops before any proposal is requested."""
 
 
+class RunStopped(RuntimeError):
+    """The episode is terminal; a new controller/run is required for further proposals."""
+
+
 _OUTCOME_STATE = {runners.TIMEOUT: TIMEOUT, runners.RESOURCE_LIMIT: RESOURCE_LIMIT,
                   runners.CRASHED: EXECUTION_FAILED, runners.ISOLATION_UNAVAILABLE: INTERRUPTED}
 _CATEGORY_STATE = {"COMPILE_FAILED": COMPILE_FAILED, "EXECUTION_FAILED": EXECUTION_FAILED}
@@ -173,6 +179,11 @@ class Evaluator:
         """`cases` overrides the search cases (the held-out evaluation of AIC-018 passes its own)."""
         self.spec, self.runner, self.protocol, self.backend = spec, runner, protocol, selected_backend
         self.budgets = budgets or Budgets()
+        validate_budgets(self.budgets)
+        if hasattr(runner, "max_log_bytes"):
+            runner.max_log_bytes = min(runner.max_log_bytes, self.budgets.max_log_bytes)
+        self.clock, self.deadline, self.store = time.monotonic, None, None
+        self.completed_required_at = None
         self._baseline_source = spec.reference_source
         self.baseline_sha256 = storage.sha256(self._baseline_source.encode("utf-8"))
         self.workdir = Path(workdir)
@@ -200,9 +211,36 @@ class Evaluator:
 
     # -- worker requests --------------------------------------------------------------------------
 
+    def remaining_s(self):
+        if self.deadline is None:
+            self.deadline = self.clock() + self.budgets.run_wall_s
+        return max(0., self.deadline - self.clock())
+
+    def candidate_preflight(self):
+        if not (self.runner.isolated or getattr(self.runner, "reviewed_fixtures", False)):
+            return "model-written code requires verified isolation; subprocess mode is baseline-only"
+        return self.runner.preflight()
+
     def _run(self, label, mode, sources, *, trusted, cases, timeout_s, **extra):
+        validate_budgets(self.budgets)
+        remaining = self.remaining_s()
+        if remaining <= 0 or timeout_s <= 0 or self.budgets.compile_timeout_s <= 0:
+            raise EvaluationError(TIMEOUT, "run or worker budget exhausted before launch")
+        if not trusted and (reason := self.candidate_preflight()):
+            raise EvaluationError(INTERRUPTED, reason)
+        stage_limits = {"compile": self.budgets.compile_timeout_s,
+                        "correctness": self.budgets.correctness_case_timeout_s,
+                        "measure": self.budgets.measurement_session_timeout_s,
+                        "profile": self.budgets.correctness_case_timeout_s}
+        stage = {"outputs": "correctness", "measure": "measure", "profile": "profile"}[mode]
+        if stage_limits[stage] <= 0:
+            raise EvaluationError(TIMEOUT, f"{stage} budget exhausted before launch")
         for source in sources.values():
             storage.check_source_credentials(source)
+            if len(source.encode()) > self.budgets.max_source_bytes:
+                raise EvaluationError(RESOURCE_LIMIT, "source byte budget exceeded before launch")
+        if self.store is not None:
+            self.store.check_capacity()
         self._requests += 1
         work = self.workdir / f"{self._requests:04d}-{label}"
         work.mkdir(parents=True)
@@ -212,13 +250,27 @@ class Evaluator:
             files[role] = f"{role}.py"
         array_io.save(work / "inputs.npz", {name: array_io.flatten(args) for name, args in cases})
         request = {"schema_version": worker.REQUEST_SCHEMA, "mode": mode, "backend": self.backend,
-                   "function_name": self.spec.function_name, "sources": files, "inputs": "inputs.npz", **extra}
+                   "function_name": self.spec.function_name, "sources": files, "inputs": "inputs.npz",
+                   "stage_limits": stage_limits, "stage_cases": [name for name, _ in cases],
+                   "host_deadline_monotonic": self.deadline, **extra}
         if mode == "outputs":
             request["analyze_case"] = self.measure_case
-        outcome = self.runner.run(work, request, trusted=trusted, timeout_s=timeout_s)
+        if self.store is not None:
+            self.store.check_capacity()
+        timeout_s = min(timeout_s, self.remaining_s())
+        if timeout_s <= 0:
+            raise EvaluationError(TIMEOUT, "run wall budget exhausted while preparing worker inputs")
+        try:
+            outcome = self.runner.run(work, request, trusted=trusted, timeout_s=timeout_s)
+        except Exception as error:
+            if isinstance(error, storage.StorageError):
+                raise
+            outcome = runners.RunOutcome(runners.CRASHED, None, "", "", 0.,
+                                         f"runner failed ({type(error).__name__}): {error}")
         try:
             for name in ("stdout", "stderr"):
-                data = storage.redact(getattr(outcome, name)).encode("utf-8")[-self.budgets.max_log_bytes:]
+                data = storage.redact(getattr(outcome, name)).encode("utf-8")
+                data = data[-self.budgets.max_log_bytes:] if self.budgets.max_log_bytes else b""
                 storage.atomic_write_bytes(work / f"{name}.log", data, exclusive=True)
             storage.atomic_write_json(work / "runner_outcome.json", storage.redact({
                 "schema_version": "runner_outcome/v1", "status": outcome.status, "detail": outcome.detail,
@@ -226,7 +278,12 @@ class Evaluator:
         except (OSError, ValueError) as error:
             raise storage.StorageError("cannot retain worker outcome") from error
         if outcome.status != runners.OK:
-            raise EvaluationError(_OUTCOME_STATE[outcome.status], outcome.detail or outcome.status)
+            state = INTERRUPTED if outcome.detail and outcome.detail.startswith("runner failed") else _OUTCOME_STATE[outcome.status]
+            raise EvaluationError(state, outcome.detail or outcome.status)
+        if self.remaining_s() <= 0:
+            raise EvaluationError(TIMEOUT, "worker completed after the run deadline; result discarded")
+        if not isinstance(outcome.result, dict):
+            raise EvaluationError(EXECUTION_FAILED, "worker returned no result object")
         if outcome.result.get("status") != "ok":
             raise EvaluationError(EXECUTION_FAILED, f"worker error: {outcome.result.get('error')}")
         self._same_population(outcome.result["device"])
@@ -252,14 +309,19 @@ class Evaluator:
         """Run the frozen reference once, trusted. Any failure is a harness bug: BaselineFailed."""
         try:
             result, outputs = self._outputs(self.baseline_source, trusted=True, label="reference")
-        except EvaluationError as error:
+        except (EvaluationError, array_io.ArrayIOError, ValueError, KeyError, TypeError, OSError) as error:
+            if isinstance(error, storage.StorageError):
+                raise
             raise BaselineFailed(f"reference run failed: {error}") from error
+        if (set(outputs) != set(self.case_names) or
+                sorted(c.get("name", "") for c in result["cases"]) != sorted(self.case_names)):
+            raise BaselineFailed("reference did not return exactly the declared cases")
         failed = [c for c in result["cases"] if c["status"] != "ok"]
         if failed:
             raise BaselineFailed(f"reference failed on {failed[0]['name']}: {failed[0].get('detail')}")
         for name, tree in outputs.items():
             for path, leaf in tree.leaves:
-                if leaf.dtype.kind == "f" and not np.all(np.isfinite(leaf)):
+                if benchmark._is_float(leaf.dtype) and not np.all(np.isfinite(leaf)):
                     raise BaselineFailed(f"reference produced non-finite values in {name}{path}")
         self.reference = outputs
         self.baseline_ir = result.get("ir")
@@ -277,7 +339,8 @@ class Evaluator:
         if repeats is None and self.calibration is not None:
             repeats = self.calibration.repeats
         result, _ = self._run("session", "measure", {"a": a_source, "b": b_source}, trusted=trusted, cases=case,
-                              timeout_s=self.budgets.measurement_session_timeout_s, case=self.measure_case,
+                              timeout_s=self.budgets.compile_timeout_s + self.budgets.measurement_session_timeout_s,
+                              case=self.measure_case,
                               protocol=dataclasses.asdict(self.protocol), repeats=repeats)
         session = benchmark.PairedSession.from_json(result["session"])
         return session, benchmark.analyze_session(session, self.protocol)
@@ -362,6 +425,9 @@ class Evaluator:
             return Verdict(INTERRUPTED, f"no usable A/A calibration: {error}",
                            Evaluation(**evaluation, failure_category="CALIBRATION"), output_correct=True)
         sessions = []
+        evaluation["decision"] = {"delta": calibration.delta, "protocol_hash": protocol_hash(self.protocol),
+                                  "incumbent_sha256": storage.sha256(incumbent_source.encode()),
+                                  "calibration": dataclasses.asdict(calibration)}
 
         def measure():
             session, analysis = self.session(incumbent_source, candidate_source, trusted=False)
@@ -380,11 +446,16 @@ class Evaluator:
         stages["measurement"] = "ok"
         if decision.state == ACCEPTED and not same_program(incumbent_source, self.baseline_source):
             # Recorded for the report, never used to rank: the decision is against the incumbent.
-            session, analysis = self.session(self.baseline_source, candidate_source, trusted=False)
+            try:
+                session, analysis = self.session(self.baseline_source, candidate_source, trusted=False)
+            except EvaluationError as error:
+                stages["measurement"] = "failed"
+                return Verdict(error.state, error.detail, Evaluation(**evaluation, sessions=tuple(sessions)), True)
             sessions.append({"against": "baseline", "a_sha256": self.baseline_sha256,
                              "b_sha256": storage.sha256(candidate_source.encode()),
                              "raw": session.to_json(), "analysis": analysis.to_json()})
         first = analyses[0].b
+        self.completed_required_at = self.clock()
         trace = (self.profile(candidate_source, trusted=False) if decision.state == ACCEPTED
                  else feedback.unavailable_trace("profiles retained for baseline and promoted incumbents"))
         stages["profile"] = "skipped" if trace["coverage"] == "UNAVAILABLE" else "ok"
@@ -421,12 +492,16 @@ def _compact(entry, context_condition="C2"):
 
 class Controller:
     def __init__(self, agent: str, prompt, evaluator, client=None, function_name="kernel", max_iterations=3,
-                 output_dir=None, source_path=None, context_condition="C2", store=None, model_settings=None):
+                 output_dir=None, source_path=None, context_condition="C2", store=None, model_settings=None,
+                 clock=time.monotonic):
         """Store the agent, prompt and evaluator. No side effects: start() evaluates the baseline."""
         self.agent = agent
         self.init_prompt = prompt
         self.client = client
         self.evaluator = evaluator
+        validate_budgets(evaluator.budgets)
+        if type(max_iterations) is not int or max_iterations < 0:
+            raise ConfigError("max_iterations must be a nonnegative integer")
         self.function_name = function_name
         self.max_iterations = max_iterations
         self.history = []
@@ -438,10 +513,13 @@ class Controller:
         self._storage_failed = False
         self.model_settings = model_settings or ModelSettings()
         self._provider = None
-        self._started = time.monotonic()
+        self.clock, self._started = clock, None
+        self.result = None
+        self._seen_sources = {}
         self.requests = []          # one record per provider request: model, stop reason, tokens, latency
         self.context_condition = context_condition
         self.store = store or storage.RunStore(output_dir, budgets=evaluator.budgets)
+        self.evaluator.clock, self.evaluator.store = self.clock, self.store
         self.output_dir = self.store.path
         if evaluator._requests:
             raise storage.StorageError("a new run requires an unused evaluator")
@@ -454,10 +532,20 @@ class Controller:
 
     def start(self):
         """Evaluate the immutable baseline once. Raises BaselineFailed before any proposal is requested."""
+        if self.candidate_limit:
+            check_search_access(self.evaluator.spec)
         if self.history:
             return
+        if self._storage_failed:
+            raise storage.StorageError("run stopped after a storage failure; execution cannot resume")
+        if self.result is not None:
+            raise BaselineFailed(self.result["reason"])
+        if self._started is None:
+            self._started = self.clock()
+            self.evaluator.deadline = self._started + self.evaluator.budgets.run_wall_s
         if not self.store.initialized:
             from environment import collect_environment
+            self._storage_failed = True
             self.store.initialize(self.initial_code, config={
                 "schema_version": "direct_run_config/v1", "output_dir": str(self.output_dir),
                 "function_name": self.function_name, "context_condition": self.context_condition,
@@ -466,15 +554,27 @@ class Controller:
                 "measurement": dataclasses.asdict(self.evaluator.protocol),
                 "budgets": dataclasses.asdict(self.evaluator.budgets)}, manifest={
                 "scientific": False, "non_scientific_reasons": ["direct API; no resolved CLI RunConfig"],
+                "evaluation_split": evaluation_commitment(self.evaluator.spec),
                 "workload": {"id": self.evaluator.spec.workload_id,
                              "reference_sha256": self.evaluator.baseline_sha256,
                              "correctness_policy_hash": self.evaluator.policy_hash,
                              "split": "development", "cases": self.evaluator.case_names},
                 "runner": self.evaluator.runner.identity(),
                 "environment": collect_environment(Path(__file__).resolve().parent)})
-        self.evaluator.reference_outputs()
+            self._storage_failed = False
+        try:
+            self.evaluator.reference_outputs()
+            if self.evaluator.reference is None:
+                raise BaselineFailed("reference produced no validated outputs")
+        except storage.StorageError:
+            self._storage_failed = True
+            raise
+        except Exception as error:
+            reason = storage.redact(f"baseline failed ({type(error).__name__}): {error}")[:2000]
+            self._finish("BASELINE_FAILED", reason, baseline_failure=True)
+            raise BaselineFailed(reason) from error
         import hashlib
-        trace = self.evaluator.baseline_trace
+        trace = self.evaluator.baseline_trace or feedback.unavailable_trace("baseline has no profile evidence")
         profile_available = trace["coverage"] != "UNAVAILABLE"
         evaluation = Evaluation(candidate_sha256=hashlib.sha256(self.initial_code.encode()).hexdigest(),
                                 stages={"reference": "ok", "profile": "ok" if profile_available else "skipped"},
@@ -486,6 +586,81 @@ class Controller:
                       "runtime_mean": None, "runtime_std": None, "syntax_correct": True, "output_correct": True,
                       "accepted": True, "changes": "No changes", "error": None, "attempt": attempt.to_json()})
         self.best_code, self.best_iteration = self.initial_code, 0
+
+    @property
+    def candidate_limit(self):
+        return min(self.max_iterations, self.evaluator.budgets.max_candidates)
+
+    def _budget_snapshot(self):
+        return {"candidates": self.iteration, "candidate_limit": self.candidate_limit,
+                "elapsed_s": max(0., self.clock() - self._started) if self._started is not None else 0.,
+                "provider": self._provider.summary() if self._provider else None}
+
+    def _finish(self, status, reason, *, baseline_failure=False):
+        if self.result is None:
+            try:
+                self.result = self.store.finish_run(status, storage.redact(reason), self._budget_snapshot(),
+                                                     baseline_failure=baseline_failure)
+            except storage.StorageError:
+                self._storage_failed = True
+                raise
+            self.stop_reason = self.result["reason"]
+        return deepcopy(self.result)
+
+    def optimize(self, model=None, max_tokens=None):
+        """Run the episode and return run_result/v1 with its verified baseline/incumbent artifact."""
+        self.agent_loop(model=model, max_tokens=max_tokens)
+        return deepcopy(self.result)
+
+    def _confirmed(self, verdict, source):
+        """Recheck a claimed promotion from raw host evidence; injected evaluators cannot bypass judge()."""
+        evidence = verdict.evaluation
+        proof = evidence.decision or {}
+        if (not verdict.output_correct or evidence.candidate_sha256 != storage.sha256(source.encode())
+                or not evidence.correctness or evidence.correctness.get("passed") is not True
+                or evidence.correctness.get("policy_hash") != self.evaluator.policy_hash
+                or proof.get("incumbent_sha256") != storage.sha256(self.best_code.encode())
+                or proof.get("protocol_hash") != protocol_hash(self.evaluator.protocol)):
+            raise ContractError("claimed promotion lacks matching correctness/source/protocol evidence")
+        delta = proof.get("delta")
+        if type(delta) not in (int, float) or not math.isfinite(delta) or delta < 0:
+            raise ContractError("claimed promotion lacks a finite frozen threshold")
+        calibration = self.evaluator.calibration
+        if calibration is None or delta != calibration.delta or proof.get("calibration") != dataclasses.asdict(calibration):
+            raise ContractError("claimed promotion threshold differs from the frozen calibration")
+        cases = evidence.correctness.get("cases", ())
+        if (evidence.correctness.get("n_cases") != len(self.evaluator.case_names)
+                or evidence.correctness.get("n_failed") != 0
+                or sorted(case.get("case", "") for case in cases) != sorted(self.evaluator.case_names)
+                or any(case.get("passed") is not True for case in cases)):
+            raise ContractError("claimed promotion lacks correctness on every declared development case")
+        analyses = []
+        for session in evidence.sessions:
+            if session["against"] != "incumbent":
+                continue
+            if (session.get("a_sha256") != proof["incumbent_sha256"]
+                    or session.get("b_sha256") != evidence.candidate_sha256):
+                raise ContractError("claimed promotion measured different sources")
+            raw = session["raw"]
+            blocks = raw["blocks"]
+            if (type(raw.get("repeats")) is not int or raw["repeats"] != calibration.repeats
+                    or len(blocks) != self.evaluator.protocol.n_blocks
+                    or [block.get("index") for block in blocks] != list(range(len(blocks)))
+                    or any(block.get("order") not in ("AB", "BA") or block.get("repeats") != raw["repeats"]
+                           or any(type(block.get(key)) is not int or block[key] <= 0 for key in ("a_ns", "b_ns"))
+                           for block in blocks)):
+                raise ContractError("claimed promotion has incomplete or invalid measurement blocks")
+            analysis = benchmark.analyze_session(benchmark.PairedSession.from_json(raw), self.evaluator.protocol)
+            if analysis.to_json() != session["analysis"]:
+                raise ContractError("claimed promotion analysis differs from its raw measurements")
+            analyses.append(analysis)
+        iterator = iter(analyses)
+        try:
+            decision, used = judge(lambda: next(iterator), delta, self.evaluator.protocol)
+        except StopIteration as error:
+            raise ContractError("claimed promotion lacks fresh confirmation sessions") from error
+        if decision.state != ACCEPTED or len(used) != len(analyses):
+            raise ContractError("claimed promotion is not confirmed by the host decision rule")
 
     def provideTools(self):
         return [proposal_tool(self.evaluator.budgets.max_source_bytes)]
@@ -521,6 +696,8 @@ class Controller:
             raise
         self.history.append(entry)
         self.iteration = entry["iteration"]
+        if entry.get("code") is not None:
+            self._seen_sources[storage.sha256(entry["code"].encode())] = entry["iteration"]
         self._report_runtime(entry)
         return entry
 
@@ -549,29 +726,52 @@ class Controller:
         started = _utc()
         if self._storage_failed:
             raise storage.StorageError("run stopped after a storage failure; execution cannot resume")
+        if self.result is not None:
+            raise RunStopped(self.result["reason"])
+        self.start()
+        if self.iteration >= self.candidate_limit:
+            self._finish("CANDIDATE_LIMIT", "candidate budget exhausted")
+            raise RunStopped("candidate budget exhausted")
         max_source_bytes = self.evaluator.budgets.max_source_bytes
         try:
             proposal = parse_proposal(tool_input, max_source_bytes=max_source_bytes)
         except ContractError as error:
             return self._record(PROPOSAL_INVALID, str(error), None, None, None, started, submitted_proposal=tool_input)
-        if proposal.parent_id is not None and proposal.parent_id not in {e["iteration"] for e in self.history}:
-            return self._record(PROPOSAL_INVALID, "proposal.parent_id must reference an earlier attempt",
+        if proposal.parent_id is not None and proposal.parent_id != self.best_iteration:
+            return self._record(PROPOSAL_INVALID, "proposal.parent_id must reference the current incumbent",
                                 None, None, None, started, submitted_proposal=tool_input)
         source = proposal.candidate_source
         storage.check_source_credentials(source)
+        if self.evaluator.remaining_s() <= 0:
+            return self._record(TIMEOUT, "run wall budget exhausted before evaluation", source, proposal, None, started)
         policy = check_source(source, self.function_name, max_source_bytes=max_source_bytes)
         if not policy.ok:
             return self._record(POLICY_REJECTED, policy.summary(), source, proposal, None, started)
-        duplicate = next((e["iteration"] for e in self.history if e["code"] and same_program(e["code"], source)), None)
+        duplicate = self._seen_sources.get(storage.sha256(source.encode()))
+        if duplicate is None:
+            duplicate = next((e["iteration"] for e in self.history if e["code"] and same_program(e["code"], source)), None)
         if duplicate is not None:
             return self._record(DUPLICATE, f"same program as iteration {duplicate}; not measured again",
                                 source, proposal, None, started)
-        verdict = self.evaluator.evaluate(source, self.best_code)
+        try:
+            self.evaluator.completed_required_at = None
+            verdict = self.evaluator.evaluate(source, self.best_code)
+            if self.evaluator.remaining_s() <= 0 and (self.evaluator.completed_required_at is None
+                    or self.evaluator.completed_required_at > self.evaluator.deadline):
+                verdict = dataclasses.replace(verdict, state=TIMEOUT, reason="required evaluation exceeded the run deadline")
+            if verdict.state == ACCEPTED:
+                self._confirmed(verdict, source)
+        except KeyboardInterrupt:
+            verdict = Verdict(INTERRUPTED, "evaluation interrupted by user", Evaluation(storage.sha256(source.encode()),
+                              {"evaluation": "interrupted"}, failure_category=INTERRUPTED))
+        except storage.StorageError:
+            self._storage_failed = True
+            raise
+        except Exception as error:
+            reason = f"evaluation interrupted ({type(error).__name__}): {error}"
+            verdict = Verdict(INTERRUPTED, reason, Evaluation(storage.sha256(source.encode()),
+                              {"evaluation": "failed"}, failure_category="EVALUATOR_INVALID"))
         entry = self._record(verdict.state, verdict.reason, source, proposal, verdict, started)
-        if verdict.state == ACCEPTED:
-            self.best_code, self.best_iteration, self.best_runtime = source, entry["iteration"], verdict.latency_s
-        if verdict.state == INTERRUPTED:
-            self.stop_reason = verdict.reason
         return entry
 
     def _record(self, state, reason, code, proposal, verdict, started, *, submitted_proposal=None):
@@ -582,7 +782,7 @@ class Controller:
                           provider=self.requests[-1] if self.requests else None, started_utc=started,
                           finished_utc=_utc())
         failed = state not in (ACCEPTED, VALID_NO_CHANGE, VALID_SLOWER)
-        return self._append({
+        entry = self._append({
             "iteration": number, "state": state, "reason": reason, "code": code,
             "runtime_mean": verdict.latency_s if verdict else None,
             "runtime_std": verdict.latency_std_s if verdict else None,
@@ -590,6 +790,15 @@ class Controller:
             "output_correct": bool(verdict and verdict.output_correct), "accepted": state == ACCEPTED,
             "changes": self.changesPython(self.best_code, code) if code else None,
             "error": reason if failed else None, "attempt": attempt.to_json()}, submitted_proposal=submitted_proposal)
+        if state == ACCEPTED:
+            self.best_code, self.best_iteration, self.best_runtime = code, number, verdict.latency_s
+        if state in (INTERRUPTED, TIMEOUT, RESOURCE_LIMIT):
+            self._finish(state, reason)
+        elif self.evaluator.remaining_s() <= 0:
+            self._finish("TIME_LIMIT", "run wall budget exhausted after committed outcome")
+        elif self.iteration >= self.candidate_limit:
+            self._finish("CANDIDATE_LIMIT", "candidate budget exhausted")
+        return entry
 
     def _persist_request(self, record):
         """Only the provider boundary dispatches calls; persist its reconciled outcome."""
@@ -632,26 +841,54 @@ class Controller:
         return context if with_selection else context.payload
 
     def agent_loop(self, model=None, max_tokens=None):
-        """Request one locally validated proposal at a time; the host alone invokes evaluation."""
+        """Compatibility history return; optimize() returns the durable verified terminal result."""
         if self._storage_failed:
             raise storage.StorageError("run stopped after a storage failure; execution cannot resume")
-        if min(self.max_iterations, self.evaluator.budgets.max_candidates) == 0:
-            self.start()
+        validate_budgets(self.evaluator.budgets)
+        if self.result is not None:
+            if self.result["best"] is not None:
+                self.store.verified_best()
+            return deepcopy(self.history)
+        self.start()
+        if self.candidate_limit == 0:
+            self._finish("CANDIDATE_LIMIT", "zero candidate budget; verified baseline returned")
+            return deepcopy(self.history)
+        if self.evaluator.remaining_s() <= 0:
+            self._finish("TIME_LIMIT", "run wall budget exhausted")
+            return deepcopy(self.history)
+        try:
+            reason = self.evaluator.candidate_preflight()
+        except Exception as error:
+            reason = f"runner preflight failed ({type(error).__name__}): {error}"
+        if reason:
+            self._finish(INTERRUPTED, reason)
             return deepcopy(self.history)
         if self.client is None:
-            raise RuntimeError("A provider client is required for agent_loop")
+            self._finish("PROVIDER_UNAVAILABLE", "a provider client is required for optimization")
+            return deepcopy(self.history)
         settings = dataclasses.replace(self.model_settings,
                                        model_id=model if model is not None else self.model_settings.model_id,
                                        max_tokens=max_tokens if max_tokens is not None else self.model_settings.max_tokens)
         if self._provider is None:
-            self._provider = ProposalProvider(self.client, settings, self.evaluator.budgets, system=self.init_prompt,
-                                               reserve=self.store.reserve_request, record=self._persist_request,
-                                               started=self._started)
+            from providers import ProviderError
+            try:
+                self._provider = ProposalProvider(self.client, settings, self.evaluator.budgets, system=self.init_prompt,
+                    reserve=self.store.reserve_request, record=self._persist_request,
+                    started=self._started, clock=self.clock)
+            except ProviderError as error:
+                self._finish("PROVIDER_UNAVAILABLE", str(error))
+                return deepcopy(self.history)
         elif self._provider.settings != settings:
             raise RuntimeError("provider parameters cannot change during a run")
-        self.start()
-        while self.iteration < min(self.max_iterations, self.evaluator.budgets.max_candidates) and not self.stop_reason:
+        while self.iteration < self.candidate_limit and self.result is None:
             try:
+                if self.evaluator.remaining_s() <= 0:
+                    self._finish("TIME_LIMIT", "run wall budget exhausted")
+                    break
+                if reason := self.evaluator.candidate_preflight():
+                    self._finish(INTERRUPTED, reason)
+                    break
+                self.store.check_capacity()
                 proposal = self._provider.propose(self.proposal_context(with_selection=True))
             except ProposalFailure as error:
                 if error.status == PROPOSAL_INVALID:
@@ -661,6 +898,7 @@ class Controller:
                 self.stop_reason = storage.redact(str(error))
                 try:
                     self.store.record_provider_stop(error.status, self.stop_reason, self._provider.summary())
+                    self._finish(error.status, self.stop_reason)
                 except storage.StorageError:
                     self._storage_failed = True
                     raise

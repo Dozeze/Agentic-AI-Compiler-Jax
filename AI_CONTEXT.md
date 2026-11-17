@@ -9,7 +9,7 @@
 > Keep this file short: it is the current state, not a history. Detailed evidence goes in
 > `docs/IMPLEMENTATION_PROGRESS.md`; the full plan is `docs/IMPLEMENTATION_PLAN.md`.
 
-Last updated: 2026-11-16 by Codex (AIC-011 / AIC-012 / AIC-013 / AIC-014)
+Last updated: 2026-11-17 by Codex (AIC-011 … AIC-018 offline work)
 
 ---
 
@@ -25,8 +25,8 @@ Sergio Medina Hernandez (`SergioMedinaH`), Weizhuo "Harry" Sun.
 ## 2. Which document wins
 1. Latest explicit team decision (recorded in §6).
 2. `docs/IMPLEMENTATION_PLAN.md` — roadmap **AIC-1.1** (2026-10-12): 8 milestones, 33 tasks, approval gates.
-   *(The Markdown plan and companion process documents are present in this working tree; they were untracked
-   before the AIC-011 session. See §6 P1.)*
+   *(The Markdown plan and companion documents were untracked before AIC-011 and were committed with the
+   G-07 handoff `46f5089`. See §6 P1.)*
 3. The 2026-09-04 LaTeX project plan is **design history only** (AIC-1.1 says so). Its dates and task list are
    superseded; the course deliverables it mentions (report, weekly diaries, presentation) still apply.
 
@@ -45,7 +45,8 @@ timing), `workloads/example.py`. Root `test*.py`, `testrun.py`, `runningscripts.
 scratch scripts — **never import them from tests**.
 The current branch also includes `storage.py` (immutable run evidence and artifact-only best verification)
 and `providers.ProposalProvider` (the single structured proposal and accounting boundary), plus
-`context_builder.py` (bounded, deterministic, provenance-tagged development context).
+`context_builder.py` (bounded, deterministic, provenance-tagged development context) and `finalization.py`
+(provider-free, one-use final evaluation with separate immutable release/replay).
 
 ## 4. Environment and how to run
 - Python 3.12, `uv`, **JAX/jaxlib pinned to 0.4.38**. Always `uv run --locked ...`. Do not upgrade JAX without a team decision.
@@ -67,7 +68,10 @@ and `providers.ProposalProvider` (the single structured proposal and accounting 
 |---|---|---|---|
 | M1 Foundations & target | AIC-001, 031, 002, 003 | Harry | batch 01 AWAITING_ACCEPTANCE (Harry) + G-01 gaps closed in batch 03 (Sergio: honest scientific flag, policy hash recorded, `--workload`). AIC-031 phase B still pending on the NV host (`scripts/phase_b.sh`); `docs/TARGET_DECISION.md` DRAFT |
 | M2 Reliable, isolated evaluation | AIC-004 … 009 | AIC-004: Harry; AIC-005 … 009: Sergio | batch 02 AWAITING_ACCEPTANCE on `sergio/batch-02` (report: `docs/IMPLEMENTATION_PROGRESS.md`): AIC-004 done (Harry); AIC-005 timing protocol + A/A calibration, AIC-006 decision rule, AIC-007 contracts + source policy, AIC-008 worker/runner, AIC-009 Docker containment + controller integration done on the Mac (CPU). Pending on the NV host: GPU containment and the official δ (`scripts/phase_b.sh`) |
-| M3 – M8 | AIC-010 … 033 | AIC-010: Sergio; rest TBD | batch 03 AWAITING_ACCEPTANCE on `sergio/batch-03`: AIC-010 compiler feedback and AIC-018 softmax held-out implemented. AIC-011 runtime profiling CPU-verified; CUDA/container acceptance pending. AIC-012 storage core and AIC-013 structured proposals/accounting DONE offline. AIC-014 bounded context DONE: 31 context checks, real CPU failure-feedback artifacts, full suite 568 passed / 16 Docker-CUDA skips. No live provider proof or real prices/cap configured. Next immediate task: AIC-015 controller integration. Recovery/reporting and other later tasks remain unfinished. |
+| M3 – M8 | AIC-010 … 033 | AIC-010: Sergio; rest TBD | batch 03 AWAITING_ACCEPTANCE on `sergio/batch-03`: AIC-010 compiler feedback; AIC-011 runtime profiling CPU-verified. AIC-012–015 storage/provider/context/controller DONE offline. AIC-016 target/live proof BLOCKED; AIC-017 three-family references CPU-verified, target calibration pending. AIC-018 finalization/replay and one-use split protection implemented: native 40-case reference checks per family and overfit rejection, shared offline suite 781 passed / 2 host-CUDA skips / 20 target-sandbox deselected. Native CPU A/A noise is retained as TIMING_INCOMPLETE; CUDA final tests unavailable. M3/M4 target acceptance remains open. No paid calls/target claims. Recovery/reporting and later tasks remain unfinished. |
+
+Current handoff: the integrated AIC-015–018 implementation and documentation on `sergio/batch-03`,
+verified by the 781-test offline suite. Target acceptance remains pending; local run artifacts stay excluded.
 
 Course deadlines (fixed by KTH, not by AIC-1.1): report draft **2026-11-20 17:00**; presentation + final report
 **2026-12-15 … 21**.
@@ -84,16 +88,20 @@ Course deadlines (fixed by KTH, not by AIC-1.1): report draft **2026-11-20 17:00
 - D-07 Hand-off: the author verifies locally (full suite + phase A on the Mac), then pushes their own branch;
   the rest of the team runs it from there (CI, and phase B on the NV host). Nobody pushes to `main` directly.
 
-**Current task authorization (2026-11-16):** the user requested "continue with the next task" after AIC-013:
-AIC-014 bounded compiler/runtime/history context. This authorizes
-implementation and offline checks, not paid provider calls, later tasks, hardware provisioning or acceptance
-of pending M1/M2/AIC-011 target checks. SDK tests use local HTTP mocks with explicitly synthetic prices;
-these do not configure a real money cap or establish live provider availability. Live proof remains AIC-016.
+**Current task authorization (2026-11-17):** after AIC-017 and the discussion of pending target integration,
+the user explicitly requested the next task: complete AIC-018 final-evaluation software and independent
+offline checks. Earlier target/live/M3/M4 gates are not accepted by this instruction. No paid calls or
+hardware provisioning; host access and live model/spend/price inputs remain unset. Final tests and
+native CPU rehearsals use private evaluation state; the official split has not been consumed.
+The user subsequently requested committing and pushing the accumulated changes to the current GitHub
+branch, `sergio/batch-03`. This handoff groups AIC-015–018 in one batch commit because their shared files
+are already integrated and verified together; it preserves the tested snapshot. One task per commit
+remains the default for subsequent work. Local run evidence and credentials are excluded.
 
 **Pending** (default in brackets — used until the team decides)
-- P1 The plan, backlog, audit, workflow and requirements matrix are present as pre-existing untracked files in
-  this working tree. The team maintains them alongside `docs/IMPLEMENTATION_PROGRESS.md`; their older audit
-  statuses do not establish the current implementation or waive selected-target acceptance.
+- P1 The plan, backlog, audit, workflow and requirements matrix were committed with `46f5089` after
+  the AIC-011–014 work. The team maintains them alongside `docs/IMPLEMENTATION_PROGRESS.md`; historical
+  audit statuses do not establish current implementation or waive selected-target acceptance.
 - P2 Who is the "owner" who approves milestones? [whole team]
 - P3 Keep WSL2, or dual-boot Ubuntu on the NV host? [WSL2; revisit only if a hard requirement fails]
 - P4 `--iterations` default 10 → 3 per AIC-1.1 §7? [3; implemented in AIC-002 as `Budgets.max_candidates = 3` — set it back to 10 if the team disagrees]
@@ -128,8 +136,8 @@ these do not configure a real money cap or establish live provider availability.
   retries default 0; each attempt is durably reserved first. Input reservation = serialized UTF-8 bytes
   + 4096 framing tokens, output = configured ceiling, money = declared price ceilings using Decimal.
   Unknown usage keeps its debit; overrun/unpriced billing stops. This is a conservative policy, not a
-  vendor-certified token or billing guarantee. Transport timeout default 30 s per I/O operation; complete
-  run/worker deadlines remain AIC-015. No real prices are invented. Proposal-only output is unverified.]
+  vendor-certified token or billing guarantee. Default SDK timeout and host wait ceiling are 30 s,
+  shortened to remaining run time by AIC-015. No real prices are invented. Proposal-only output is unverified.]
 - P21 Context policy (AIC-014)? [deterministic development-only allowlists, newest five nonpromoted
   attempts and up to three accepted transformations, plus baseline/incumbent/latest summaries. Cap
   serialized metadata at 24 KiB and current source separately at the configured source ceiling (64 KiB
@@ -138,6 +146,40 @@ these do not configure a real money cap or establish live provider availability.
   Save exact context bytes and selection manifest before each SDK attempt. Compiler C3/C4/K and
   runtime C4 ablations remain intact. Timing identities/provenance accompany measured summaries;
   missing measurements remain unavailable. No split inputs, raw logs or credentials enter context.]
+- P22 Controller policy (AIC-015)? [explicit start verifies baseline once; optimize returns immutable
+  run_result/v1 with verified best, or no best for a failed baseline. agent_loop retains its history return.
+  Every unique submission, including schema/policy/duplicate rejection, consumes one candidate slot;
+  protocol errors without a validated submission are request failures. Require current parent and recheck
+  every correctness case, source/protocol/calibration and raw confirmation before promotion. Run time starts
+  at start(), including baseline. Parent monitors cumulative compile/startup/IR, per-case correctness and
+  session deadlines at 20 ms cadence; every launch is clipped to remaining time. Cleanup may extend elapsed
+  time and must be verified. Outstanding provider calls retain debit and cannot retry or evaluate late data;
+  proven non-dispatch records zero usage. Isolation is checked before requests; subprocess is baseline-only
+  unless fixtures are explicitly reviewed. Terminal/storage failures cannot resume. Recovery remains AIC-019.]
+- P23 MVP evidence policy (AIC-016)? [configs/target.json declares CUDA/Docker softmax/C4 with three
+  candidate/request slots, without funding or fabricated hardware identity. The actual target/sandbox
+  command selects all container probes; AIC_TARGET_CONFIG makes missing capabilities fail. Replay uses
+  reviewed sources with real workers/calibration/timing and no required speedup. Native CPU failure checks
+  are separate. scripts/verify_mvp.py reads hashes/JSON/source bytes only, checks prior-result context
+  links, provider mode, device/source observations and best export. It does not approve M3: containment,
+  profile coverage, 2–3 genuine live proposals and team review still require the selected host.]
+- P24 Representative workload policy (AIC-017)? [affine last-axis layer_norm(x, scale, bias), two-pass
+  population variance with epsilon 1e-5; matmul_gelu(x, weight, bias), HIGHEST/float32 dot followed by
+  exact erfc GELU. Plan shapes retained, parameters explicit, float32 only. LN tolerance 1e-4/1e-4
+  covers epsilon-conditioned nearly constant rows; dense 1e-4/1e-5 covers dot/GELU roundoff. Declared
+  before reference checks, unchanged after them. Input factories reject invalid shapes/oversized
+  allocation, 8 MiB combined input ceiling. CPU oracle/worker checks pass; CUDA tolerance/resource/A/A
+  checks are pending. Commit split declarations before search. Calibration --work-dir retains raw
+  observations and context (including noisy failures), refuses reuse and uses configured budgets.]
+- P25 Final evaluation policy (AIC-018)? [save an opaque reference/input-recipe/split/policy commitment
+  before search. --finalize-run selects the completed run's verified best and inherits its population,
+  protocol and budgets; no provider. A one-use reservation blocks further search/final reuse, including
+  failures/interruption and correctness-only mode. New versions need fresh seeds and shapes. Keep
+  original search exports unchanged; publish a separate hashed release with all per-shape correctness,
+  raw A/A/final sessions and uncertainty. Replay reads bytes/JSON only and recomputes timing decisions.
+  Missing legacy commitments or drift refuse finalization. CPU checks/private synthetic fixtures are
+  not CUDA performance evidence. Canonical finalization consumes the study split: finish selection
+  first, use offline tests for rehearsal. See docs/FINAL_EVALUATION.md; recovery remains AIC-019.]
 
 ## 7. Rules for code changes
 - One branch per person/batch; never push straight to `main`. One task per commit/PR; message starts with the task ID (`AIC-001: ...`).
@@ -189,8 +231,9 @@ Run configuration (AIC-002):
 - `bool` is a subclass of `int`: `contracts._coerce` rejects it (and floats) for int fields.
 - Provider request/candidate/output/total-token/money ceilings are enforced before dispatch; source/artifact
   limits are checked by the host. Unknown usage is conservatively accounted, not converted to free tokens.
-  Full optimizer/stage deadline integration remains AIC-015. Both CLI and direct-loop zero candidates make
-  no provider request; CLI zero candidates do not construct a client or require credentials/prices.
+  AIC-015 shares the run deadline across baseline/provider/workers, clips launches and monitors phases.
+  Both CLI and direct-loop zero candidates make no provider request; CLI zero candidates do not construct
+  a client or require credentials/prices. A terminal run cannot dispatch or evaluate again.
 - `CLAUDE_MODEL` sits between `--model` and the config file in precedence.
 
 Workloads (AIC-003):
@@ -284,6 +327,11 @@ Compiler feedback, held-out, providers (batch 03):
   than prune acceptance evidence; an active worker can exceed that limit before the host checks its files.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-17 Codex — User-requested GitHub handoff of the integrated AIC-015–018 implementation on `sergio/batch-03`: bounded controller, MVP validation tooling, three-workload suite and frozen final evaluation/replay. Offline suite 781 passed / 2 skipped / 20 deselected; CUDA/live acceptance remains blocked. No paid calls; local runs and credentials excluded.
+- 2026-11-17 Codex — AIC-018 offline software: pre-search split commitments, provider-free verified-best finalization, one-use split/version protection, separate per-shape correctness/timing release and artifact-only replay. Native 40-case references pass for all three families; development-valid shape overfit fails all 40 final cases. Shared suite 781 passed / 2 skipped / 20 deselected. Private CPU A/A noise yields explicit TIMING_INCOMPLETE; CUDA checks blocked. Official split untouched, no paid calls; target/M4 acceptance and AIC-019 recovery pending.
+- 2026-11-16 Codex — AIC-017 offline implementation: registered affine layer norm and highest-precision dense exact GELU, seeded inputs/edges/plan shapes and independent float64 oracles; worker image includes new modules. Native worker references/export hashes verified (17/16 cases); shared offline suite 749 passed / 2 skipped / 17 deselected. Calibration can retain raw work and honors configured budgets. Target checks/calibration blocked; AIC-016/M3 and AIC-017/M4 not complete, zero paid calls.
+- 2026-11-16 Codex — AIC-016 offline implementation: real CPU softmax compile/nonfinite/policy failure feedback and baseline replay; actual CUDA/container replay test, strict target/sandbox selection, nonsecret target config and read-only evidence verifier. Shared offline suite 643 passed / 2 skipped / 15 deselected; target command fails with 15 capability errors. NV-host access and explicit live model/funding pending; task/M3 BLOCKED, zero paid calls.
+- 2026-11-16 Codex — AIC-015 DONE: explicit baseline/failure artifacts, shared episode/provider/parent worker-phase deadlines, per-launch budgets/isolation, consistent candidate/request accounting, source deduplication/current-parent enforcement, raw host promotion recheck and immutable verified terminal result. 66 controller tests, full suite 635 passed / 16 Docker-CUDA skips; synthetic and native CPU episodes preserve original sources. No paid calls; next AIC-016.
 - 2026-11-16 Codex — AIC-014 DONE: bounded deterministic context, source/protocol/evaluation provenance, separate baseline/incumbent timing and identities, exact pre-dispatch context/selection artifacts, enforced byte/token/money fit and credential/split exclusion; 31 context tests, full suite 568 passed / 16 Docker-CUDA skips; real C4 CPU failure-feedback evidence, no paid calls. Next AIC-015.
 - 2026-11-16 Codex — AIC-013 DONE offline: single locally validated proposal boundary, live cap/dated-price gate, pre-dispatch reservations and conservative retry/usage accounting, bounded redacted evidence, offline replay and proposal-only CLI; real SDK HTTP-mock proof, 67 provider checks, full suite 537 passed / 16 Docker-CUDA skips; no paid calls, live proof remains AIC-016.
 - 2026-11-16 Codex — AIC-012 DONE: unique run directories, strict atomic storage, frozen exact source bytes, hashed immutable requests/attempts/raw evidence, commit-last records and validated best export with baseline fallback; 47 storage tests, full suite 470 passed / 16 Docker-CUDA skips, real CPU artifact evidence verified; no live provider calls.

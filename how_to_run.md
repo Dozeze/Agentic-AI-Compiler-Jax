@@ -64,6 +64,22 @@ They contain the exact bounded context, byte accounting, included fields and omi
 The 24 KiB feedback cap and full-request budget checks preserve constraints and the latest outcome;
 see README's AIC-014 section for the selection policy and ablation conditions.
 
+Optimization episodes now finish with `run_result.json`, including the stop status and verified best
+artifact reference. A failed baseline instead records `baseline_failure.json` and has no best export.
+`--iterations 0 --runner subprocess` verifies the trusted baseline without a provider; positive-candidate
+subprocess runs stop before requesting model code. Production evaluation requires Docker. See README's
+AIC-015 section for shared run/stage deadlines and the programmatic `controller.optimize()` result.
+
+For AIC-016, `configs/target.json` declares CUDA/Docker softmax with three candidate/request slots and C4
+feedback. It deliberately has no live funding. README's selected-target MVP section gives the separate
+offline, mandatory target/sandbox and approved live commands, evidence retention and read-only verifier.
+
+After selection is finished, `--finalize-run runs/SEARCH_RUN --output-dir runs/FINAL_RUN` performs a
+provider-free final evaluation using the frozen configuration. It consumes the one-use final split
+and blocks further search under that version. `--final-correctness-only` also consumes it and leaves
+performance unverified. See `docs/FINAL_EVALUATION.md` before using final mode; use the offline tests
+for rehearsal. Replay is `python scripts/heldout.py replay --run runs/FINAL_RUN` through locked uv.
+
 ## Backend and run configuration
 
 Select the JAX backend explicitly; the run stops with exit code 2 if it is unavailable instead of silently
@@ -95,10 +111,13 @@ uv run --locked python scripts/build_worker_image.py                 # --variant
 uv run --locked python agent.py --backend cpu --workload softmax --iterations 2 --config live_run.json
 ```
 
-- `--workload softmax|example_add` picks a registered workload; `--source/--function` still works (not scientific).
+- `--workload softmax|layer_norm|matmul_gelu|example_add` picks a registered workload;
+  `--source/--function` still works (not scientific). See `docs/WORKLOAD_SUITE.md` for the new contracts.
 - `--runner docker` (default) or `--runner subprocess` (no Docker: the baseline runs, model candidates are refused).
 - `--calibration FILE` reuses a frozen A/A calibration from `scripts/calibrate_aa.py`; otherwise the run
   calibrates δ before its first measurement and stops if the host is too noisy.
+  The calibration CLI accepts `--work-dir <new-directory>` to retain raw sessions and failed/noisy
+  evidence, and uses the configured evaluation budgets.
 - `--provider` chooses the LLM:
   - `anthropic` (default): `ANTHROPIC_API_KEY` in `.env.local`, as before.
   - `anthropic-vertex`: Claude on Vertex AI, billed to the GCP project.

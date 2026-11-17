@@ -17,6 +17,8 @@ import dataclasses
 import json
 import os
 import re
+import queue
+import threading
 import time
 import uuid
 from decimal import Decimal
@@ -202,6 +204,14 @@ class ProposalFailure(ProviderError):
         self.status, self.submitted = status, submitted
 
 
+class OutstandingRequestTimeout(TimeoutError):
+    """The host stopped waiting; the request may still complete remotely and must not be retried."""
+
+
+class RequestNotDispatched(TimeoutError):
+    """The durable reservation expired before the SDK was invoked; its debit can be released."""
+
+
 class ProposalProvider:
     """propose(context) -> locally validated Proposal, with durable reservations before dispatch.
 
@@ -293,6 +303,37 @@ class ProposalProvider:
         if self.settings.temperature is not None:
             body["temperature"] = self.settings.temperature
         return self._redact(body)
+
+    def _call(self, body, reservation):
+        """Bound host waiting independently of per-I/O SDK timeouts. Late completion has no callbacks.
+
+        A daemon can only finish this one SDK call. Its uncertain reservation stays charged, no retry
+        is allowed and no second request is dispatched. This does not promise remote cancellation.
+        """
+        wait_s = min(reservation["timeout_s"], self.budgets.run_wall_s - (self.clock() - self.started))
+        if wait_s <= 0:
+            raise RequestNotDispatched("run deadline expired before SDK dispatch")
+        completed = queue.Queue(maxsize=1)
+
+        def invoke():
+            try:
+                client = self.client.with_options(max_retries=0, timeout=reservation["timeout_s"]) if callable(
+                    getattr(self.client, "with_options", None)) else self.client
+                if self.clock() - self.started >= self.budgets.run_wall_s:
+                    raise RequestNotDispatched("run deadline expired before SDK dispatch")
+                completed.put((True, client.messages.create(**body)))
+            except BaseException as error:
+                completed.put((False, error))
+
+        threading.Thread(target=invoke, daemon=True, name="aic-provider-request").start()
+        try:
+            ok, value = completed.get(timeout=min(reservation["timeout_s"], max(0.,
+                self.budgets.run_wall_s - (self.clock() - self.started))))
+        except queue.Empty as error:
+            raise OutstandingRequestTimeout("host provider deadline exceeded; request completion is uncertain") from error
+        if not ok:
+            raise value
+        return value
 
     def _reservation(self, body, retry):
         if self.stopped:
@@ -415,11 +456,13 @@ class ProposalProvider:
             self.accounted_money += self._cost(reservation["input_tokens_reserved"], reservation["output_tokens_reserved"])
             started, response, failure = self.clock(), None, None
             try:
-                client = self.client.with_options(max_retries=0, timeout=reservation["timeout_s"]) if callable(
-                    getattr(self.client, "with_options", None)) else self.client
-                response = client.messages.create(**body)
+                response = self._call(body, reservation)
+            except KeyboardInterrupt:
+                failure = OutstandingRequestTimeout("provider wait interrupted; request completion is uncertain")
             except Exception as error:
                 failure = error
+                if isinstance(error, RequestNotDispatched):
+                    response = {"usage": {"input_tokens": 0, "output_tokens": 0}}
             usage = self._usage(response, reservation)
             content = _get(response, "content")
             event = {"request": reservation["request"], "local_request_id": reservation["local_request_id"],
@@ -434,9 +477,11 @@ class ProposalProvider:
                      "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                      "error": f"{type(failure).__name__}: {str(failure)[:2000]}" if failure else None}
             event["omitted_content_blocks"] = max(0, len(content) - 4) if isinstance(content, list) else 0
+            event["dispatched"] = not isinstance(failure, RequestNotDispatched)
+            event["completion_may_be_outstanding"] = isinstance(failure, OutstandingRequestTimeout)
             proposal, problem = None, None
             if failure:
-                event["status"] = "TRANSPORT_FAILED"
+                event["status"] = "NOT_DISPATCHED" if isinstance(failure, RequestNotDispatched) else "TRANSPORT_FAILED"
                 event["error_payload"] = self._bounded_payload(_get(failure, "body"))
             else:
                 try:
@@ -483,7 +528,10 @@ class ProposalProvider:
             status = _get(failure, "status_code", _get(failure, "code"))
             transient = isinstance(failure, (TimeoutError, ConnectionError)) or status in (408, 429) or (
                 isinstance(status, int) and 500 <= status < 600) or type(failure).__name__ in ("APITimeoutError", "APIConnectionError")
+            if isinstance(failure, (OutstandingRequestTimeout, RequestNotDispatched)):
+                transient = False
             if not transient or retry >= self.settings.max_retries:
                 self.stopped = True
-                raise ProposalFailure("TRANSPORT_FAILED", f"provider request failed: {event['error']}")
+                raise ProposalFailure("BUDGET_BLOCKED" if isinstance(failure, RequestNotDispatched) else "TRANSPORT_FAILED",
+                                      f"provider request failed: {event['error']}")
             self.sleep(min(self.settings.retry_backoff_s, max(0, self.budgets.run_wall_s - (self.clock() - self.started))))

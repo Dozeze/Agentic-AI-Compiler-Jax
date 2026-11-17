@@ -7,6 +7,7 @@ Runs the frozen reference, then `aa_sessions` independent A/A sessions (each in 
 baseline against itself, and writes evidence/calibration/<label>/<workload>-<shape>.json. Pass that file
 to agent.py with --calibration. Exit code 1, with the reasons, when the host is too noisy: then lengthen
 the blocks or pick a larger declared shape before any search, never loosen the limits after the fact.
+Use --work-dir <new-path> to retain raw worker evidence, including failed/noisy sessions.
 """
 from __future__ import annotations
 
@@ -14,15 +15,17 @@ import argparse
 import dataclasses
 import sys
 import tempfile
+from contextlib import nullcontext
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
 from benchmark import CalibrationError  # noqa: E402
-from contracts import BACKENDS, ConfigError, resolve_run_config  # noqa: E402
+from contracts import BACKENDS, ConfigError, resolve_run_config, to_dict  # noqa: E402
 from controller import BaselineFailed, EvaluationError, Evaluator  # noqa: E402
 from runner import DockerRunner, TrustedSubprocessRunner  # noqa: E402
+from storage import atomic_write_json  # noqa: E402
 from workloads import registry  # noqa: E402
 
 
@@ -34,9 +37,13 @@ def main(argv=None) -> int:
     parser.add_argument("--label", required=True, help="the measurement population, e.g. nvhost-wsl2-cuda-docker")
     parser.add_argument("--config", type=Path, default=None, help="RunConfig v1 file: its `measurement` protocol is used")
     parser.add_argument("--out", type=Path, default=REPO / "evidence" / "calibration")
+    parser.add_argument("--work-dir", type=Path, default=None,
+                        help="new directory retaining raw A/A workers, source, inputs, timings, logs and profiles")
     args = parser.parse_args(argv)
     try:
-        protocol = resolve_run_config({}, args.config).measurement
+        cfg = resolve_run_config({"workload_id": args.workload, "backend": args.backend,
+                                  "runner": args.runner}, args.config)
+        protocol = cfg.measurement
     except ConfigError as error:
         parser.error(str(error))
 
@@ -46,8 +53,26 @@ def main(argv=None) -> int:
         print(f"error: {reason}", file=sys.stderr)
         return 2
     spec = registry.get(args.workload)
-    with tempfile.TemporaryDirectory(prefix="aic-calibrate-") as tmp:
-        evaluator = Evaluator(spec, runner, protocol, tmp, selected_backend=args.backend)
+    shape = "x".join(str(n) for n in spec.development_shapes[-1])
+    path = args.out / args.label / f"{args.workload}-{shape}.json"
+    if args.work_dir is not None and path.exists():
+        print(f"error: calibration already exists: {path}; choose a new label", file=sys.stderr)
+        return 2
+    if args.work_dir is not None:
+        try:
+            args.work_dir.mkdir(parents=True, exist_ok=False)
+        except OSError as error:
+            print(f"error: raw evidence directory must be new: {error}", file=sys.stderr)
+            return 2
+    context = nullcontext(args.work_dir) if args.work_dir is not None else tempfile.TemporaryDirectory(prefix="aic-calibrate-")
+    with context as tmp:
+        evaluator = Evaluator(spec, runner, protocol, tmp, selected_backend=args.backend, budgets=cfg.budgets)
+        if args.work_dir is not None:
+            atomic_write_json(args.work_dir / "calibration_context.json", {
+                "schema_version": "calibration_context/v1", "config": to_dict(cfg), "label": args.label,
+                "reference_sha256": evaluator.baseline_sha256, "correctness_policy_hash": evaluator.policy_hash,
+                "primary_shape": list(evaluator.measure_shape), "runner": runner.identity(),
+                "scope": "raw A/A evidence; no candidate search or held-out evaluation"}, exclusive=True)
         try:
             evaluator.reference_outputs()
             calibration = evaluator.calibrate()
@@ -58,8 +83,6 @@ def main(argv=None) -> int:
             print(f"not calibrated: {error}", file=sys.stderr)
             return 1
     calibration = dataclasses.replace(calibration, label=args.label)
-    shape = "x".join(str(n) for n in calibration.shape)
-    path = args.out / args.label / f"{args.workload}-{shape}.json"
     calibration.save(path)
     print(f"delta = {calibration.delta:.4f} from {len(calibration.aa_relative_differences)} A/A sessions "
           f"({calibration.repeats} calls per block) -> {path}")

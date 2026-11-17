@@ -240,7 +240,10 @@ def test_promoted_candidate_is_profiled_after_confirmation(tmp_path, monkeypatch
     evaluator = Evaluator(SOFTMAX, TrustedSubprocessRunner(), MeasurementProtocol(), tmp_path, selected_backend="cpu")
     report = SimpleNamespace(passed=True, to_json=lambda: {"passed": True})
     monkeypatch.setattr(evaluator, "correctness", lambda source: (report, {}, None))
-    monkeypatch.setattr(evaluator, "calibrate", lambda: SimpleNamespace(delta=0.03))
+    from contracts import protocol_hash
+    calibration = benchmark.Calibration(benchmark.CALIBRATION_SCHEMA, "synthetic fixture", SOFTMAX.workload_id,
+        evaluator.measure_shape, "float32", protocol_hash(evaluator.protocol), "synthetic fixture", 1, .03, (), 1e-9, "fixture")
+    monkeypatch.setattr(evaluator, "calibrate", lambda: calibration)
     blocks = tuple(benchmark.Block(i, "AB", 1, 100, 50, 2*i, 2*i+1) for i in range(20))
     from contracts import protocol_hash
     session = benchmark.PairedSession(protocol_hash(evaluator.protocol), 1, blocks)

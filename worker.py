@@ -50,6 +50,15 @@ def _signature(args) -> str:
     return ";".join(f"{a.dtype}{list(a.shape)}" for a in args)
 
 
+def _phase(request, workdir, stage, case=None):
+    """Notify the parent of a phase boundary, outside timed calls. The parent owns all limits."""
+    if "stage_limits" not in request:
+        return
+    temporary = workdir / "phase.json.tmp"
+    temporary.write_text(json.dumps({"schema_version": "worker_phase/v1", "stage": stage, "case": case}))
+    temporary.replace(workdir / "phase.json")
+
+
 def _outputs(request: dict, workdir: Path, jax) -> dict:
     import array_io
     import benchmark
@@ -62,6 +71,7 @@ def _outputs(request: dict, workdir: Path, jax) -> dict:
                 "compile": {}}
     results, compiled, failed, outputs, case_args = [], {}, {}, {}, {}
     for name, tree in cases.items():
+        _phase(request, workdir, "compile")
         args = tuple(jax.device_put(a) for a in tree.arrays)
         jax.block_until_ready(args)
         sig = _signature(tree.arrays)
@@ -78,6 +88,7 @@ def _outputs(request: dict, workdir: Path, jax) -> dict:
                 results.append({"name": name, "status": "COMPILE_FAILED", "detail": _error(exc)})
                 continue
         try:
+            _phase(request, workdir, "correctness", name)
             out = jax.block_until_ready(compiled[sig].executable(*args))
         except Exception as exc:   # noqa: BLE001
             results.append({"name": name, "status": "EXECUTION_FAILED", "detail": _error(exc)})
@@ -85,6 +96,7 @@ def _outputs(request: dict, workdir: Path, jax) -> dict:
         outputs[name] = array_io.flatten(out)          # host transfer: correctness phase only
         results.append({"name": name, "status": "ok"})
     array_io.save(workdir / "outputs.npz", outputs)
+    _phase(request, workdir, "compile")
     return {"cases": results, "outputs": "outputs.npz",
             "compile": {sig: {"lower_s": c.lower_s, "compile_s": c.compile_s} for sig, c in compiled.items()},
             "ir": _feedback(request.get("analyze_case"), case_args, compiled, fn, workdir, jax)}
@@ -113,6 +125,7 @@ def _measure(request: dict, workdir: Path, jax) -> dict:
     for side in ("a", "b"):
         fn = _load(workdir, request["sources"][side], request["function_name"])
         sides[side] = benchmark.compile_timed(fn, args)
+    _phase(request, workdir, "measure")
     session = benchmark.measure_paired(sides["a"].executable, sides["b"].executable, args, protocol,
                                        repeats=request.get("repeats"))
     return {"session": session.to_json(),
@@ -135,6 +148,7 @@ def _profile(request: dict, workdir: Path, jax) -> dict:
         jax.block_until_ready(args)
         fn = _load(workdir, source_name, request["function_name"])
         compiled = benchmark.compile_timed(fn, args)
+        _phase(request, workdir, "profile")
         trace = feedback.capture_runtime_trace(jax, compiled.executable, args, artifacts=workdir / "profile",
                                                provenance=provenance)
     except Exception as error:   # noqa: BLE001 - missing optional evidence does not alter a correctness verdict
@@ -152,6 +166,7 @@ def handle(request: dict, workdir: Path) -> dict:
         raise ValueError(f"not a {REQUEST_SCHEMA} request")
     if request.get("mode") not in MODES:
         raise ValueError(f"unknown mode {request.get('mode')!r}")
+    _phase(request, Path(workdir), "compile")
     if request.get("backend") is not None:
         from environment import select_backend
         select_backend(request["backend"])

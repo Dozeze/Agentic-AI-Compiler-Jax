@@ -5,8 +5,9 @@ M1 entry authorization remains pending. See PLAN-APPROVAL in
 [IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md).
 
 33 tasks: **32 main-project tasks in M1–M7**, one optional second-target task in
-M8. No implementation is authorized or DONE. All test commands below are future
-verification instructions; audit results are in [CODEBASE_AUDIT.md](CODEBASE_AUDIT.md).
+M8. The original approval/audit snapshot is historical. Current implementation authorization,
+task evidence and remaining target acceptance are recorded in AI_CONTEXT.md and
+[IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md); per-task Status fields below are updated as work proceeds.
 The [plan](IMPLEMENTATION_PLAN.md) defines common numerical, measurement, safety,
 profile, budget and approval contracts.
 
@@ -21,7 +22,7 @@ compact complete model, and AIC-033 qualifies optional second-target use. Kernel
 and model tasks AIC-027–030 are now main-project REQUIRED tasks before evaluation,
 not automatic deferrals. The listing is in execution order, not numeric order.
 
-All tasks start NOT_STARTED except AIC-033 DEFERRED. READY requires both task
+Tasks initially started NOT_STARTED except AIC-033 DEFERRED. READY requires both task
 prerequisites and authorization of its milestone. The progress tracker is the
 execution record; update these Status fields together. A K2/K3 kernel deferral
 requires an explicit amended task/milestone/dependency plan, never silently
@@ -730,13 +731,15 @@ No paid calls or target/live acceptance claimed. Details: IMPLEMENTATION_PROGRES
 
 **Priority:** CRITICAL.
 
-**Status:** NOT_STARTED.
+**Status:** DONE (2026-11-16; offline software/native CPU scope; target/live acceptance remains AIC-016).
 
 **Goal:** Connect proposal, sandbox evaluation, decision, storage and feedback into one loop.
 
 **Reason:** Existing loop proves plumbing but budgets, baseline failure and error recovery are weak.
 
-**Current codebase state:** Controller.agent_loop, updateHist, _dispatch_tool and initHist are existing integration points; D06 zero-budget defect.
+**Current codebase state:** Controller.start/optimize/agent_loop integrate durable attempts and verified terminal
+results. Shared run/stage budgets, parent phase monitoring, isolated-runner preflight and raw promotion
+confirmation checks are verified offline, with actual CPU failure/fallback artifacts.
 
 **Dependencies:** AIC-006, AIC-009, AIC-012, AIC-013, AIC-014.
 
@@ -750,11 +753,11 @@ No paid calls or target/live acceptance claimed. Details: IMPLEMENTATION_PROGRES
 
 **Acceptance criteria:**
 
-- [ ] Zero candidates invokes no model.
-- [ ] Every attempt records one terminal result.
-- [ ] Second iteration consumes prior result.
-- [ ] Only confirmed correct candidate replaces best.
-- [ ] Stop returns verified baseline/incumbent.
+- [x] Zero candidates invokes no model: direct and CLI checks return the verified baseline.
+- [x] Every attempt records one terminal result before another request; publication failure freezes execution.
+- [x] Second iteration consumes prior result: scripted state matrix and real CPU C4 request snapshots.
+- [x] Only confirmed correct candidate replaces best: raw source/policy/calibration/session recheck and corruption tests.
+- [x] Stop returns verified baseline/incumbent: run_result/v1 references verified best; failed baseline explicitly has none.
 
 **Definition of Done:** Every acceptance item is evidenced; the implementation and relevant documentation agree; the listed tests and affected regression checks pass; actual results and limitations are recorded in the progress tracker. No skipped mandatory check, implicit approval or mock substituted for required real evidence.
 
@@ -764,7 +767,11 @@ No paid calls or target/live acceptance claimed. Details: IMPLEMENTATION_PROGRES
 
 **Out of scope:** Advanced search and multi-agent optimization.
 
-**Completion evidence:** State transition matrix, regression tests, bounded fake-run artifacts and source untouched proof.
+**Completion evidence:** tests/test_controller.py: 66 passed; focused affected regression 314 passed / 3
+target skips. Final full suite 635 passed / 16 Docker-CUDA skips. Synthetic state and
+native CPU episodes retained at runs/aic-015-{synthetic,native}-validation-20261116/validation.json,
+with verified best/context/evaluation/commit references and original source hashes. No paid calls or target
+acceptance claimed. Details: IMPLEMENTATION_PROGRESS.md AIC-015.
 
 ## Task ID: AIC-016
 
@@ -774,19 +781,24 @@ No paid calls or target/live acceptance claimed. Details: IMPLEMENTATION_PROGRES
 
 **Priority:** CRITICAL.
 
-**Status:** NOT_STARTED.
+**Status:** BLOCKED (2026-11-16): offline software/native CPU mechanics implemented; selected-target
+CUDA/Docker execution and funded live pilot unavailable. No M3 completion claimed.
 
 **Goal:** Demonstrate genuine multi-iteration optimization on the explicitly chosen hardware.
 
 **Reason:** Fake-client evidence proves plumbing, not LLM-based optimization.
 
-**Current codebase state:** Audit D05 is mocked only; integrated system after AIC-015 must demonstrate real evaluation.
+**Current codebase state:** AIC-015 supplies bounded integration and deterministic decision fixtures.
+AIC-016 adds actual native CPU failure/feedback evidence, a real selected-target container replay test,
+nonsecret configs/target.json, mandatory sandbox test selection and an artifact-only evidence verifier.
+The target command fails locally for unavailable Docker/CUDA; there are no live request IDs/results.
 
 **Dependencies:** AIC-015.
 
 **Implementation instructions:** Add fake-provider end-to-end tests exercising actual selected-target sandbox compilation/correctness/timing using reviewed fixtures. With explicit model/spend cap and M3 authorization, evaluate at least two and at most three live softmax proposals. Store next-request feedback, actual device/containment evidence, artifacts and best export. Distinguish fake decision fixtures from live results; a speedup is not required.
 
-**Expected files:** tests/test_end_to_end.py (new), README.md, implementation tracker; runtime artifacts under runs/<id>/.
+**Expected files:** tests/test_end_to_end.py (new), scripts/verify_mvp.py (new), configs/target.json (new),
+tests/conftest.py, pyproject.toml markers, README.md, implementation tracker; runtime artifacts under runs/<id>/.
 
 **Implementation constraints:** No automatic paid run in tests. Sandbox suite cannot be skipped to pass Level A. Live model availability and cap are hard entry conditions.
 
@@ -794,10 +806,13 @@ No paid calls or target/live acceptance claimed. Details: IMPLEMENTATION_PROGRES
 
 **Acceptance criteria:**
 
-- [ ] Offline compile/failure/reject/accept paths pass.
+- [x] Offline compile/failure/reject/accept paths pass: native CPU failure/rejection episodes plus AIC-015
+  synthetic decision/confirmation fixtures. This does not establish selected-target acceptance.
 - [ ] >=2 genuine proposals evaluated on selected device.
-- [ ] Later context includes actual earlier result.
-- [ ] Best source and manifest replay.
+- [x] Later context includes actual earlier result: native softmax compile/nonfinite diagnostics with
+  exact context/request/committed-evaluation references. The corresponding live criterion remains blocked.
+- [x] Best source and manifest replay: native CPU baseline export and manifest/config/raw hashes verified
+  without source import; tampered source/context/worker evidence refused. Live replay remains pending.
 - [ ] Profile coverage/limitations reviewed.
 
 **Definition of Done:** Every acceptance item is evidenced; the implementation and relevant documentation agree; the listed tests and affected regression checks pass; actual results and limitations are recorded in the progress tracker. No skipped mandatory check, implicit approval or mock substituted for required real evidence.
@@ -808,7 +823,12 @@ No paid calls or target/live acceptance claimed. Details: IMPLEMENTATION_PROGRES
 
 **Out of scope:** Research-scale search, another hardware target or speedup claims from MVP alone.
 
-**Completion evidence:** Full test output, redacted live request IDs/usage, run ID, manifest, source hashes and M3 review.
+**Completion evidence:** Native CPU run 20261116T182356.869516Z-49c6ec758c8a under
+runs/aic-016-native-validation-20261116/native/run; no paid calls. Focused checks: 45 passed / 1 target
+deselected. Shared offline suite: 643 passed / 2 host-CUDA skips / 15 target-sandbox deselected.
+Mandatory selected-target/sandbox command: nonzero, 15 capability setup errors, zero successful
+skips. Detailed evidence in IMPLEMENTATION_PROGRESS.md AIC-016. Live request IDs,
+CUDA observations, container acceptance, profile review and M3 review remain pending.
 
 ## Task ID: AIC-017
 
@@ -818,19 +838,24 @@ No paid calls or target/live acceptance claimed. Details: IMPLEMENTATION_PROGRES
 
 **Priority:** REQUIRED.
 
-**Status:** NOT_STARTED.
+**Status:** BLOCKED for selected-target acceptance (2026-11-16): software and CPU verification implemented;
+AIC-016 prerequisite acceptance, actual CUDA/container resource checks and raw target A/A calibration pending.
 
 **Goal:** Cover reduction, normalization and dense compound computations under one evaluator.
 
 **Reason:** A single simple example cannot establish project utility or workload progression.
 
-**Current codebase state:** Only example exists today; AIC-003 establishes softmax/registry.
+**Current codebase state:** Registry supports softmax, affine layer norm and highest-precision dense
+projection with exact GELU, plus legacy addition. Independent float64 oracles and eager/JIT/native CPU
+checks pass. The calibration CLI can retain raw work and uses the declared evaluation budgets.
 
 **Dependencies:** AIC-016.
 
 **Implementation instructions:** Add pure reference/input/edge-case definitions for layer norm and matmul+bias+GELU. Fix epsilon, axis, GELU variant and matmul precision. Register plan shapes, verify reference with independent checks, calibrate workload-specific tolerance/noise policy before search. Preserve baseline semantics and reject unsupported dtypes.
 
-**Expected files:** workloads/registry.py; new workloads/layer_norm.py, workloads/matmul_gelu.py, tests/test_workload_suite.py.
+**Expected files:** workloads/registry.py, workloads/oracles.py, runner.py, scripts/calibrate_aa.py;
+new workloads/layer_norm.py, workloads/matmul_gelu.py, tests/test_workload_suite.py, docs/WORKLOAD_SUITE.md;
+existing calibration regression and current-state docs.
 
 **Implementation constraints:** No deliberate baseline slowdown, approximate precision changes or full models.
 
@@ -838,9 +863,9 @@ No paid calls or target/live acceptance claimed. Details: IMPLEMENTATION_PROGRES
 
 **Acceptance criteria:**
 
-- [ ] Three workload families supported.
-- [ ] Eager/JIT and reference checks pass.
-- [ ] Edge cases/tolerances recorded.
+- [x] Three workload families supported by registry/shared evaluator; actual target acceptance pending.
+- [x] Eager/JIT and independent reference checks pass on CPU, including native multi-input workers.
+- [x] Edge cases/tolerances recorded before search; no policy relaxation after tests.
 - [ ] All fit isolated resource limits or preregistered smaller shapes.
 
 **Definition of Done:** Every acceptance item is evidenced; the implementation and relevant documentation agree; the listed tests and affected regression checks pass; actual results and limitations are recorded in the progress tracker. No skipped mandatory check, implicit approval or mock substituted for required real evidence.
@@ -851,7 +876,13 @@ No paid calls or target/live acceptance claimed. Details: IMPLEMENTATION_PROGRES
 
 **Out of scope:** Attention, Transformer and kernel rewrites.
 
-**Completion evidence:** Reference correctness, configs/shape policy, raw A/A evidence per primary shape.
+**Completion evidence:** 232 affected checks passed / 2 target tests deselected; initial workload-only
+checks 100 passed / 2 target tests deselected. Shared offline suite 749 passed / 2 host-CUDA skips /
+17 target-sandbox deselected. Native CPU reference/export evidence at
+runs/aic-017-native-validation-20261116/validation.json (17 LN / 16 dense cases). Plan shapes and
+numerical policy in WORKLOAD_SUITE.md. New target command fails with 2 CUDA setup errors; all three
+CUDA calibration preflights fail because the matching image is unavailable. No raw target A/A evidence,
+resource acceptance or speedup claim. Full offline result in IMPLEMENTATION_PROGRESS.md AIC-017.
 
 ## Task ID: AIC-018
 
@@ -861,19 +892,25 @@ No paid calls or target/live acceptance claimed. Details: IMPLEMENTATION_PROGRES
 
 **Priority:** REQUIRED.
 
-**Status:** NOT_STARTED.
+**Status:** BLOCKED for selected-target acceptance (2026-11-17): finalization/replay software and native
+CPU correctness verified; genuine CUDA final timing and earlier target/M3/M4 entry acceptance pending.
 
 **Goal:** Evaluate selected implementations on inputs not used to guide search.
 
 **Reason:** Existing fixed inputs and future search feedback otherwise encourage overfitting.
 
-**Current codebase state:** No split infrastructure exists in current code; WorkloadSpec defines slots after AIC-003.
+**Current codebase state:** The original split/correctness helper remains a legacy diagnostic. Canonical
+finalization now selects a completed run's verified best, checks its pre-search split commitment, seals
+the evaluation version, retains forty-case per-family correctness and fresh per-shape measurements in
+a separate immutable release. Data-only replay verifies hashes, coverage and host measurement analysis.
 
 **Dependencies:** AIC-017.
 
 **Implementation instructions:** Add trusted final-evaluation mode with at least twenty disjoint seeds and two unseen shapes/workload, frozen split digest before search. Keep arrays/seeds out of prompts and candidate context; release only after selection and evaluation. Evaluate winner versus immutable baseline and record per-shape correctness/speedups. Refuse search reuse of final feedback under same evaluation version.
 
-**Expected files:** workloads/registry.py, agent.py, contracts.py, storage.py; new tests/test_holdout.py.
+**Expected files:** existing split declarations in workloads/registry.py; agent.py, contracts.py,
+context_builder.py, controller.py, heldout.py, storage.py, scripts/heldout.py;
+new finalization.py, tests/test_holdout.py and docs/FINAL_EVALUATION.md.
 
 **Implementation constraints:** Held-out failure invalidates affected claims; never tune tolerances or candidates on heldout and reuse the same label.
 
@@ -881,10 +918,13 @@ No paid calls or target/live acceptance claimed. Details: IMPLEMENTATION_PROGRES
 
 **Acceptance criteria:**
 
-- [ ] Splits disjoint/frozen.
-- [ ] Deliberately overfit fixture fails.
-- [ ] No heldout fields in proposal context.
-- [ ] All per-shape results retained.
+- [x] Splits disjoint/frozen: opaque pre-search digest binds reference/input recipe/split/numeric policy;
+  missing/drifted old commitments refused. Commit declarations before research search.
+- [x] Deliberately overfit fixture passes development and fails all forty final cases on both unseen shapes.
+- [x] No heldout fields in proposal context: development allowlists unchanged; sealed final state blocks
+  CLI/direct-controller dispatch before provider access and refuses version-only relabeling.
+- [x] All per-shape results retained: native correctness reports and raw arrays, explicit failure scopes,
+  fixed fresh-session/calibration evidence and verified replay. CUDA timing acceptance remains pending.
 
 **Definition of Done:** Every acceptance item is evidenced; the implementation and relevant documentation agree; the listed tests and affected regression checks pass; actual results and limitations are recorded in the progress tracker. No skipped mandatory check, implicit approval or mock substituted for required real evidence.
 
@@ -894,7 +934,12 @@ No paid calls or target/live acceptance claimed. Details: IMPLEMENTATION_PROGRES
 
 **Out of scope:** Universal equivalence, gradients or inferring second-target correctness from the primary target.
 
-**Completion evidence:** Pre-search split hash, release manifest, negative fixture results and generalization report schema.
+**Completion evidence:** New finalization checks: 30 passed / 1 target deselected before the last two
+state/replay checks; final shared offline suite 781 passed / 2 host-CUDA skips / 20 target-sandbox
+deselected. Native three-family final correctness and shape-overfit releases retained at
+runs/aic-018-native-validation-20261117/validation.json. Target checks fail with 3 CUDA setup errors.
+No paid call or official split consumption; synthetic timing tests are not performance evidence.
+Detailed results and remaining acceptance: IMPLEMENTATION_PROGRESS.md AIC-018.
 
 ## Task ID: AIC-019
 

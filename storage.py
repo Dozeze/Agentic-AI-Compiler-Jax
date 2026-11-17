@@ -144,6 +144,10 @@ class RunStore:
                 raise StorageError("non-regular artifact refused")
         return total
 
+    def check_capacity(self):
+        """Check prepared artifacts before an external request or worker launch."""
+        return self._size()
+
     def _write(self, relative, data, *, immutable=True):
         path = self._safe(relative)
         old_size = path.stat().st_size if path.is_file() and not immutable else 0
@@ -237,6 +241,25 @@ class RunStore:
             raise StorageError("run store is not initialized")
         return self._json("provider_stop.json", {"schema_version": "provider_stop/v1", "run_id": self.run_id,
                                                  "status": status, "reason": reason, "budget": budget})
+
+    @_storage_boundary
+    def finish_run(self, status, reason, budget, *, baseline_failure=False):
+        """Immutable terminal result. Failed initialization has no invented best artifact."""
+        if not self.initialized:
+            raise StorageError("run store is not initialized")
+        records = self.committed_records()
+        best = self.verified_best() if records else None
+        result = {"schema_version": "run_result/v1", "run_id": self.run_id,
+                  "output_dir": str(self.path),
+                  "status": status, "reason": reason, "budget": budget, "best": best,
+                  "candidate_attempts": max(0, len(records) - 1),
+                  "finished_utc": datetime.now(timezone.utc).isoformat()}
+        if baseline_failure:
+            result["baseline_failure"] = self._json("baseline_failure.json", {
+                "schema_version": "baseline_failure/v1", "reason": reason,
+                "raw_artifacts": self._work_references()})
+        self._json("run_result.json", result)
+        return result
 
     @_storage_boundary
     def save_proposal(self, proposal, request):
@@ -468,6 +491,25 @@ class RunStore:
             raise StorageError("best export hash does not match its committed source")
         return index
 
+    @_storage_boundary
+    def commit_final_result(self, report):
+        """Publish a separate final evaluation; never alter the search run or its best pointer."""
+        manifest = json.loads(self._safe("manifest.json").read_bytes())
+        if not self.initialized or manifest.get("mode") != "final_evaluation":
+            raise StorageError("final publication requires a separate final-evaluation store")
+        report = {**report, "run_id": self.run_id, "finished_utc": datetime.now(timezone.utc).isoformat()}
+        report_ref = self._json("final_report.json", report)
+        references = [self._reference(name) for name in (
+            "manifest.json", "run_config.json", "environment.json", "baseline.py", "winner.py",
+            "selection.json", "split.json", "parent_manifest.json", "parent_best.json", "parent_result.json")]
+        references.extend(self._work_references())
+        references.append(report_ref)
+        # The release is the commit marker; partial directories without it are never final evidence.
+        release = {**report, "schema_version": "final_release/v1",
+                   "artifacts": references, "report_artifact": report_ref}
+        self._json("release.json", release)
+        return json.loads(self._safe("release.json").read_bytes())
+
 
 @_storage_boundary
 def verified_best(output_dir):
@@ -477,3 +519,80 @@ def verified_best(output_dir):
     manifest = json.loads(store._safe("manifest.json").read_bytes())
     store.run_id = manifest["run_id"]
     return store.verified_best()
+
+
+@_storage_boundary
+def verified_final_result(output_dir):
+    """Replay final evidence by hashes/JSON only; saved source is never imported."""
+    store = RunStore(output_dir)
+    store._size()
+    report = json.loads(store._safe("release.json").read_bytes())
+    manifest = json.loads(store._safe("manifest.json").read_bytes())
+    if (report.get("schema_version") != "final_release/v1" or report.get("run_id") != manifest.get("run_id")
+            or manifest.get("mode") != "final_evaluation"):
+        raise StorageError("invalid final release identity")
+    for reference in report["artifacts"]:
+        store._verify_reference(reference)
+    store._verify_reference(report["report_artifact"])
+    payload = json.loads(store._safe(report["report_artifact"]["path"]).read_bytes())
+    if (set(report) != set(payload) | {"schema_version", "artifacts", "report_artifact"}
+            or any(report.get(key) != value for key, value in payload.items())):
+        raise StorageError("final release differs from its committed report")
+    selection = json.loads(store._safe("selection.json").read_bytes())
+    if (report["selection"] != selection or sha256(store._safe("winner.py").read_bytes()) != selection["source_sha256"]
+            or sha256(store._safe("baseline.py").read_bytes()) != selection["baseline_sha256"]):
+        raise StorageError("final selection/source mismatch")
+    split = json.loads(store._safe("split.json").read_bytes())
+    digest = sha256(json.dumps(split, sort_keys=True, separators=(",", ":"), allow_nan=False).encode())
+    if digest != report["commitment"]["sha256"]:
+        raise StorageError("final split differs from its pre-search commitment")
+    parent = json.loads(store._safe("parent_manifest.json").read_bytes())
+    best = json.loads(store._safe("parent_best.json").read_bytes())
+    if (parent.get("evaluation_split") != report["commitment"] or best["attempt_id"] != selection["attempt_id"]
+            or best["source"]["sha256"] != selection["source_sha256"]):
+        raise StorageError("final result differs from its frozen parent selection")
+    from contracts import from_dict
+    from benchmark import PairedSession, analyze_session
+    from controller import decide
+    cfg = from_dict(json.loads(store._safe("run_config.json").read_bytes()))
+    if [item["shape"] for item in report["shapes"]] != split["shapes"]:
+        raise StorageError("final result is missing declared shapes")
+    native_sessions = set()
+    calibrations = []
+    for ref in report["artifacts"]:
+        if ref["path"].startswith("work/") and ref["path"].endswith("/result.json"):
+            worker = json.loads(store._safe(ref["path"]).read_bytes())
+            if worker.get("mode") == "measure" and worker.get("status") == "ok":
+                native_sessions.add(sha256(json_bytes(worker["session"])))
+        if ref["path"].startswith("work/") and ref["path"].endswith("/calibration.json"):
+            calibrations.append(json.loads(store._safe(ref["path"]).read_bytes()))
+    for item in report["shapes"]:
+        correctness = item["correctness"]
+        if "cases" in correctness:
+            names = [f"heldout{item['shape']}/seed{seed}" for seed in split["seeds"]]
+            if ([case["case"] for case in correctness["cases"]] != names
+                    or correctness["n_cases"] != len(names)
+                    or correctness["passed"] != all(c["passed"] for c in correctness["cases"])):
+                raise StorageError("final correctness report does not cover the declared split")
+        timing = item["timing"]
+        if timing["status"] == "MEASURED":
+            calibration = timing["calibration"]
+            if calibration not in calibrations or len(timing["sessions"]) != cfg.measurement.final_sessions:
+                raise StorageError("final timing is missing frozen calibration or fresh sessions")
+            for session in timing["sessions"]:
+                analysis = analyze_session(PairedSession.from_json(session["raw"]), cfg.measurement)
+                decision = dataclasses.asdict(decide(analysis, calibration["delta"]))
+                if (sha256(json_bytes(session["raw"])) not in native_sessions
+                        or json_bytes(analysis.to_json()) != json_bytes(session["analysis"])
+                        or decision != session["decision"]
+                        or session["baseline_sha256"] != selection["baseline_sha256"]
+                        or session["candidate_sha256"] != selection["source_sha256"]):
+                    raise StorageError("final timing differs from native measurements and host analysis")
+            if timing["confirmed_improvement"] != all(s["decision"]["state"] == ACCEPTED for s in timing["sessions"]):
+                raise StorageError("final confirmation differs from host decisions")
+    correct = report["status"] != "INTERRUPTED" and all(i["correctness"]["passed"] for i in report["shapes"])
+    faster = (correct and bool(manifest.get("scientific")) and cfg.backend == "cuda" and not best["baseline_fallback"]
+              and all(i["timing"].get("confirmed_improvement") for i in report["shapes"]))
+    if report["correctness_passed"] != correct or report["performance_verified"] != bool(faster):
+        raise StorageError("final verification flags disagree with per-shape evidence")
+    return report

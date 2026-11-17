@@ -26,6 +26,9 @@ dev = [
 testpaths = ["tests"]          # only tests/ is collected; root scripts are never collected
 addopts = "-ra -p no:anyio"    # the anyio plugin emits PytestRemovedIn10Warning on pytest 9.2; it is unused
 markers = [
+  "target: selected-target acceptance; requires AIC_TARGET_CONFIG and real target hardware",
+  "sandbox: real container containment/evaluation; required when AIC_TARGET_CONFIG is set",
+  "live: separately authorized paid execution; never collected by the offline command",
   "slow: takes longer than 10 seconds",
   "needs_gpu: needs CUDA; skipped without it, an error with --require-gpu",
   "needs_docker: needs Docker and the worker image; skipped without them, an error with --require-docker",

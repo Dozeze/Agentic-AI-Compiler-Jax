@@ -1,9 +1,10 @@
 # Agentic AI Compiler — general implementation roadmap
 
 Version **AIC-1.1**, 2026-10-12. **APPROVED** by the owner on 2026-10-12.
-No implementation milestone is authorized. Overall plan approval is recorded as
-PLAN-APPROVAL in [IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md);
-subsequent milestone authorization and implementation evidence belong there too.
+Overall plan approval is recorded as PLAN-APPROVAL in
+[IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md). Current user task authorization and
+implementation evidence are recorded there and in AI_CONTEXT.md; implementation does not waive
+pending selected-target acceptance or authorize unspecified live spending.
 
 ## 1. Executive decision and scope revision
 
@@ -144,6 +145,10 @@ Layer norm and matmul/GELU set their own justified tolerances before search;
 do not increase tolerances after inspecting a faster failing candidate. x64
 is recorded explicitly; the initial float32 protocol preserves the selected target’s
 reference semantics and matmul precision. No silent reduced-precision change.
+
+AIC-017 declares layer norm rtol/atol `1e-4`/`1e-4` and dense exact GELU `1e-4`/`1e-5`.
+The independent reference checks validate them on CPU; selected-target checks remain pending.
+The conditioning rationale, complete inputs and fixed semantics are in [WORKLOAD_SUITE.md](WORKLOAD_SUITE.md).
 
 Require finite outputs for finite-input workloads. Softmax tests include zeros,
 equal logits, large finite positive/negative offsets, mixed magnitudes and one
@@ -394,7 +399,7 @@ never choose only shapes with favorable post-search results.
 | --- | --- | --- |
 | Infrastructure | Existing addition; dispatch, identity and evaluator checks | float32 vectors (32,) and (4096,); no headline speedup claim |
 | MVP | Stable last-axis softmax; reductions and numeric stability | Development (32,128), (128,1024); held-out (64,257), (256,2048), subject to pre-search calibration |
-| Representative suite | Layer norm; matmul+bias+GELU | Same reduction shapes; dense (M,K,N)=(32,64,64),(128,256,256), held-out (63,127,95),(256,512,384); fix epsilon and GELU variant |
+| Representative suite | Layer norm; matmul+bias+GELU | Same reduction shapes; dense (M,K,N)=(32,64,64),(128,256,256), held-out (63,127,95),(256,512,384). AIC-017: affine last-axis layer norm, epsilon 1e-5; dense HIGHEST/float32 dot + exact erfc GELU. CPU references verified, target calibration pending |
 | Lower level | One real custom operation integrated into a JAX workload | Prefer layer norm matching its established reference; exact technology/shape/layout fixed by AIC-021 |
 | Algorithm | Scaled dot-product attention | Forward float32, fixed scaling/mask semantics and bounded Q/K/V; stable reference and unseen sizes |
 | Model component | One small Transformer block | Fixed normalization/residual/activation semantics, deterministic weights and reference |
@@ -474,15 +479,15 @@ in the backlog is authoritative. “Storage core” means AIC-012, not later rec
 | Goal | Description / motivation | Current status | Implementation / tasks | Dependencies | Deliverable, verification and acceptance | Priority / difficulty | Risk / fallback |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | G-01 | Reproducible foundation and evidence-based target choice | PARTIALLY_IMPLEMENTED, CPU only | AIC-001,031,002,003 | None | Positive offline tests, selected-device proof, pinned config/manifest, seeded references | CRITICAL / MEDIUM | Access/version limits; leave target gate blocked rather than imply GPU/TPU support |
-| G-02 | Correctness as a hard constraint | PARTIALLY_IMPLEMENTED | AIC-004,018 | G-01 | Bad tree/shape/dtype/numeric/nonfinite/overfit fixtures rejected; valid held-out cases pass | CRITICAL / MEDIUM | Freeze tolerances before search; narrow supported domain explicitly |
+| G-02 | Correctness as a hard constraint | PARTIALLY_IMPLEMENTED (2026-11-17): three-family CPU references/final correctness and development-valid overfit rejection verified; one-use split release and data-only replay implemented, actual target acceptance pending | AIC-004,018 | G-01 | Bad tree/shape/dtype/numeric/nonfinite/overfit fixtures rejected; valid held-out cases pass | CRITICAL / MEDIUM | Freeze tolerances before search; narrow supported domain explicitly |
 | G-03 | Reliable target-specific measurement and decisions | PARTIALLY_IMPLEMENTED | AIC-005,006 | G-01,G-02 | Raw synchronized blocks, A/A calibration and fresh confirmation; noisy gains rejected | CRITICAL / LARGE | Contention/drift; inconclusive result, no speed claim |
 | G-04 | Isolated bounded evaluation | MISSING | AIC-007–009 | G-01–03 | Real selected-target containment and cleanup tests, policy validation, fail closed | CRITICAL / LARGE | Device/runtime cannot be constrained; block autonomy and reconsider target |
 | G-05 | Compiler context | MISSING | AIC-010 | G-04 | Actual selected-target IR and bounded summaries with optional estimate status | REQUIRED / MEDIUM | Pinned API mismatch; documented unsupported fields, no invented estimates |
 | G-06 | Actual runtime/profile context | PARTIALLY_IMPLEMENTED (2026-11-16): CPU trace and C4 context verified; CUDA/container acceptance pending | AIC-011 | G-05 | Measured event coverage and overlap-aware summary consumed in context | REQUIRED / MEDIUM | Host-only/unavailable trace; mark R-06 partial and request scoped fallback |
 | G-07 | Structured budgeted provider and history | PARTIALLY_IMPLEMENTED (2026-11-16): AIC-013 boundary/accounting and AIC-014 context selection verified offline/CPU; AIC-016 live proof pending | AIC-013,014 | G-04–06, G-09 storage core | Local schema validation, bounded contexts and prior failure in next prompt | CRITICAL / MEDIUM | Provider/cost; offline tests, live gate remains open |
-| G-08 | Complete iterative optimizer | PARTIALLY_IMPLEMENTED | AIC-015,016 | G-02–07, G-09 storage core | >=2 live feedback-informed evaluations, verified best or baseline, offline state tests | CRITICAL / LARGE | No gain; return baseline, no mock discovery claim |
+| G-08 | Complete iterative optimizer | PARTIALLY_IMPLEMENTED (2026-11-16): AIC-015 bounded controller verified offline; AIC-016 native softmax failure-feedback checks, real target replay test and artifact verifier implemented. Target command fails for unavailable Docker/CUDA; live pilot blocked on access/funding | AIC-015,016 | G-02–07, G-09 storage core | >=2 live feedback-informed evaluations, verified best or baseline, offline state tests | CRITICAL / LARGE | No gain; return baseline, no mock discovery claim |
 | G-09 | Durable artifacts, recovery and reporting | PARTIALLY_IMPLEMENTED (2026-11-16): AIC-012 storage core verified offline; execution recovery/reporting pending | AIC-012,019,020 | G-04 for storage; G-08 for recovery | Hashes, raw measurements, interrupted recovery and artifact-only report | REQUIRED / MEDIUM | Partial files/request ambiguity; committed records and conservative debit |
-| G-10 | Representative suite and generalization | MISSING | AIC-017,018 | G-08 | Three families, disjoint shapes/seeds, per-case results | REQUIRED / MEDIUM | Workload resource limits; calibrate before protocol freeze |
+| G-10 | Representative suite and generalization | PARTIALLY_IMPLEMENTED (2026-11-17): three-family CPU references and 40-case final checks verified; AIC-018 pre-search split identity, separate release/replay and reuse prevention implemented. Actual target calibration/resources/final sessions and earlier M3 acceptance pending | AIC-017,018 | G-08 | Three families, disjoint shapes/seeds, per-case results | REQUIRED / MEDIUM | Workload resource limits; calibrate before protocol freeze |
 | G-11 | Real custom-kernel capability | MISSING | AIC-021,027,028 | G-10,G-09 | Native selected-target JAX operation plus >=2 live kernel proposals, same correctness/timing | REQUIRED / LARGE | Infeasible toolchain/sandbox; approved deferral leaves R-11 incomplete |
 | G-12 | Algorithm and complete-model progression | MISSING | AIC-029,030,032 | G-10,G-09 | Attention, block and compact full model evaluated end-to-end with fixed semantics | REQUIRED / LARGE | Resource growth; reduce model dimensions before freeze, not semantic coverage |
 | G-13 | Research assessment and reproducible delivery | MISSING | AIC-022–026 | G-11,G-12 | Funded frozen study, complete inventory/report, clean setup, demo and explicit speedup achieved/unmet | REQUIRED / LARGE | No speedup/funding; negative results or scoped pilot, preserve gaps |

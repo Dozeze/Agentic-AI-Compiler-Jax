@@ -12,6 +12,7 @@ import jax.numpy as jnp
 from dotenv import load_dotenv
 
 from contracts import Budgets, ConfigError, ModelSettings, config_hash, resolve_run_config, to_dict
+from context_builder import evaluation_commitment
 from controller import Controller, read_python_source
 from environment import BACKENDS, BackendUnavailable, collect_environment, has_gpu, select_backend
 from storage import RunStore, StorageError, atomic_write_json
@@ -74,10 +75,14 @@ def build_controller(client, max_iterations=DEFAULT_ITERATIONS, source_path=None
     Without either, the registered `example_add` workload (the original x + y example) is used. The
     default runner is the isolated DockerRunner; pass another runner explicitly.
     """
-    from contracts import MeasurementProtocol
+    from contracts import MeasurementProtocol, validate_budgets
     from controller import Evaluator
     from runner import DockerRunner
     from workloads import registry
+
+    validate_budgets(budgets or Budgets())
+    if type(max_iterations) is not int or max_iterations < 0:
+        raise ConfigError("max_iterations must be a nonnegative integer")
 
     if source_path is not None:
         _, _, args = _load_source_workload(source_path, function_name)
@@ -183,6 +188,10 @@ def _build_parser():
                         help="replay an array of local Messages-shaped responses; no credentials or network")
     parser.add_argument("--proposal-only", action="store_true", default=None,
                         help="save one validated proposal without loading or evaluating source code")
+    parser.add_argument("--finalize-run", type=Path,
+                        help="consume the one-use final split for a completed run's verified best; no provider requests")
+    parser.add_argument("--final-correctness-only", action="store_true",
+                        help="omit final timing; still consumes the split and leaves performance unverified")
     return parser
 
 
@@ -256,10 +265,42 @@ def main(argv=None):
     parser = _build_parser()
     args = parser.parse_args(argv)
 
+    if args.finalize_run is not None:
+        if any(getattr(args, name) is not None for name in (
+                "config", "iterations", "provider", "model", "workload", "source", "function", "backend",
+                "runner", "calibration", "offline_responses", "proposal_only")) or args.plot:
+            parser.error("final evaluation inherits the frozen run config; only output-dir, require-gpu and final-correctness-only apply")
+        from finalization import _load_selection, finalize_run
+        from heldout import HeldoutError
+        try:
+            final_cfg = _load_selection(args.finalize_run)[4]
+            devices = select_backend(final_cfg.backend)
+            if args.require_gpu and not has_gpu(devices):
+                parser.error("--require-gpu: frozen run does not select an available GPU")
+            path, report = finalize_run(args.finalize_run, output_dir=args.output_dir,
+                                       correctness_only=args.final_correctness_only)
+        except (HeldoutError, StorageError, ConfigError, BackendUnavailable, OSError, ValueError, KeyError) as error:
+            print(f"error: {error}", file=sys.stderr)
+            sys.exit(2)
+        print(f"Final release: {path / 'release.json'}; {report['status']}; "
+              f"correctness={report['correctness_passed']}; performance_verified={report['performance_verified']}")
+        return path, report
+    if args.final_correctness_only:
+        parser.error("--final-correctness-only requires --finalize-run")
+
     try:
         cfg = resolve_run_config(_cli_overrides(args), args.config)
     except ConfigError as error:
         parser.error(str(error))
+
+    if cfg.split != "development":
+        parser.error("search requires the development split; use --finalize-run for final evaluation")
+    if cfg.source_path is None and cfg.budgets.max_candidates > 0:
+        from heldout import HeldoutError, check_search_allowed
+        try:
+            check_search_allowed(_registry().get(cfg.workload_id))
+        except HeldoutError as error:
+            parser.error(str(error))
 
     if args.require_gpu and cfg.backend in ("cpu", "tpu"):
         parser.error(f"--require-gpu conflicts with backend {cfg.backend!r}")
@@ -335,6 +376,7 @@ def main(argv=None):
         "backend_requested": cfg.backend,
         "scientific": scientific,
         "non_scientific_reasons": reasons,
+        "evaluation_split": evaluation_commitment(evaluator.spec),
         "workload": {"id": evaluator.spec.workload_id, "reference_sha256": evaluator.baseline_sha256,
                      "correctness_policy_hash": evaluator.policy_hash,
                      "split": "development", "cases": evaluator.case_names,
@@ -352,15 +394,11 @@ def main(argv=None):
     except StorageError as error:
         print(f"error: storage: {error}", file=sys.stderr)
         sys.exit(2)
-    if cfg.budgets.max_candidates == 0:
-        # A zero candidate budget is valid and means: no provider request at all.
-        history = controller.provide_hist()
-    else:
-        try:
-            history = controller.agent_loop(model=cfg.model.model_id, max_tokens=cfg.model.max_tokens)
-        except StorageError as error:
-            print(f"error: storage: {error}", file=sys.stderr)
-            sys.exit(2)
+    try:
+        history = controller.agent_loop(model=cfg.model.model_id, max_tokens=cfg.model.max_tokens)
+    except StorageError as error:
+        print(f"error: storage: {error}", file=sys.stderr)
+        sys.exit(2)
     if controller.stop_reason:
         print(f"Run stopped: {controller.stop_reason}")
 
@@ -369,7 +407,9 @@ def main(argv=None):
           f"{totals['input_tokens']} known input / {totals['output_tokens']} known output tokens; "
           f"{totals['accounted_tokens']} conservatively accounted, "
           f"{totals['unknown_usage_requests']} requests with incomplete usage.")
-    print(f"Completed {len(history) - 1} candidate evaluations.")
+    print(f"Completed {len(history) - 1} candidate attempts.")
+    print(f"Stop: {controller.result['status']}: {controller.result['reason']}")
+    print(f"Verified best: {controller.output_dir / 'best.py'}")
     print(f"Best runtime: {controller.best_runtime}")
     print(
         "Accepted candidates: "

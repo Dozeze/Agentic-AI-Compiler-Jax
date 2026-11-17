@@ -13,7 +13,7 @@ from typing import Callable
 
 import numpy as np
 
-from workloads.oracles import add_f64, softmax_f64
+from workloads.oracles import add_f64, layer_norm_f64, matmul_gelu_f64, softmax_f64
 
 WORKLOAD_SCHEMA = "workload/v1"
 HERE = Path(__file__).resolve().parent
@@ -129,6 +129,128 @@ SOFTMAX = WorkloadSpec(
 
 
 # ---------------------------------------------------------------------------
+# Representative suite (AIC-017). Numerical contracts are declared before any candidate search.
+# These byte bounds cover every input, including explicit affine parameters/weights.
+# ---------------------------------------------------------------------------
+
+REPRESENTATIVE_MAX_INPUT_BYTES = 8 << 20
+
+
+def _checked_shape(shape, arity, workload):
+    if (len(shape) != arity or any(isinstance(n, (bool, np.bool_))
+            or not isinstance(n, (int, np.integer)) or n <= 0 for n in shape)):
+        raise ValueError(f"{workload}: expected {arity} positive integer dimensions")
+    return tuple(int(n) for n in shape)
+
+
+def _check_input_size(elements, workload):
+    size = elements * np.dtype("float32").itemsize
+    if size > REPRESENTATIVE_MAX_INPUT_BYTES:
+        raise ValueError(f"{workload}: inputs are {size} B > {REPRESENTATIVE_MAX_INPUT_BYTES} B before allocation")
+
+
+def _layer_norm_inputs(seed, shape, dtype):
+    rows, width = _checked_shape(shape, 2, "layer_norm")
+    _check_input_size(rows * width + 2 * width, "layer_norm")
+    rng = np.random.default_rng(seed)
+    return (rng.standard_normal((rows, width)).astype(dtype),
+            rng.uniform(0.5, 1.5, width).astype(dtype),
+            (0.1 * rng.standard_normal(width)).astype(dtype))
+
+
+def _layer_norm_edge(kind, shape):
+    x, scale, bias = _layer_norm_inputs(EDGE_SEED, shape, "float32")
+    if kind == "zeros":
+        x.fill(0)
+    elif kind == "constant_rows":
+        x.fill(3.25)
+    elif kind == "nearly_constant_rows":
+        x = np.float32(1) + np.float32(1e-4) * x
+    elif kind == "positive_offset":
+        x += np.float32(32)
+    elif kind == "mixed_magnitudes":
+        factors = 10.0 ** np.random.default_rng(EDGE_SEED).integers(-3, 3, x.shape)
+        x = (x * factors).astype(np.float32)
+    elif kind == "one_dominant_value":
+        x[:, -1] += np.float32(50)
+    elif kind == "affine_parameters":
+        scale = np.linspace(-2, 2, x.shape[-1], dtype=np.float32)
+        bias = np.linspace(0.5, -0.5, x.shape[-1], dtype=np.float32)
+    return x, scale, bias
+
+
+LAYER_NORM = WorkloadSpec(
+    schema_version=WORKLOAD_SCHEMA, workload_id="layer_norm", version=1,
+    reference_path=HERE / "layer_norm.py", function_name="layer_norm",
+    dtypes=("float32",), static_params={"axis": -1, "epsilon": 1e-5, "variance": "population_two_pass",
+        "affine": True, "input_layout": "x[rows,width], scale[width], bias[width]"},
+    development_shapes=((32, 128), (128, 1024)), heldout_shapes=((64, 257), (256, 2048)),
+    search_seeds=(0, 1, 2, 3, 4), input_factory=_layer_norm_inputs, oracle=layer_norm_f64,
+    output_contract="single float32 array with the same shape as x; last-axis affine layer normalization",
+    # Mean rounding is amplified by 1/sqrt(epsilon) on nearly constant float32 rows near 1.
+    # Absolute 1e-4 covers that conditioning; ordinary rows also use relative 1e-4. Target checks pending.
+    tolerance=Tolerance(rtol=1e-4, atol=1e-4),
+    edge_cases=tuple(EdgeCase(name, lambda shape, kind=name: _layer_norm_edge(kind, shape)) for name in
+        ("zeros", "constant_rows", "nearly_constant_rows", "positive_offset", "mixed_magnitudes",
+         "one_dominant_value", "affine_parameters")),
+    max_input_bytes=REPRESENTATIVE_MAX_INPUT_BYTES, scientific=True,
+    heldout_seeds=tuple(range(1000, 1020)),
+)
+
+
+def _matmul_gelu_inputs(seed, shape, dtype):
+    m, k, n = _checked_shape(shape, 3, "matmul_gelu")
+    _check_input_size(m * k + k * n + n, "matmul_gelu")
+    rng = np.random.default_rng(seed)
+    return (rng.standard_normal((m, k)).astype(dtype),
+            (rng.standard_normal((k, n)) / np.sqrt(k)).astype(dtype),
+            (0.1 * rng.standard_normal(n)).astype(dtype))
+
+
+def _matmul_gelu_edge(kind, shape):
+    x, weight, bias = _matmul_gelu_inputs(EDGE_SEED, shape, "float32")
+    if kind == "zeros":
+        x.fill(0)
+        weight.fill(0)
+        bias.fill(0)
+    elif kind == "zero_inputs":
+        x.fill(0)
+    elif kind == "zero_weights":
+        weight.fill(0)
+    elif kind == "bias_activation_sweep":
+        x.fill(0)
+        weight.fill(0)
+        bias = np.linspace(-6, 6, weight.shape[-1], dtype=np.float32)
+    elif kind == "cancellation":
+        x[:] = np.where(np.arange(x.shape[-1]) % 2, -1, 1).astype(np.float32)
+        weight.fill(np.float32(1 / np.sqrt(x.shape[-1])))
+    elif kind == "mixed_magnitudes":
+        factors = (10.0 ** (np.arange(x.shape[-1]) % 7 - 3)).astype(np.float32)
+        x *= factors
+        weight /= factors[:, None]
+    return x, weight, bias
+
+
+MATMUL_GELU = WorkloadSpec(
+    schema_version=WORKLOAD_SCHEMA, workload_id="matmul_gelu", version=1,
+    reference_path=HERE / "matmul_gelu.py", function_name="matmul_gelu",
+    dtypes=("float32",), static_params={"gelu": "exact_erfc", "matmul_precision": "HIGHEST",
+        "accumulation_dtype": "float32", "bias_axis": -1, "shape_order": ["M", "K", "N"],
+        "input_layout": "x[M,K], weight[K,N], bias[N]"},
+    development_shapes=((32, 64, 64), (128, 256, 256)), heldout_shapes=((63, 127, 95), (256, 512, 384)),
+    search_seeds=(0, 1, 2, 3, 4), input_factory=_matmul_gelu_inputs, oracle=matmul_gelu_f64,
+    output_contract="single float32 array [M,N]; exact GELU(x @ weight + bias)",
+    # Float32 dot accumulation/reassociation up to K=512 and GELU near zero need a distinct absolute
+    # floor. This policy is fixed before search; HIGHEST precision forbids a TF32 baseline shortcut.
+    tolerance=Tolerance(rtol=1e-4, atol=1e-5),
+    edge_cases=tuple(EdgeCase(name, lambda shape, kind=name: _matmul_gelu_edge(kind, shape)) for name in
+        ("zeros", "zero_inputs", "zero_weights", "bias_activation_sweep", "cancellation", "mixed_magnitudes")),
+    max_input_bytes=REPRESENTATIVE_MAX_INPUT_BYTES, scientific=True,
+    heldout_seeds=tuple(range(1000, 1020)),
+)
+
+
+# ---------------------------------------------------------------------------
 # example_add: legacy trusted-example adapter for workloads/example.py (not scientific)
 # ---------------------------------------------------------------------------
 
@@ -151,7 +273,7 @@ EXAMPLE_ADD = WorkloadSpec(
     scientific=False,
 )
 
-REGISTRY = {s.workload_id: s for s in (SOFTMAX, EXAMPLE_ADD)}
+REGISTRY = {s.workload_id: s for s in (SOFTMAX, LAYER_NORM, MATMUL_GELU, EXAMPLE_ADD)}
 
 
 def legacy_source_spec(source_path, function_name, args) -> WorkloadSpec:

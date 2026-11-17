@@ -97,10 +97,11 @@ the loop. Unknown usage keeps its reserved debit; partial usage only releases kn
 priority or server-tool billing is unsupported and stops the loop rather than assuming a zero price.
 
 SDK retries are disabled. `model.max_retries` (default 0) allows individually reserved application retries;
-request/token/money limits and remaining time are checked before each attempt. The default transport timeout
-is 30 seconds, shortened to remaining time. Transport timeouts are per I/O operation; AIC-015 still owns the
-complete optimizer deadline and worker budget integration. A timed-out request can still be billed remotely,
-so its debit is retained. This ledger does not promise cancellation of remote work or certify provider billing.
+request/token/money limits and remaining time are checked before each attempt. The default timeout is
+30 seconds, shortened to remaining run time. AIC-015 bounds the whole host wait as well as SDK I/O.
+An SDK call still outstanding at that deadline keeps its full uncertain debit and is never retried; its
+late response cannot start evaluation or another request. A reservation that expires before dispatch is
+recorded as `NOT_DISPATCHED` with zero usage. Remote cancellation/billing is not guaranteed.
 
 Outcomes in `requests/NNNN.json` include server IDs (or explicit unavailability), bounded redacted payloads,
 usage, accounting and refusal/error status. A storage failure stops further dispatch. An interrupted reservation
@@ -132,6 +133,37 @@ Before each SDK attempt, `contexts/NNNN.json` saves the exact user context bytes
 `contexts/NNNN.selection.json` records its hash, byte accounting, included field paths, omitted attempt IDs
 and truncations. The request reservation references both. Committed attempts link these files so artifact
 verification detects tampering. Proposal-only mode uses the same context policy and remains unverified.
+
+## Bounded current-best controller (AIC-015)
+
+`Controller.start()` explicitly verifies the frozen baseline. A failed baseline saves `baseline_failure.json`
+and `run_result.json` with no best artifact, then aborts before requesting a proposal. `Controller.optimize()`
+runs the episode and returns `run_result/v1`, including the verified baseline/incumbent artifact and stop
+reason. `agent_loop()` keeps its history-list return for existing callers and exposes the same result as
+`controller.result`. Zero candidates performs baseline verification with no provider request.
+
+Each validated submission, including schema/policy rejection and duplicates, counts as one candidate attempt.
+Malformed/empty provider responses with no unique validated submission remain request failures. Every candidate
+gets one committed terminal record before another request; exact hashes and syntax-tree equivalence prevent
+duplicate evaluation. Optional `parent_id` must name the current incumbent. Claimed promotions are rechecked
+against every declared correctness case, frozen policy/calibration, measured source identities and raw paired
+sessions, including fresh confirmation. The original file is preserved. Exports record development/search
+verification; final/held-out checks remain separate.
+
+The run clock starts at `start()` and includes baseline and search. Worker launches are clipped to remaining
+time; late required results cannot promote. Parent process monitoring (20 ms polling) enforces cumulative
+compilation/startup/IR time, a separate correctness allowance for each declared case and the measurement
+session allowance, including warmup. Workers only report phase boundaries, outside timed calls. Parent-owned
+limits cannot be renewed by changing markers. Source/log/artifact ceilings are checked before launches;
+artifact publication limits are not an active-worker filesystem quota. Required cleanup can extend elapsed
+time past the work deadline and must finish before further work. Optional profile expiry preserves a win
+whose required measurements already finished within budget.
+
+Unavailable isolation stops before a model request. `--runner subprocess` is baseline-only; production model
+code requires the Docker runner. Explicit reviewed fixtures remain available for offline tests. Runtime or
+resource interruption stops the episode with its last verified artifact; storage failure stops further work
+without resuming an uncertain commit. Execution recovery is AIC-019. Real Docker/CUDA/live-provider acceptance
+remains separate from CPU and synthetic controller evidence.
 
 The locked Anthropic SDK is 1.3.0: its `Messages.create` does not accept `temperature`. Anthropic sampling
 uses provider defaults; an explicit `model.temperature` is supported only for the existing Gemini adapter.
@@ -232,3 +264,96 @@ On the NV host, add `--extra cuda12` to `uv run` and `--require-gpu` to pytest. 
 uv sync --locked
 uv run --locked pytest -q        # offline: no API key and no network needed
 ```
+
+## Selected-target MVP verification (AIC-016)
+
+`configs/target.json` declares the D-02 CUDA/Docker softmax execution contract. It contains no credentials,
+approved live prices or money cap, and does not certify a GPU model, driver or containment capability.
+Record those observations with `scripts/phase_b.sh` on Harry's WSL2 NVIDIA host first.
+
+The shared offline command is:
+
+```bash
+uv run --locked pytest tests/ -m 'not target and not sandbox and not live' -q
+```
+
+`tests/test_end_to_end.py` runs reviewed softmax compile-failure, nonfinite-output and policy-rejection
+fixtures through native CPU workers and checks the exact next-request feedback and verified baseline.
+These are mechanics checks. The deterministic accepted-candidate cases in `tests/test_controller.py`
+use explicitly synthetic timing observations; no GPU or discovery claim follows from them.
+
+After phase B, run the real containment and selected-target replay suite inside WSL2:
+
+```bash
+AIC_TARGET_CONFIG=configs/target.json \
+AIC_MVP_EVIDENCE_DIR=runs/aic-016-target-replay-UNIQUE \
+uv run --locked --extra cuda12 pytest tests/ -m 'target or sandbox' -q -s
+```
+
+Every existing `needs_docker` test is also selected as `sandbox`. With `AIC_TARGET_CONFIG` set, missing
+Docker/CUDA capabilities fail the check. They cannot turn into successful skips. The target replay uses
+three reviewed proposals: a compile failure and two valid rewrites. Compilation, all 16 development
+correctness cases, A/A calibration, paired timing and any confirmation run in the real worker. It makes
+no provider call and prescribes no speedup. A noisy calibration stops the check; keep that evidence and
+address the measurement population before a new run. Each evidence directory must be new.
+
+The live pilot is separate. Copy `configs/target.json` to `runs/aic-016-live-config.json` and add the
+explicitly approved provider/model, dated matching `model.prices`, `budgets.money_cap` and currency.
+Configure credentials through the existing environment/ADC path. Keep the candidate/request caps at
+three, use C4, and remove any `model.offline_responses_path`. Once these inputs and live execution are
+authorized, run on the same host:
+
+```bash
+uv run --locked --extra cuda12 python agent.py \
+  --config runs/aic-016-live-config.json --require-gpu \
+  --output-dir runs/aic-016-live-UNIQUE
+uv run --locked python scripts/verify_mvp.py runs/aic-016-live-UNIQUE --target-mode live
+```
+
+The verifier reads JSON and source bytes without importing saved candidate code. It verifies committed
+hashes, best export, earlier-outcome links in dispatched contexts, provider mode and worker device/source
+observations. `--target-mode live` rejects CPU, offline, uncontained, unfunded or fewer-than-two-evaluation
+evidence. Without that option it can inspect the native CPU mechanics run; `--target-mode offline` checks
+the selected-target replay. The JSON includes request IDs/usage or explicit unavailable fields, profile
+coverage/reasons and the best verification scope. Review these against the phase-B containment evidence;
+the command alone does not approve M3. CPU/host-only/unavailable profiles cannot establish GPU hotspots.
+Final and held-out verification remain separate. No paid call runs automatically in tests.
+
+Current evidence: CPU mechanics verified; selected-target/container acceptance and the live pilot remain
+blocked by host access and explicit model/funding inputs. AIC-016 and M3 are not complete.
+
+## Representative workloads (AIC-017)
+
+The registry now includes `layer_norm` and `matmul_gelu` alongside `softmax` and the legacy `example_add`.
+Layer norm uses explicit scale/bias vectors and epsilon `1e-5`; dense projection uses `HIGHEST` matmul
+precision, float32 accumulation and exact GELU. Seeded inputs, plan shapes, edge cases, tolerances and
+independent float64 oracles are declared before search. The same evaluator, source policy and bounded
+context handle all three scientific families.
+
+```bash
+uv run --locked pytest tests/test_workload_suite.py -m 'not target' -q
+uv run --locked python agent.py --backend cpu --runner subprocess --workload layer_norm --iterations 0
+uv run --locked python agent.py --backend cpu --runner subprocess --workload matmul_gelu --iterations 0
+```
+
+These commands need no provider. CPU reference checks pass; CUDA correctness, container resource
+acceptance and workload-specific A/A calibration remain pending. [Workload contracts and target
+commands](docs/WORKLOAD_SUITE.md) document the fixed numerical policies and raw calibration retention
+with `scripts/calibrate_aa.py --work-dir <new-directory>`. AIC-016's live gate remains open; M4 is not complete.
+
+## Final split evaluation (AIC-018)
+
+Completed runs with a pre-search split commitment can be finalized without a provider:
+
+```bash
+uv run --locked --extra cuda12 python agent.py --finalize-run runs/SEARCH_RUN \
+  --require-gpu --output-dir runs/FINAL_RUN
+uv run --locked python scripts/heldout.py replay --run runs/FINAL_RUN
+```
+
+Finalization is one-use: it seals that workload/evaluation version against further search, including
+correctness-only or interrupted attempts. Finish selection first; offline tests use private state for
+rehearsal. The default checks all forty reserved cases, then records fresh baseline comparisons on
+each unseen shape. A separate hashed release retains raw results and uncertainty; the search best
+stays unchanged. Replay never imports saved candidate code. Old runs without a pre-search commitment
+are refused. See [final evaluation contracts and limitations](docs/FINAL_EVALUATION.md).

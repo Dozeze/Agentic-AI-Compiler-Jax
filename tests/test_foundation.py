@@ -206,9 +206,9 @@ def test_model_code_is_refused_without_isolation(no_key, repo_root):
     script = [[tool_use("a", "submit_proposal", proposal(WRONG))], []]
     client, controller = _build(repo_root, script, no_key / "run", runner=TrustedSubprocessRunner())
     history = controller.agent_loop(model="fake-model")
-    assert history[-1]["state"] == "INTERRUPTED"
-    assert "isolated runner" in history[-1]["reason"]
-    assert controller.stop_reason and len(client.messages.calls) == 1   # the loop stopped right there
+    assert len(history) == 1 and history[0]["state"] == "ACCEPTED"
+    assert controller.result["status"] == "INTERRUPTED" and "isolat" in controller.result["reason"]
+    assert controller.stop_reason and not client.messages.calls
 
 
 def test_duplicate_is_not_measured_again(no_key, repo_root):

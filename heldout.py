@@ -14,6 +14,7 @@ invalid, and a later attempt on the same split is not called held out. Debugging
 from __future__ import annotations
 
 import hashlib
+import dataclasses
 import json
 import time
 from pathlib import Path
@@ -23,6 +24,7 @@ MIN_SEEDS = 20
 MIN_SHAPES = 2
 EDGE_SEED = 12345
 LEDGER = REPO / "evidence" / "heldout" / "ledger.jsonl"
+PUBLICATIONS = REPO / "evidence" / "heldout" / "publications"
 
 
 class HeldoutError(RuntimeError):
@@ -32,12 +34,90 @@ class HeldoutError(RuntimeError):
 def check_split(spec) -> None:
     """The split meets AIC-1.1 §4: enough seeds and shapes, none shared with the search."""
     seeds, shapes = spec.heldout_seeds, spec.heldout_shapes
+    if type(spec.heldout_version) is not int or spec.heldout_version < 1:
+        raise HeldoutError("split version must be a positive integer")
+    if any(type(seed) is not int or seed < 0 for seed in seeds):
+        raise HeldoutError("split seeds must be nonnegative integers")
     if len(set(seeds)) < MIN_SEEDS or len(set(seeds)) != len(seeds):
         raise HeldoutError(f"{spec.workload_id}: needs at least {MIN_SEEDS} distinct held-out seeds")
     if set(seeds) & (set(spec.search_seeds) | {EDGE_SEED}):
         raise HeldoutError(f"{spec.workload_id}: held-out seeds overlap the search or edge-case seeds")
-    if len(set(shapes)) < MIN_SHAPES or set(shapes) & set(spec.development_shapes):
+    if (len(set(shapes)) < MIN_SHAPES or len(set(shapes)) != len(shapes)
+            or set(shapes) & set(spec.development_shapes)):
         raise HeldoutError(f"{spec.workload_id}: needs at least {MIN_SHAPES} shapes the search never uses")
+    if any(not shape or any(type(n) is not int or n <= 0 for n in shape) for shape in shapes):
+        raise HeldoutError("split shapes need positive integer dimensions")
+
+
+def split_contract(spec):
+    """Trusted split recipe. Only its opaque commitment goes into the pre-search manifest."""
+    check_split(spec)
+    return {"schema_version": "final_split/v1", "workload_id": spec.workload_id,
+            "workload_version": spec.version, "version": spec.heldout_version,
+            "seeds": list(spec.heldout_seeds), "shapes": [list(s) for s in spec.heldout_shapes],
+            "development_shapes": [list(s) for s in spec.development_shapes],
+            "search_seeds": list(spec.search_seeds), "dtypes": list(spec.dtypes),
+            "static_params": spec.static_params, "tolerance": dataclasses.asdict(spec.tolerance),
+            "reference_sha256": spec.reference_sha256,
+            "input_recipe_sha256": hashlib.sha256((REPO / "workloads/registry.py").read_bytes()).hexdigest()}
+
+
+def commitment(spec):
+    """No raw split data in this value, which must be saved before a search request."""
+    from contracts import SplitCommitment
+    contract = split_contract(spec)
+    digest = hashlib.sha256(json.dumps(contract, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+    return dataclasses.asdict(SplitCommitment(spec.workload_id, spec.heldout_version, digest,
+                                             len(spec.heldout_seeds) * len(spec.heldout_shapes)))
+
+
+def _publication_root(spec):
+    root = PUBLICATIONS / hashlib.sha256(spec.workload_id.encode()).hexdigest()
+    for path in (PUBLICATIONS, root):
+        if path.is_symlink():
+            raise HeldoutError("symlink evaluation state refused")
+    return root
+
+
+def check_search_allowed(spec):
+    """Sealed, failed and interrupted final evaluations cannot guide another search on that split."""
+    if not spec.scientific:
+        return
+    check_split(spec)
+    try:
+        check_not_burned(spec, LEDGER)
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise HeldoutError("invalid prior burn ledger; reconciliation required") from error
+    root = _publication_root(spec)
+    if (root / str(spec.heldout_version)).exists():
+        raise HeldoutError("evaluation split is sealed; search/final reuse requires a fresh split and version")
+    for directory in root.iterdir() if root.exists() else ():
+        reservation = directory / "reservation.json"
+        if directory.is_symlink() or reservation.is_symlink():
+            raise HeldoutError("symlink evaluation reservation refused")
+        try:
+            previous = json.loads(reservation.read_bytes())["split"]
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            raise HeldoutError("invalid prior evaluation reservation; reconciliation required") from error
+        if (set(previous["seeds"]) & set(spec.heldout_seeds)
+                or {tuple(s) for s in previous["shapes"]} & set(spec.heldout_shapes)):
+            raise HeldoutError("new evaluation version must use fresh seeds and shapes")
+
+
+def reserve(spec, *, run_id, candidate_sha256, output_dir):
+    """Atomic one-use reservation before any final worker starts. An interrupted reservation stays sealed."""
+    from storage import atomic_write_json
+    check_search_allowed(spec)
+    directory = _publication_root(spec) / str(spec.heldout_version)
+    try:
+        directory.mkdir(parents=True, exist_ok=False)
+        atomic_write_json(directory / "reservation.json", {
+            "schema_version": "final_reservation/v1", "run_id": run_id,
+            "candidate_sha256": candidate_sha256, "output_dir": str(output_dir),
+            "split": split_contract(spec), "commitment": commitment(spec)}, exclusive=True)
+    except OSError as error:
+        raise HeldoutError("cannot reserve final split; an existing or partial reservation cannot retry") from error
+    return directory
 
 
 def cases(spec):

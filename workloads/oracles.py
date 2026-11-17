@@ -3,6 +3,8 @@
 They validate the frozen JAX references themselves; candidates are compared with the
 jit-compiled reference, never with these oracles. Kept out of agent-visible workload sources.
 """
+import math
+
 import numpy as np
 
 
@@ -17,3 +19,19 @@ def softmax_f64(x) -> np.ndarray:
 def add_f64(x, y) -> np.ndarray:
     """Trusted float64 elementwise addition for the legacy example workload."""
     return np.asarray(x, dtype=np.float64) + np.asarray(y, dtype=np.float64)
+
+
+def layer_norm_f64(x, scale, bias) -> np.ndarray:
+    """Two-pass population variance with epsilon inside the square root; affine parameters explicit."""
+    x = np.asarray(x, dtype=np.float64)
+    centered = x - np.mean(x, axis=-1, keepdims=True)
+    variance = np.mean(centered ** 2, axis=-1, keepdims=True)
+    return centered / np.sqrt(variance + 1e-5) * np.asarray(scale, np.float64) + np.asarray(bias, np.float64)
+
+
+def matmul_gelu_f64(x, weight, bias) -> np.ndarray:
+    """NumPy float64 dot and Python's erfc, independent of JAX/XLA and its GELU implementation."""
+    projected = np.asarray(x, np.float64) @ np.asarray(weight, np.float64) + np.asarray(bias, np.float64)
+    tail = np.fromiter((math.erfc(float(v)) for v in (-projected / math.sqrt(2.0)).flat),
+                       dtype=np.float64, count=projected.size).reshape(projected.shape)
+    return 0.5 * projected * tail

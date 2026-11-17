@@ -18,12 +18,13 @@ import json, os, sys
 sys.path.insert(0, {repo!r}); sys.path.insert(0, {tests!r})
 os.environ["ANTHROPIC_API_KEY"] = {key!r}
 import anthropic
-from fakes import FakeAnthropic
+from fakes import FakeAnthropic, tool_use, proposal
 calls = []
 
 class Recording(FakeAnthropic):
     def __init__(self, **kwargs):
-        super().__init__([[]])               # the loop ends after one empty turn
+        script = [[tool_use('fixture', 'submit_proposal', proposal('def bad_func(x,y):\\n    return x+y\\n'))]] if '--proposal-only' in {argv!r} else [[]]
+        super().__init__(script)
         create = self.messages.create
         def wrapped(**kw):
             calls.append(sorted(p.name for p in __import__("pathlib").Path({out!r}).iterdir()))
@@ -81,10 +82,11 @@ def test_missing_live_cap_writes_nothing(repo_root, clean_env, tmp_path):
     assert not (tmp_path / "runs").exists()
 
 
-def test_manifest_written_before_llm(repo_root, clean_env, tmp_path):
+def test_manifest_and_baseline_preserved_when_isolation_stops_dispatch(repo_root, clean_env, tmp_path):
     out, result, proc = _drive(repo_root, clean_env, tmp_path)
-    assert result["n_calls"] == 1
-    assert {"run_config.json", "manifest.json"} <= set(result["files_at_first_llm_call"])
+    assert result["n_calls"] == 0 and result["files_at_first_llm_call"] is None
+    terminal = json.loads((out / "run_result.json").read_bytes())
+    assert terminal["status"] == "INTERRUPTED" and terminal["best"]["baseline_fallback"]
     run_config_text = (out / "run_config.json").read_text()
     manifest_text = (out / "manifest.json").read_text()
     run_config = json.loads(run_config_text)
@@ -104,6 +106,14 @@ def test_manifest_written_before_llm(repo_root, clean_env, tmp_path):
     for path in (p for p in out.rglob("*") if p.is_file()):
         assert FAKE_KEY.encode() not in path.read_bytes(), path.name
     assert FAKE_KEY not in proc.stdout + proc.stderr
+
+
+def test_proposal_only_manifest_and_context_are_written_before_provider(repo_root, clean_env, tmp_path):
+    out, result, _ = _drive(repo_root, clean_env, tmp_path, "--proposal-only")
+    assert result["n_calls"] == 1
+    assert {"manifest.json", "run_config.json", "contexts", "request_reservations"} <= set(result["files_at_first_llm_call"])
+    assert json.loads((out / "proposal_only_result.json").read_bytes())["verified"] is False
+    assert not (out / "work").exists()
 
 
 def test_iterations_maps_to_max_candidates(repo_root, clean_env, tmp_path):

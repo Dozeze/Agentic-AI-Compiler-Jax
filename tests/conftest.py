@@ -35,9 +35,18 @@ def pytest_runtest_setup(item):
         available, reason = status()        # probed lazily, once per session
         if available:
             continue
-        if item.config.getoption(option.lstrip("-").replace("-", "_")):
+        required_target = bool(os.environ.get("AIC_TARGET_CONFIG")) and any(
+            item.get_closest_marker(name) for name in ("target", "sandbox"))
+        if required_target or item.config.getoption(option.lstrip("-").replace("-", "_")):
             pytest.fail(f"{option}: {reason}", pytrace=False)
         pytest.skip(f"{marker}: {reason}")
+
+
+def pytest_collection_modifyitems(items):
+    """Expose existing real-container probes through the plan's sandbox selection command."""
+    for item in items:
+        if item.get_closest_marker("needs_docker"):
+            item.add_marker(pytest.mark.sandbox)
 
 
 @pytest.fixture

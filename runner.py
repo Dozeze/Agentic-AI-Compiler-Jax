@@ -45,7 +45,8 @@ MAX_RESULT_BYTES = 16 << 20
 DOCKERFILE = REPO / "docker" / "worker.Dockerfile"
 IMAGE_FILES = ("pyproject.toml", "uv.lock", "worker.py", "benchmark.py", "contracts.py", "environment.py",
                "array_io.py", "feedback.py", "workloads/__init__.py", "workloads/registry.py", "workloads/oracles.py",
-               "workloads/softmax.py", "workloads/example.py")
+               "workloads/softmax.py", "workloads/layer_norm.py", "workloads/matmul_gelu.py",
+               "workloads/example.py")
 IMAGE_REPOSITORY = "aic-worker"
 VARIANTS = {"cpu": "", "cuda12": "cuda12"}       # variant -> uv extra
 
@@ -78,7 +79,12 @@ class RunOutcome:
 
 def _tail(data: bytes | None, limit: int) -> str:
     data = data or b""
-    return data[-limit:].decode("utf-8", errors="replace")
+    return data[-limit:].decode("utf-8", errors="replace") if limit > 0 else ""
+
+
+def _launch_timeout(request, timeout_s):
+    deadline = request.get("host_deadline_monotonic")
+    return min(timeout_s, max(0., deadline - time.monotonic())) if deadline is not None else timeout_s
 
 
 def read_result(workdir: Path) -> dict | None:
@@ -93,8 +99,37 @@ def read_result(workdir: Path) -> dict | None:
     return result
 
 
+class _StageClock:
+    """Parent-observed cumulative phase budgets. Changing a marker never replenishes a budget.
+
+    Startup/imports/IR share compilation's allowance; each declared correctness case has its own
+    allowance. No marker means compilation. Observation is quantized by execute's 20 ms poll.
+    """
+    def __init__(self, workdir, limits, cases, now):
+        self.path, self.limits, self.cases = Path(workdir) / "phase.json", limits, set(cases)
+        self.last, self.key, self.spent = now, ("compile", None), {}
+
+    def remaining(self, now):
+        self.spent[self.key] = self.spent.get(self.key, 0) + now - self.last
+        self.last = now
+        remaining = self.limits[self.key[0]] - self.spent[self.key]
+        if remaining <= 0:
+            return 0
+        if self.path.exists() or self.path.is_symlink():
+            path = checked_path(self.path, self.path.parent, 4096)
+            marker = json.loads(path.read_bytes())
+            stage, case = marker.get("stage"), marker.get("case")
+            if (marker.get("schema_version") != "worker_phase/v1" or stage not in self.limits
+                    or (stage == "correctness" and case not in self.cases)
+                    or (stage != "correctness" and case is not None)):
+                raise ValueError("invalid worker phase marker")
+            self.key = stage, case
+            remaining = min(remaining, self.limits[stage] - self.spent.get(self.key, 0))
+        return remaining
+
+
 def execute(argv: list[str], *, cwd: Path, env: dict, timeout_s: float, max_log_bytes: int,
-            on_timeout=None) -> tuple[str, bytes, bytes, float]:
+            on_timeout=None, stage_limits=None, stage_cases=()) -> tuple[str, bytes, bytes, float]:
     """Run `argv` in its own session; (status, stdout tail, stderr tail, wall_s).
 
     Only the main process is waited for. Logs go to temporary files rather than pipes, so a descendant
@@ -103,18 +138,41 @@ def execute(argv: list[str], *, cwd: Path, env: dict, timeout_s: float, max_log_
     descendant outlives the request.
     """
     start = time.monotonic()
+    if timeout_s <= 0 or (stage_limits and stage_limits["compile"] <= 0):
+        return TIMEOUT, b"", b"launch refused: exhausted deadline", 0.0
+    stages = _StageClock(cwd, stage_limits, stage_cases, start) if stage_limits else None
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
         proc = subprocess.Popen(argv, cwd=cwd, env=env, stdout=out, stderr=err, start_new_session=True)
         status = OK
+        interruption = None
         try:
-            proc.wait(timeout=timeout_s)
-        except subprocess.TimeoutExpired:
-            status = TIMEOUT
-            if on_timeout is not None:
-                on_timeout()
-            _kill_group(proc.pid)
-            proc.wait()
+            while proc.poll() is None:
+                remaining = timeout_s - (time.monotonic() - start)
+                if stages is not None:
+                    remaining = min(remaining, stages.remaining(time.monotonic()))
+                if remaining <= 0:
+                    status = TIMEOUT
+                    break
+                try:
+                    proc.wait(timeout=min(remaining, .020) if stages else remaining)
+                except subprocess.TimeoutExpired:
+                    continue
+        except (OSError, ValueError, ArrayIOError, TypeError, KeyError):
+            status = CRASHED
+        except BaseException as error:
+            status, interruption = CRASHED, error
+        if status != OK:
+            try:
+                if on_timeout is not None:
+                    on_timeout()
+            except (OSError, subprocess.SubprocessError):
+                status = CRASHED
+            finally:
+                _kill_group(proc.pid)
+                proc.wait()
         _kill_group(proc.pid)
+        if interruption is not None:
+            raise interruption
         return status, _read_tail(out, max_log_bytes), _read_tail(err, max_log_bytes), time.monotonic() - start
 
 
@@ -143,6 +201,9 @@ def _write_request(workdir: Path, request: dict) -> None:
     stale = workdir / "result.json"
     if stale.exists():
         stale.unlink()
+    phase = workdir / "phase.json"
+    if phase.exists() or phase.is_symlink():
+        phase.unlink()
 
 
 def _outcome(status, out, err, wall_s, workdir, max_log_bytes, detail=None) -> RunOutcome:
@@ -181,10 +242,12 @@ class TrustedSubprocessRunner:
                               "model-written code runs only in an isolated runner (--runner docker)")
         workdir = Path(workdir).resolve()  # the worker runs with cwd=workdir, so a relative path would double
         _write_request(workdir, request)
+        timeout_s = _launch_timeout(request, timeout_s)
         status, out, err, wall_s = execute([sys.executable, str(WORKER), str(workdir)], cwd=workdir,
                                            env=worker_env(workdir), timeout_s=timeout_s,
-                                           max_log_bytes=self.max_log_bytes)
-        detail = f"exceeded the {timeout_s:g} s deadline" if status == TIMEOUT else None
+                                           max_log_bytes=self.max_log_bytes,
+                                           stage_limits=request.get("stage_limits"), stage_cases=request.get("stage_cases", ()))
+        detail = f"worker stage or request deadline exceeded (request ceiling {timeout_s:g} s)" if status == TIMEOUT else None
         return _outcome(status, out, err, wall_s, workdir, self.max_log_bytes, detail)
 
 
@@ -256,6 +319,9 @@ class DockerRunner:
         reason = self.preflight()
         if reason is not None:
             return RunOutcome(ISOLATION_UNAVAILABLE, None, "", "", 0.0, reason)
+        timeout_s = _launch_timeout(request, timeout_s)
+        if timeout_s <= 0:
+            return RunOutcome(TIMEOUT, None, "", "", 0., "run deadline expired during runner verification")
         import uuid
         workdir = Path(workdir)
         _write_request(workdir, request)
@@ -263,15 +329,19 @@ class DockerRunner:
         container = f"aic-worker-{uuid.uuid4().hex[:12]}"
         host_env = {k: os.environ[k] for k in ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONTEXT",
                                                "DOCKER_CONFIG") if k in os.environ}
-        status, out, err, wall_s = execute(self.argv(workdir, container), cwd=workdir, env=host_env,
+        try:
+            status, out, err, wall_s = execute(self.argv(workdir, container), cwd=workdir, env=host_env,
                                            timeout_s=timeout_s, max_log_bytes=self.max_log_bytes,
-                                           on_timeout=lambda: _docker("kill", container, timeout=30))
-        oom = _docker("inspect", "--format", "{{.State.OOMKilled}}", container, timeout=30).stdout.strip()
-        _docker("rm", "--force", container, timeout=60)
-        if _docker("ps", "--all", "--quiet", "--filter", f"name=^{container}$", timeout=30).stdout.strip():
-            raise RuntimeError(f"container {container} survived its request")
+                                           on_timeout=lambda: _docker("kill", container, timeout=30),
+                                           stage_limits=request.get("stage_limits"), stage_cases=request.get("stage_cases", ()))
+            oom = _docker("inspect", "--format", "{{.State.OOMKilled}}", container, timeout=30).stdout.strip()
+        finally:
+            _docker("rm", "--force", container, timeout=60)
+            alive = _docker("ps", "--all", "--quiet", "--filter", f"name=^{container}$", timeout=30)
+            if alive.returncode != 0 or alive.stdout.strip():
+                raise RuntimeError(f"container {container} cleanup could not be verified")
         if status == OK and oom == "true":
             return RunOutcome(RESOURCE_LIMIT, None, _tail(out, self.max_log_bytes), _tail(err, self.max_log_bytes),
                               wall_s, f"killed for exceeding the {self.limits['memory']} memory limit")
-        detail = f"exceeded the {timeout_s:g} s deadline" if status == TIMEOUT else None
+        detail = f"worker stage or request deadline exceeded (request ceiling {timeout_s:g} s)" if status == TIMEOUT else None
         return _outcome(status, out, err, wall_s, workdir, self.max_log_bytes, detail)

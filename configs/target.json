@@ -1,0 +1,11 @@
+{
+  "schema_version": "run_config/v1",
+  "backend": "cuda",
+  "runner": "docker",
+  "workload_id": "softmax",
+  "context_condition": "C4",
+  "budgets": {
+    "max_candidates": 3,
+    "max_provider_requests": 3
+  }
+}

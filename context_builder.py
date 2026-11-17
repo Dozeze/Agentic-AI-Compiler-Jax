@@ -26,8 +26,25 @@ def workload_contract(spec):
             "output_contract": spec.output_contract, "tolerance": asdict(spec.tolerance)}
 
 
+def evaluation_commitment(spec):
+    """Only the opaque final-split identity belongs in a run manifest."""
+    if not spec.scientific:
+        return None
+    from heldout import commitment
+    return commitment(spec)
+
+
+def check_search_access(spec):
+    from heldout import HeldoutError, check_search_allowed
+    try:
+        check_search_allowed(spec)
+    except HeldoutError as error:
+        raise ContextError(str(error)) from error
+
+
 def check_development_cases(spec, case_names):
     """Refuse a search context built from another evaluation split, including smoke cases."""
+    check_search_access(spec)
     allowed = {f"dev({','.join(map(str, shape))})/seed{seed}"
                for shape in spec.development_shapes for seed in spec.search_seeds}
     allowed.update(f"edge/{edge.name}" for edge in spec.edge_cases)
@@ -110,6 +127,8 @@ def build_context(*, function_name, workload, baseline_sha256, current_source, c
                "provenance": {"attempt_id": number, "evaluation_artifact": evidence.get("evaluations", {}).get(number),
                               "split": "development"},
                "sessions": []}
+        if evaluation.get("decision"):
+            out["decision"] = _pick(evaluation["decision"], ("delta", "protocol_hash", "incumbent_sha256"))
         correctness = evaluation.get("correctness")
         if correctness:
             if any(not case.get("case", "").startswith(("dev(", "edge/")) for case in correctness.get("cases", ())):

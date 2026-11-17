@@ -33,6 +33,16 @@ class ConfigError(ContractError):
     """Unknown key, wrong type or invalid value in a run config. The message names the dotted path."""
 
 
+@dataclass(frozen=True)
+class SplitCommitment:
+    """Opaque pre-search identity. Split seeds, shapes and inputs stay outside proposal context."""
+    workload_id: str
+    version: int
+    sha256: str
+    n_cases: int
+    schema_version: str = "split_commitment/v1"
+
+
 # Terminal states of a candidate (AIC-1.1 §3). A provider error or an empty response is a request
 # event, not a candidate, so it has no state here.
 PROPOSAL_INVALID = "PROPOSAL_INVALID"
@@ -62,7 +72,7 @@ class ContextLimits:
 
 @dataclass(frozen=True)
 class Budgets:
-    """Development ceilings from AIC-1.1 §7. Provider/storage checks are active; stage-wide deadlines are AIC-015."""
+    """Development ceilings from AIC-1.1 §7, checked before requests and worker launches."""
     max_candidates: int = 3
     max_provider_requests: int = 6
     max_output_tokens_per_request: int = 2048
@@ -76,6 +86,20 @@ class Budgets:
     max_artifact_bytes: int = 256 << 20
     money_cap: float | None = None   # without a cap, live mode is disabled (AIC-1.1 §7)
     currency: str | None = None
+
+
+def validate_budgets(budgets, *, path="budgets"):
+    """Validate direct Python callers as strictly as JSON, before any work or artifacts."""
+    _build(Budgets, dataclasses.asdict(budgets), path=path)
+    for item in dataclasses.fields(Budgets):
+        value = getattr(budgets, item.name)
+        if isinstance(value, (int, float)) and value < 0:
+            raise ConfigError(f"{path}.{item.name}: negative limits are invalid")
+    if budgets.money_cap is not None:
+        if budgets.money_cap <= 0:
+            raise ConfigError(f"{path}.money_cap: must be > 0 when set")
+        if not budgets.currency:
+            raise ConfigError(f"{path}.currency: required when money_cap is set")
 
 
 @dataclass(frozen=True)
@@ -256,15 +280,7 @@ def validate(cfg: RunConfig) -> None:
         raise ConfigError("run_config.seeds: must be unique")
     if any(s < 0 for s in cfg.seeds):
         raise ConfigError("run_config.seeds: must be >= 0")
-    for f in dataclasses.fields(Budgets):
-        value = getattr(cfg.budgets, f.name)
-        if isinstance(value, (int, float)) and value < 0:
-            raise ConfigError(f"run_config.budgets.{f.name}: negative limits are invalid")
-    if cfg.budgets.money_cap is not None:
-        if cfg.budgets.money_cap <= 0:
-            raise ConfigError("run_config.budgets.money_cap: must be > 0 when set")
-        if not cfg.budgets.currency:
-            raise ConfigError("run_config.budgets.currency: required when money_cap is set")
+    validate_budgets(cfg.budgets, path="run_config.budgets")
     for name in ("num_runs", "num_tests"):
         if getattr(cfg.benchmark, name) <= 0:
             raise ConfigError(f"run_config.benchmark.{name}: must be positive")
@@ -516,6 +532,7 @@ class Evaluation:
     logs: dict | None = None               # bounded stdout/stderr tails
     failure_category: str | None = None
     unavailable: dict = field(default_factory=dict)
+    decision: dict | None = None           # host threshold/protocol/incumbent identity, not a worker verdict
     schema_version: str = EVALUATION_SCHEMA
 
 

@@ -3,6 +3,384 @@
 Evidence log: what each task did, the commands run, their actual output, and deviations.
 The current-state snapshot is `AI_CONTEXT.md`.
 
+## AIC-015–018 — GitHub handoff · 2026-11-17
+
+The user requested pushing the accumulated implementation to the current branch, `sergio/batch-03`.
+Publish the integrated, already verified code and documentation in one batch commit above `46f5089`;
+shared-file changes remain in the exact tested snapshot. `AI_CONTEXT.md` records this handoff exception
+to the usual task-per-commit convention. The final shared offline suite remains **781 passed / 2
+host-CUDA skips / 20 target-sandbox deselected**; no implementation changed after that verification.
+Local `runs/` evidence and credentials are excluded. This publication does not satisfy the outstanding
+CUDA, target/live or milestone acceptance gates and authorizes no paid calls or provisioning.
+
+## AIC-018 — Frozen final evaluation, release and replay · 2026-11-17 · status: BLOCKED for target acceptance
+
+- Authorization: after AIC-017 and discussion of the outstanding target integration, the user explicitly
+  requested the next task. Complete independent final-evaluation software/offline checks. Prior M3/M4,
+  hardware and live spending gates remain open. Existing AIC-015–017 changes remain uncommitted above
+  `46f5089` on `sergio/batch-03`; no commits/pushes, paid calls, provisioning or official split consumption.
+  Starting shared suite: 749 passed / 2 host-CUDA skips / 17 target-sandbox deselected.
+- Added `SplitCommitment` and a deterministic digest binding reference, input-recipe source, workload
+  version, split seeds/shapes, development population, dtype/static semantics and numeric policy.
+  CLI and direct-controller manifests save only the opaque commitment before search dispatch. The
+  positive proposal-context allowlist still excludes final seeds/shapes/arrays/results. P16 public seed
+  declarations remain unchanged; this is evaluation separation, not repository-secrecy protection.
+- New `agent.py --finalize-run SEARCH_RUN`: requires a completed run's verified terminal best and its
+  pre-search commitment. Missing old commitments, reference/input/split/lock drift or changed runner/
+  image/device/JAX population refuse reuse. Inherit frozen config/protocol/budgets, never construct a
+  provider or allow search overrides. Baseline fallback may run as trusted reference; model-written
+  winners still require isolation. Python tests explicitly inject reviewed fixtures where needed.
+- Reserve the final split once before final input publication/worker launch. Success, failed
+  correctness, interruptions, correctness-only evaluation and partial publication all seal that version
+  against further search/re-evaluation. Changing only the version cannot relabel exposed data: fresh
+  seeds and shapes are required. Malformed/partial prior state fails closed. Legacy failure burns stay
+  honored. Automatic reconciliation/resume remains AIC-019; tests use private state, not the official
+  `evidence/heldout/publications/` registry.
+- `finalization.py` uses actual evaluator workers for all forty reserved correctness cases per family.
+  Keep every shape/case and block all timing on any correctness failure. Otherwise, default final mode
+  records baseline-only A/A calibration and at least three fresh paired baseline/winner sessions on
+  each unseen shape (timing uses its first reserved seed). Keep raw blocks, host uncertainty/stability,
+  source identities and decisions; raw invalid blocks cannot grant a claim. Budget/time/noise failures
+  remain explicit. A baseline fallback is valid but never promoted as a measured improvement.
+- Final evidence is a new store: source snapshots, frozen parent selection/result, split release,
+  per-shape results, raw workers/calibration, `final_report.json` and commit-last `release.json`. The
+  original search best/source/scope are untouched. `storage.verified_final_result` and
+  `scripts/heldout.py replay --run FINAL_RUN` verify hashes, complete coverage, native session links,
+  recalculated analysis/decisions and derived flags without importing saved candidate code. This
+  checks the recorded chain, not malicious replacement of every file. The old arbitrary-candidate
+  correctness helper remains explicitly a legacy diagnostic, not canonical final research evidence.
+- `--final-correctness-only` supports explicitly scoped correctness checks and discloses missing
+  performance verification. It still consumes the split; documented rehearsal uses offline tests with
+  private state. New contracts/commands/limitations are in `docs/FINAL_EVALUATION.md` and README.
+
+### Verification and retained evidence
+
+- First focused run: 18 passed / 10 failed. Native execution/results were correct; fixed the final
+  writer returning an artifact reference instead of its report and an exception assertion in a test.
+  Affected regression then passed 234 checks with two serialization-comparison failures: normalize the
+  returned report to its persisted JSON form (calibration shape tuples become lists).
+- Corrected finalization suite: **30 passed / 1 target deselected in 80.55 s**. Two later state/replay
+  checks and three actual-target cases are included in final shared verification. New tests cover
+  pre-dispatch commitment, all three native families, development-valid overfit, tampering of source/
+  arrays/report/selection, no source imports in replay, sealed-state/fresh-version rules, inherited
+  zero-compile caps, failed publication and provider-free CLI. Synthetic timing fixtures exercise
+  stable/noisy/calibration-failed/incomplete-block behavior and remain non-scientific.
+- Shared full offline command:
+  `uv run --locked --offline pytest tests/ -m 'not target and not sandbox and not live' -q`
+  → **781 passed, 2 host-CUDA skips, 20 target-sandbox deselected, 2 unchanged google-genai warnings
+  in 387.09 s**. Full output: `runs/aic-018-native-validation-20261117/offline-test-output.txt`.
+  Existing environment-only OpenSSL/cache workaround used; `uv.lock` and dependency pins unchanged.
+- Native final-correctness evidence (private evaluation state, synthetic parent selection metadata,
+  actual worker outputs, no synthetic timing), retained with hash review at
+  `runs/aic-018-native-validation-20261117/validation.json`:
+  softmax **20261117T005604.693407Z-cb46d3d7c1a4**, layer norm
+  **20261117T005626.240974Z-1ed08367fa4a**, dense exact GELU
+  **20261117T005638.261049Z-322ada418792**. Each passes **40 cases / 2 shapes / 20 seeds**;
+  correctness-only release, no performance claim. Parent exports/source hashes remain unchanged.
+- Reviewed shape-overfit fixture passes all development cases, then fails **40/40 final cases**, twenty
+  on each unseen shape. Final ID **20261117T011416.622456Z-4a076732eb1f** under `overfit-final/`;
+  status **CORRECTNESS_FAILED**, timing blocked for both shapes. Its parent selection metadata is
+  deliberately synthetic and is not a live optimizer or speedup example.
+- Additional actual baseline-only CLI + native final-timing rehearsal, private state:
+  `runs/aic-018-native-measurement-20261117/validation.json`, final ID
+  **20261117T111525.425711Z-c2c238e21e83**. Correctness passes; default A/A collects **ten actual raw
+  sessions**, five per shape. Both shapes fail the unchanged IQR/drift checks, so status is
+  **TIMING_INCOMPLETE**, both timings explicitly UNAVAILABLE and zero final comparison sessions.
+  Retain the first noise refusal; no rerun, relaxed threshold, performance claim or provider request.
+- Mandatory new target command:
+  `AIC_TARGET_CONFIG=configs/target.json uv run --locked --offline pytest tests/test_holdout.py -m target -q`
+  → **exit 1, 3 CUDA setup errors, 32 deselected, no skips, 3.24 s**. All three actual CUDA/container
+  final-session tests remain unexecuted. No skipped mandatory check is counted as acceptance.
+
+### Remaining acceptance and next work
+
+Finalization/replay software and native CPU correctness are verified. **AIC-018 is not DONE for target
+acceptance**, and earlier AIC-016/017/M3/M4 gates remain open. On the selected host, complete the live
+MVP and reference/resource/calibration prerequisites, freeze selection, then run final correctness and
+fresh per-shape comparisons without model access. Obtain the target/M4 review. Commit the new workload
+declarations before research search; do not backfill missing commitments in old runs. Execution recovery
+and general artifact-only reporting remain AIC-019 and AIC-020. No official evaluation version was used
+by these tests/rehearsals, and no paid request was made.
+
+## AIC-017 — Representative workloads and calibration handoff · 2026-11-16 · status: BLOCKED for target acceptance
+
+- Authorization: user requested the next task after the AIC-016 offline handoff and explicit target/live
+  block. Implement independent AIC-017 software and credential-free checks. This does not accept the
+  AIC-016 dependency/M3 gate, complete M4 or authorize live calls/provisioning. Starting shared offline
+  suite: 643 passed / 2 host-CUDA skips / 15 target-sandbox deselected. Prior AIC-015/016 edits preserved
+  uncommitted above pushed `46f5089` on `sergio/batch-03`.
+- Added `layer_norm(x, scale, bias)`: affine last-axis population normalization, two-pass variance,
+  epsilon **1e-5** inside the square root. Added `matmul_gelu(x, weight, bias)`: explicit
+  **HIGHEST** dot precision and float32 accumulation, column bias and exact erfc GELU. Neither
+  reference adds intentional slowdown or approximate/reduced precision. Both reject non-float32
+  arguments and invalid input layouts. Pure agent-visible source contains no input arrays or seeds.
+- Registered plan development/unseen shapes, deterministic PCG64 factories, explicit parameters,
+  nonfinite rejection and 8 MiB combined input caps checked before oversized allocation. New factories
+  reject invalid dimensions/dtypes. Development cases: **17 layer norm / 16 dense**, including nearly
+  constant/offset/cancellation cases and a GELU activation sweep. Disjoint final split slots preserve
+  the existing split contract; commit these new declarations before search. This work does not perform
+  held-out candidate selection or generalization evaluation.
+- Declared LN rtol/atol **1e-4/1e-4** for epsilon-conditioned mean roundoff and dense **1e-4/1e-5** for
+  float32 dot/GELU roundoff. Policies were set before reference checks and not changed afterward.
+  Added independent NumPy float64 oracles (Python math.erfc for GELU), eager/JIT/oracle checks on all
+  development/edge cases and reference shape smoke on the two unseen declarations. Negative fixtures
+  reject altered epsilon, omitted affine parameters, unstable variance, approximate GELU, omitted bias
+  and reduced output dtype. JAXPR inspection verifies both HIGHEST operands/float32 accumulation.
+- The shared evaluator/CLI/context already supports explicit multi-input workloads; integration checks
+  cover them without special controller branches. `runner.IMAGE_FILES` includes both source modules,
+  so worker image content hashes change. No dependency/JAX/lock upgrade. `docs/WORKLOAD_SUITE.md`
+  records numerical policies, shapes, input byte calculations, limitations and actual-target commands.
+- Calibration CLI adds optional **--work-dir <new-path>**: retains actual worker inputs/source/results,
+  raw A/A blocks, logs and profile traces, including noisy failures. `calibration_context.json` records
+  config, budgets, protocol, reference/policy hashes, primary shape and runner identity. Retained work
+  directories and existing aggregate calibrations are refused. The CLI now passes configured budgets
+  to the evaluator; zero-compile-cap tests prove that no worker launches. Without --work-dir the
+  existing temporary-work behavior remains available. The native real A/A mechanics regression now
+  checks that raw sessions survive success or a noise refusal.
+
+### Actual verification and artifacts
+
+- Initial new workload file: **100 passed, 2 target tests deselected in 19.25 s**. After adding CLI
+  cap/retention checks, affected regression across workload suite, runner, original workloads,
+  portability, split and context tests: **232 passed, 2 target tests deselected in 64.48 s**.
+  Command: `uv run --locked --offline pytest tests/test_workload_suite.py tests/test_runner.py
+  tests/test_workloads.py tests/test_backend_portability.py tests/test_heldout.py tests/test_context.py
+  -q -m 'not target and not sandbox'`.
+- Preserved native baseline-only CLI evidence:
+  `runs/aic-017-native-validation-20261116/validation.json`, with `layer_norm/` and `matmul_gelu/` run
+  stores and CLI logs. The report verifies each actual worker output against the independent oracle,
+  baseline/best/original byte equality, source/policy identities and implementation hashes. Both use
+  C4 and report **CPU_EXECUTION_EVENTS**, executable granularity only. No candidate search, provider
+  requests, paid calls, timing/gain claim or selected-target acceptance.
+- Layer norm run **20261116T190927.700924Z-5312c932f8f6**: 17 development/edge reference cases pass;
+  maximum absolute oracle error **4.2117111e-5**, maximum tolerance fraction **0.411804**.
+  Reference SHA-256 `9a69bc9b3f555cfe9b49e1b7b57aac3cd20d938b3c985cceada1f238af15d74e`.
+- Dense run **20261116T190931.562444Z-fbf1e18b54f3**: 16 development/edge reference cases pass;
+  maximum absolute oracle error **2.7784521e-6**, maximum tolerance fraction **0.042146**.
+  Reference SHA-256 `f6d542ec63dcdf2fe10fbfd335c95073dfa8194385f86c62af9893d95c4bb385`.
+  These numbers characterize CPU reference correctness, not device timings or CUDA error bounds.
+- Mandatory new target checks:
+  `AIC_TARGET_CONFIG=configs/target.json uv run --locked --offline pytest tests/test_workload_suite.py
+  -m target -q` → **exit 1, 2 CUDA capability setup errors, 102 deselected, no skips, 2.14 s**.
+  No target test is counted as passed.
+- Actual calibration preflights for **softmax, layer_norm and matmul_gelu**, each with `--backend cuda
+  --runner docker --config configs/target.json --label aic-017-nvhost-20261116 --work-dir
+  runs/aic-017-target-calibration-20261116/<workload>` → **exit 2**: CUDA worker image
+  `aic-worker:cuda12-7678d1eebe492949` is not available. Preflight refuses before raw work creation,
+  calibration or any provider call. No target A/A evidence or resource-fit claim was manufactured.
+- Shared full offline regression:
+  `uv run --locked --offline pytest tests/ -m 'not target and not sandbox and not live' -q`
+  → **749 passed, 2 host-CUDA skips, 17 target-sandbox deselected, 2 unchanged google-genai warnings
+  in 263.48 s**. Full output retained as `runs/aic-017-native-validation-20261116/offline-test-output.txt`.
+  Mandatory target checks above failed separately; exclusions do not establish target acceptance.
+  `git diff --check` is clean. Commands use the existing environment-only OpenSSL fallback, temporary
+  UV/Matplotlib caches and PYTHONDONTWRITEBYTECODE. No lock/package changes.
+
+### Remaining acceptance
+
+The three-family software/reference/edge-policy items are implemented and CPU-verified. **AIC-017 is
+not DONE.** AIC-016/M3 acceptance remains open. On the selected host, rebuild current worker images,
+run actual target/reference/containment checks and retain A/A sessions per primary workload shape.
+Confirm CUDA tolerances and complete compilation/device/profile memory fit inside the frozen resource
+caps before search. Keep the plan shapes unless pre-search measurements justify a documented resize;
+do not choose shapes or loosen tolerance based on candidate performance. M4 is not accepted.
+
+## AIC-016 — Selected-target offline/live MVP verification · 2026-11-16 · status: BLOCKED
+
+- Authorization: user requested the next task after AIC-015. Implement verification and run reviewed,
+  credential-free fixtures. The NV-host access/execution handoff and explicit provider/model, money
+  amount/currency and dated price ceilings were requested; no answer or spending inputs were supplied.
+  No paid request, provisioning, remote access attempt or later task was performed.
+- Starting state: AIC-015 changes remain uncommitted on `sergio/batch-03`, above pushed `46f5089`.
+  Preserve them. Previous full suite: 635 passed / 16 Docker-CUDA skips. This task does not accept
+  pending M1/M2/AIC-011 target checks or mark the target decision DECIDED.
+
+### Implemented checks and handoff
+
+- `configs/target.json` is the nonsecret D-02 execution contract: CUDA, Docker, registered softmax, C4,
+  three candidate slots and three provider requests. Normal frozen protocol/budget defaults apply.
+  It contains no guessed GPU identity, price or money cap. It cannot dispatch a live request unchanged.
+- `tests/test_end_to_end.py` sends reviewed compile-error, nonfinite and forbidden-import sources
+  through the actual CLI/provider boundary and native CPU workers, explicitly enabling the test-only
+  reviewed-fixture runner. Real compilation/correctness reports reach later bounded contexts. The run
+  returns the verified frozen reference and never executes generated live code in a trusted process.
+- The separate `target` test runs compile-error / `jax.nn.softmax` / logsumexp fixtures through actual
+  selected CUDA container workers. It requires all development cases and two measured rewrites under
+  real A/A calibration, raw paired timings and normal host decision/confirmation. No outcome or speedup
+  is scripted. Calibration noise blocks the check rather than changing the protocol after results.
+- Existing `needs_docker` probes are also marked `sandbox` during collection, making the plan's
+  `-m 'target or sandbox'` command select the containment tests. With `AIC_TARGET_CONFIG`, unavailable
+  CUDA/Docker produces failure instead of a skip. Ordinary CPU-only tests remain available locally.
+- `scripts/verify_mvp.py` reads stored JSON/bytes only. It checks committed hashes and the best export,
+  resolved CLI config/manifest identity, exact dispatched contexts and previous-result provenance,
+  provider mode, native worker source/device observations, request IDs/usage and profile coverage.
+  `--target-mode live` requires the recorded live mode, matching prices/cap, CUDA/container observations
+  and two to three evaluated proposals. The verifier cannot authenticate arbitrarily fabricated files
+  or replace actual containment probes, profile review or M3 approval. Final/held-out checks remain
+  separate. README documents the new offline/target/live commands and unique evidence directories.
+
+### Actual results
+
+- Focused end-to-end and portability checks:
+  `uv run --locked --offline pytest tests/test_end_to_end.py tests/test_backend_portability.py -q -m 'not target'`
+  → **45 passed, 1 deselected in 15.59 s**. The eight new offline cases cover real failure/context/export
+  paths, tampered best/context/worker rejection, the target contract and refusing declared capabilities
+  without native source/device/funding evidence. AIC-015's 66 checks supply explicit synthetic acceptance
+  and confirmation branches; they do not substitute for a selected-target win.
+- Native run ID **20261116T182356.869516Z-49c6ec758c8a**, retained at
+  `runs/aic-016-native-validation-20261116/native/run`; immutable review/provenance snapshot at
+  `native/validation.json`, CLI logs alongside the run. States:
+  **ACCEPTED (reference), COMPILE_FAILED, CORRECTNESS_FAILED, POLICY_REJECTED**. Three offline replay
+  requests, two actual candidate correctness evaluations, zero paid calls, no candidate timing/gain claim.
+  Context 2 contains the compile failure and context 3 the actual NONFINITE result across 16 cases.
+  Baseline/best/original source SHA-256:
+  `74fe461f76bb239bad8f2f5d638ff61dd31b8020bb5232991ee85390776a0c6f`.
+  Profile: **CPU_EXECUTION_EVENTS**, executable events only, no per-HLO-op attribution. Manifest explicitly
+  records a nonisolated CPU mechanics run. Both selected-target modes refuse it.
+- Mandatory actual-target/sandbox command:
+  `AIC_TARGET_CONFIG=configs/target.json uv run --locked --offline pytest tests/ -m 'target or sandbox' -q`
+  → **exit 1, 15 setup errors, 645 deselected, no successful skips, 12.73 s**. Docker worker image cannot
+  be built/accessed and CUDA selection raises BackendUnavailable/AssertionError. A separate authorized
+  read-only `docker info` check outside the filesystem sandbox also reports that the daemon is not
+  reachable. Docker Desktop was not started and no unrelated services were changed.
+- The first focused attempt exposed a test-driver mistake (`--context-condition` is not a CLI option);
+  changed the driver to supply C4 through its JSON config, then verified it. An initial regression command
+  also referenced nonexistent `tests/test_config.py`; corrected to the actual affected files. Neither
+  failed invocation changed production behavior or weakened a correctness/timing policy.
+- Shared full offline suite:
+  `uv run --locked --offline pytest tests/ -m 'not target and not sandbox and not live' -q`
+  → **643 passed, 2 host-CUDA skips, 15 target/sandbox deselected, 2 unchanged google-genai warnings
+  in 280.98 s**. The mandatory target/sandbox command above failed separately, so these exclusions do
+  not establish target acceptance. Full offline output retained beside the native evidence as
+  `offline-test-output.txt`. `git diff --check` is clean. The verifier CLI also returns exit 2 when this
+  CPU replay is offered as the live target MVP.
+  Local commands use the existing environment-only OpenSSL fallback, temporary UV/Matplotlib cache
+  paths and `PYTHONDONTWRITEBYTECODE=1`; dependency versions and `uv.lock` are unchanged.
+
+### Remaining acceptance gates
+
+1. Access to Harry's NVIDIA WSL2 host; actual target probe/model/driver and containment evidence from
+   phase B. Run the new selected-target replay on that population and retain its real measurements.
+2. Explicit live provider/model, dated price ceilings/provenance, approved money cap/currency and secure
+   credentials. On that same host, evaluate **at least two and at most three genuine live proposals**;
+   external failures/budget exhaustion do not turn fewer proposals into a passed gate.
+3. Replay live artifacts without source imports, review next-request feedback, real profile coverage
+   and limitations and obtain the M3 review. No speedup is required; a verified baseline is valid.
+
+Offline software work is implemented. **AIC-016 and M3 remain BLOCKED**, not DONE. No GPU, container,
+live-optimization or profiling-benefit claim follows from native CPU or AIC-015 synthetic evidence.
+
+## AIC-015 — Bounded current-best controller · 2026-11-16 · status: DONE
+
+- Authorization: user requested the next task after AIC-014 was committed/pushed as `46f5089` on
+  `sergio/batch-03`. Implement controller integration and offline verification; no paid calls or target
+  provisioning. Starting suite: 568 passed / 16 Docker-CUDA skips; clean working tree.
+- Scope: explicit baseline initialization, consistent terminal attempts, current-best confirmation,
+  pre-launch budgets, shared run/worker/provider deadlines and a verified terminal best artifact.
+  Live/sandbox selected-target proof remains AIC-016. All five task acceptance criteria evidenced below.
+
+### Implemented behavior and scope
+
+- `Controller.start()` starts a shared monotonic episode clock and verifies the immutable reference once.
+  Native compile failures, missing cases/outputs or nonfinite reference data abort before a provider call.
+  `baseline_failure.json` retains diagnostic/raw evidence; `run_result.json` explicitly has no best artifact.
+  Zero candidates verifies the baseline and makes no model call. Negative/nonfinite/wrong-type budgets
+  and candidate limits fail before artifacts or trusted source initialization.
+- `optimize()` returns `run_result/v1`, including a verified best reference, output directory, counts,
+  budget snapshot and stop status/reason. `agent_loop()` preserves the history-list API and sets the
+  same `controller.result`. Terminal calls are idempotent and verify best again; direct new submissions
+  are refused after termination. The CLI prints attempt counts, stop status and best path, including zero.
+- Each unique submission consumes one candidate slot, including schema/policy/parent rejection and
+  duplicates. A malformed/empty/refused provider response without a locally validated submission is a
+  request outcome, not an invented candidate. Every candidate record is committed before another request.
+  Exact hashes plus existing syntax-tree equivalence prevent duplicate evaluation. Optional parent IDs
+  must match the current incumbent, whose source is used for measurements.
+- Promotions require every declared development correctness case under the frozen policy, matching
+  candidate/incumbent source identities, protocol and calibration, complete positive raw measurement
+  blocks, matching host analysis and fresh confirmation under AIC-006. The controller reruns the host
+  decision from evidence before accepting an evaluator's promotion claim. `Evaluation.decision` records
+  threshold/calibration/protocol/incumbent identity; bounded context includes the safe threshold summary.
+  Promotion happens only after the attempt commit succeeds. Reporting-only baseline-comparison failures
+  now produce a durable candidate outcome instead of escaping unrecorded.
+- `Evaluator._run` checks wall/stage/source/artifact limits before launch and rechecks after preparing
+  inputs. Stage allowances travel in the host-built request. Parent runners monitor atomic phase markers
+  at 20 ms cadence: compilation/startup/input preparation/IR is cumulative per request, correctness is
+  cumulative per declared case, and measurement covers warmup/session work. Markers never replenish a
+  budget. Absolute host deadline is rechecked after runner verification and clips the launch timeout;
+  late required results are discarded. A profile that exhausts remaining time does not invalidate a win
+  already confirmed within budget. No generated source executes in the controller.
+- Model evaluation requires isolated-runner preflight before requesting a proposal and before execution.
+  Trusted subprocess mode verifies only the baseline; positive-candidate CLI runs stop before dispatch.
+  Explicit reviewed fixtures remain available for tests. Runner failures, interruption, timeout and
+  resource limits stop with the last verified source. Process-group cleanup runs on exceptions/interrupts;
+  Docker removal/absence checks run even when launch or inspection raises. Source/log/artifact ceilings
+  apply before side effects; zero log bytes really captures zero. Publication/terminal storage failures
+  are sticky and cannot resume. Active-worker filesystem quotas and execution recovery are not added.
+- Provider waiting is independently capped by request timeout and remaining episode time, in addition
+  to SDK I/O timeouts. An outstanding SDK call retains its full uncertain reservation, is never retried
+  and cannot use a late response to launch evaluation or another request. Its daemon only finishes the
+  SDK operation. A reservation expiring before dispatch records `NOT_DISPATCHED`, known zero usage and
+  released token/money debit. Every request still consumes a request slot. No remote-cancellation or final
+  billing guarantee is claimed. Cleanup can extend elapsed time past the work deadline; it must complete
+  before further work. Real cap/prices remain unset and no paid calls are enabled.
+
+### Validation and retained evidence
+
+Commands used the same environment-only Homebrew OpenSSL fallback and temporary UV/Matplotlib caches
+as AIC-014, with `PYTHONDONTWRITEBYTECODE=1`; no dependency or JAX/jaxlib/lockfile changes.
+
+- Required `uv run --locked --offline pytest tests/test_controller.py -q`: **66 passed in 28.77 s**.
+  Deterministic state matrix covers zero/invalid limits, failed baseline, invalid schema/policy/parent,
+  exact/semantic duplicates, compile/correctness failure, slower/no-change/unstable/confirmed/unconfirmed,
+  timeout/resource/interruption, request/token/money/wall caps, late required versus optional results,
+  corrupted promotion evidence, storage failure and pre-dispatch/isolation/cleanup checks.
+- Two tests actually run invalid reference code in trusted CPU workers (nonfinite output and invalid
+  reshape), retain failure artifacts and assert zero model calls/no best/source untouched. Parent deadline
+  tests actually kill reviewed sleeping processes; deterministic phase-clock tests verify cumulative limits.
+  No synthetic timing is substituted for selected-target performance evidence.
+- Affected regression run: **314 passed / 3 target skips**, 169.32 s. An earlier full run had 634 passed /
+  16 target skips and one D-06 timing-marker guard failure: new functional timeout assertions needed
+  `slow` markers. Added the markers; the unchanged guard then passed (1 passed, 0.88 s).
+- Final `uv run --locked --offline pytest -q`: **635 passed / 16 skipped**, 274.28 s; two unchanged
+  google-genai SyntaxWarnings. Skips are 12 Docker image/daemon checks and 4 unavailable-CUDA checks;
+  these do not waive selected-target/sandbox acceptance. No required controller test was skipped.
+- Retained synthetic state episode: `runs/aic-015-synthetic-validation-20261116/validation.json`.
+  States: baseline `ACCEPTED` -> `PROPOSAL_INVALID` -> confirmed `ACCEPTED` -> `CORRECTNESS_FAILED`;
+  best attempt 2 is preserved and the third prompt receives that incumbent. Timing and correctness
+  observations are explicitly scripted; host decision, confirmation recheck and durable storage are real.
+  This is not a performance or native-execution claim.
+- Retained native CPU episode: `runs/aic-015-native-validation-20261116/validation.json`.
+  States: baseline `ACCEPTED` -> `COMPILE_FAILED` -> `CORRECTNESS_FAILED` -> `DUPLICATE`; real reviewed
+  fixtures run in CPU workers and prior failures enter subsequent C4 contexts. Final best is the verified
+  original baseline. Both episodes stop at three candidate attempts/three offline requests and preserve
+  original sources; exact request/context/evaluation/commit/export references were independently checked.
+- Retained validation snapshots precede the timing-marker-only test edit; production source hashes still
+  match. Each episode's `reviewed_checks.json` links the original report hash, verifies production hashes
+  and the best export again, and records the final test-fixture hash. The marker changes do not alter the
+  scripted evaluator or candidate fixture behavior.
+- Offline transition matrix (`tests/test_controller.py`; no real speedup claim):
+
+| Trigger/observation | Candidate terminal result | Export/stop behavior |
+| --- | --- | --- |
+| Zero candidates | No candidate | Verified baseline, zero requests |
+| Invalid reference/nonfinite/compile failure | No candidate | BASELINE_FAILED, no best, zero requests |
+| Invalid schema/policy/current parent | PROPOSAL_INVALID / POLICY_REJECTED | Counts one slot; prior result enters next context |
+| Exact/semantic source repeat | DUPLICATE | No evaluation; incumbent retained |
+| Compile or numeric failure | COMPILE_FAILED / CORRECTNESS_FAILED | Incumbent retained; diagnostics supplied next |
+| Stable slower/noise-level session | VALID_SLOWER / VALID_NO_CHANGE | Incumbent retained |
+| Unstable sessions through fixed retry | MEASUREMENT_UNSTABLE | No promotion |
+| Correct win plus fresh confirmation | ACCEPTED | Recheck raw proof, commit, then promote |
+| Unconfirmed or corrupted win | VALID_NO_CHANGE / INTERRUPTED | No promotion |
+| Timeout/resource/runner/user interruption | TIMEOUT / RESOURCE_LIMIT / INTERRUPTED | Durable stop, verified incumbent returned |
+| Protocol/provider/budget failure | Request event, no invented candidate | Durable reason and verified incumbent |
+| Publication failure | No uncommitted promotion | Sticky storage failure; no new dispatch/resume |
+
+- Limits: no live provider, Docker/CUDA acceptance, actual speedup or final/held-out result is claimed.
+  Those gates remain separate (AIC-016 and later evaluation tasks). No automatic resume, artifact-only
+  reporting feature or source overwrite was introduced. Next immediate task after this scope: AIC-016.
+- Acceptance: zero-model baseline mode, one terminal result per candidate, prior outcome in next request,
+  confirmed-correct promotion and verified fallback/terminal export all verified. No paid calls made.
+
 ## AIC-014 — Bounded proposal context · 2026-11-16 · status: DONE
 
 - Authorization: user requested "continue with the next task" after AIC-013. Implement bounded context
