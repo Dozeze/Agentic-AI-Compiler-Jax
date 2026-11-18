@@ -9,7 +9,7 @@
 > Keep this file short: it is the current state, not a history. Detailed evidence goes in
 > `docs/IMPLEMENTATION_PROGRESS.md`; the full plan is `docs/IMPLEMENTATION_PLAN.md`.
 
-Last updated: 2026-11-17 by Codex (AIC-011 … AIC-018 offline work)
+Last updated: 2026-11-18 by Sergio (AIC-009 fix after the first phase-B run)
 
 ---
 
@@ -69,6 +69,11 @@ and `providers.ProposalProvider` (the single structured proposal and accounting 
 | M1 Foundations & target | AIC-001, 031, 002, 003 | Harry | batch 01 AWAITING_ACCEPTANCE (Harry) + G-01 gaps closed in batch 03 (Sergio: honest scientific flag, policy hash recorded, `--workload`). AIC-031 phase B still pending on the NV host (`scripts/phase_b.sh`); `docs/TARGET_DECISION.md` DRAFT |
 | M2 Reliable, isolated evaluation | AIC-004 … 009 | AIC-004: Harry; AIC-005 … 009: Sergio | batch 02 AWAITING_ACCEPTANCE on `sergio/batch-02` (report: `docs/IMPLEMENTATION_PROGRESS.md`): AIC-004 done (Harry); AIC-005 timing protocol + A/A calibration, AIC-006 decision rule, AIC-007 contracts + source policy, AIC-008 worker/runner, AIC-009 Docker containment + controller integration done on the Mac (CPU). Pending on the NV host: GPU containment and the official δ (`scripts/phase_b.sh`) |
 | M3 – M8 | AIC-010 … 033 | AIC-010: Sergio; rest TBD | batch 03 AWAITING_ACCEPTANCE on `sergio/batch-03`: AIC-010 compiler feedback; AIC-011 runtime profiling CPU-verified. AIC-012–015 storage/provider/context/controller DONE offline. AIC-016 target/live proof BLOCKED; AIC-017 three-family references CPU-verified, target calibration pending. AIC-018 finalization/replay and one-use split protection implemented: native 40-case reference checks per family and overfit rejection, shared offline suite 781 passed / 2 host-CUDA skips / 20 target-sandbox deselected. Native CPU A/A noise is retained as TIMING_INCOMPLETE; CUDA final tests unavailable. M3/M4 target acceptance remains open. No paid calls/target claims. Recovery/reporting and later tasks remain unfinished. |
+
+Phase B, first run on the NV host (2026-11-18, reported by the team, evidence not yet in the repo): steps 1–5
+passed (GPU suite, target probe, worker images, CPU and GPU containment). Step 6, the A/A calibration of softmax in
+the CUDA container, is unstable (IQR/median 0.107–0.33 > 0.10, one drift 0.116 > 0.05): no official δ yet. A
+protocol decision (for example longer blocks) is pending and must be taken before any search.
 
 Current handoff: the integrated AIC-015–018 implementation and documentation on `sergio/batch-03`,
 verified by the 781-test offline suite. Target acceptance remains pending; local run artifacts stay excluded.
@@ -180,6 +185,9 @@ remains the default for subsequent work. Local run evidence and credentials are 
   Missing legacy commitments or drift refuse finalization. CPU checks/private synthetic fixtures are
   not CUDA performance evidence. Canonical finalization consumes the study split: finish selection
   first, use offline tests for rehearsal. See docs/FINAL_EVALUATION.md; recovery remains AIC-019.]
+- P26 GPU A/A calibration is unstable on the NV host (first phase-B run, 2026-11-18). What changes before any
+  search? [none yet: rerun step 6 on a quiet machine with `--work-dir`, compare `--runner subprocess`, inspect the
+  raw blocks; then decide, for example longer blocks. Never loosen the IQR/drift limits only to make it pass]
 
 ## 7. Rules for code changes
 - One branch per person/batch; never push straight to `main`. One task per commit/PR; message starts with the task ID (`AIC-001: ...`).
@@ -318,6 +326,13 @@ Compiler feedback, held-out, providers (batch 03):
   SDK/application retries cannot bypass request reservations. The Gemini adapter also disables SDK retries.
 - Docker Desktop (macOS) can refuse to bind a directory that was deleted and recreated with the same name; use a new
   `--output-dir`.
+- Linux Docker: files written by the container user (65534) in a subdirectory it creates (`profile/`, `ir/`) were
+  0644 inside 0755 directories, so the host user could not delete them (`calibrate_aa.py` crashed while removing
+  its temporary directory). Since 2026-11-18 the worker clears its umask when it does not own the work directory.
+  Docker Desktop on macOS hides this, so only Linux (CI, the NV host) can show it.
+- NV host: XLA used an older system `ptxas` (CUDA 12.0, PTX ISA 8.0) instead of the locked pip one (12.9) and failed
+  with "Unsupported .version 8.3". Put `.venv/lib/python3.12/site-packages/nvidia/cuda_nvcc/bin` first on `PATH`
+  (and leave conda) before running GPU code on the host.
 - AIC-012: `output_dir: null` creates `runs/<run-id>`; an existing explicit directory is always refused.
   `attempts/NNNN/record.json` is the commit marker. Partial directories do not enter history or best.
   `best.py` / `best.json` are derived exports: use `storage.verified_best(path)` to verify their source,
@@ -327,6 +342,7 @@ Compiler feedback, held-out, providers (batch 03):
   than prune acceptance evidence; an active worker can exceed that limit before the host checks its files.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-18 Sergio — AIC-009 fix: the worker clears its umask when it does not own the work directory, so the host can delete what a Linux container writes (phase-B calibration crashed on cleanup). Worker image hash changes: rebuild the images. Recorded the first phase-B run (steps 1–5 passed, A/A unstable on the GPU) and the host `ptxas` pitfall. Offline suite 782 passed / 2 skipped / 20 deselected.
 - 2026-11-17 Codex — User-requested GitHub handoff of the integrated AIC-015–018 implementation on `sergio/batch-03`: bounded controller, MVP validation tooling, three-workload suite and frozen final evaluation/replay. Offline suite 781 passed / 2 skipped / 20 deselected; CUDA/live acceptance remains blocked. No paid calls; local runs and credentials excluded.
 - 2026-11-17 Codex — AIC-018 offline software: pre-search split commitments, provider-free verified-best finalization, one-use split/version protection, separate per-shape correctness/timing release and artifact-only replay. Native 40-case references pass for all three families; development-valid shape overfit fails all 40 final cases. Shared suite 781 passed / 2 skipped / 20 deselected. Private CPU A/A noise yields explicit TIMING_INCOMPLETE; CUDA checks blocked. Official split untouched, no paid calls; target/M4 acceptance and AIC-019 recovery pending.
 - 2026-11-16 Codex — AIC-017 offline implementation: registered affine layer norm and highest-precision dense exact GELU, seeded inputs/edges/plan shapes and independent float64 oracles; worker image includes new modules. Native worker references/export hashes verified (17/16 cases); shared offline suite 749 passed / 2 skipped / 17 deselected. Calibration can retain raw work and honors configured budgets. Target checks/calibration blocked; AIC-016/M3 and AIC-017/M4 not complete, zero paid calls.

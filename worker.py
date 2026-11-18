@@ -14,6 +14,7 @@ Modes
 from __future__ import annotations
 
 import json
+import os
 import sys
 import traceback
 from pathlib import Path
@@ -176,9 +177,23 @@ def handle(request: dict, workdir: Path) -> dict:
     return {"schema_version": RESULT_SCHEMA, "mode": request["mode"], "status": "ok", "device": device, **body}
 
 
+def share_with_owner(workdir: Path) -> None:
+    """Keep everything the worker writes removable by the owner of the work directory.
+
+    In the container the worker runs as an unprivileged user (65534) that does not own the bind-mounted
+    work directory. The directory itself is 0777 (runner.DockerRunner.run), but subdirectories the worker
+    creates (ir/, profile/) would be 0755, so the host user could not delete their files and cleaning a
+    temporary work directory failed with PermissionError. When the worker is not the owner, create every
+    file and directory without permission restrictions; the host verifies artifacts by hash anyway.
+    """
+    if hasattr(os, "getuid") and os.getuid() != workdir.stat().st_uid:
+        os.umask(0)
+
+
 def main(argv: list[str]) -> int:
     workdir = Path(argv[1])
     try:
+        share_with_owner(workdir)
         request = json.loads((workdir / "request.json").read_text(encoding="utf-8"))
         result = handle(request, workdir)
     except Exception as exc:   # noqa: BLE001 - every failure comes back as data

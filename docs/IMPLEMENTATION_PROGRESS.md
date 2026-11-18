@@ -3,6 +3,25 @@
 Evidence log: what each task did, the commands run, their actual output, and deviations.
 The current-state snapshot is `AI_CONTEXT.md`.
 
+## AIC-009 fix and first phase-B run · 2026-11-18
+
+- First phase-B run on the NV host (output pasted by the team; the log and `evidence/targets/nvhost-wsl2-cuda.json` are
+  not in the repository yet). A first attempt failed in step 2: XLA called an older system `ptxas` (CUDA 12.0,
+  PTX ISA 8.0) for PTX 8.3, in the first test that really compiles on the GPU
+  (`test_cuda_profile_requires_real_device_execution_events`); the other GPU tests only select the device. After
+  the host environment was fixed, a second run passed steps 1–5: GPU suite, target probe, worker images, CPU and
+  GPU containment.
+- Step 6 (A/A calibration, softmax (128, 1024), CUDA container) did not calibrate: IQR/median per session
+  0.290/0.330, 0.152/0.144, 0.107/0.117, 0.145/0.190 (drift 0.116), 0.196/0.124 against limits 0.10 and 0.05. No
+  official δ; the decision on the protocol is pending (`AI_CONTEXT.md` P26).
+- The script then crashed while deleting its temporary directory: the container user (65534) had written
+  `profile/perfetto_trace.json.gz` in a 0755 directory it created, which the host user cannot empty. Fix in
+  `worker.share_with_owner`: when the worker does not own the work directory, it clears its umask, so everything it
+  creates stays removable by the owner (the work directory itself was already 0777). Tests: a unit test of the
+  ownership rule in `tests/test_worker.py`, and `test_runtime_profile_inside_the_container` now deletes the work
+  directory after the container run (meaningful on Linux, where CI runs it; Docker Desktop on macOS hides the
+  problem). `worker.py` is part of the image hash, so the worker images must be rebuilt.
+
 ## AIC-015–018 — GitHub handoff · 2026-11-17
 
 The user requested pushing the accumulated implementation to the current branch, `sergio/batch-03`.

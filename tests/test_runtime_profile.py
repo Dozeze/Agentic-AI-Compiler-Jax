@@ -4,6 +4,7 @@ import dataclasses
 import gzip
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -336,6 +337,7 @@ def test_runtime_profile_inside_the_container(tmp_path, selected_backend):
     expected = "CPU_EXECUTION_EVENTS" if selected_backend == "cpu" else "DEVICE_EXECUTION_EVENTS"
     assert trace["coverage"] == expected, trace
     assert (work / trace["artifact"]).is_file()
+    shutil.rmtree(work)   # the host user removes everything the container user wrote, profile/ included
 
 
 @pytest.mark.needs_gpu

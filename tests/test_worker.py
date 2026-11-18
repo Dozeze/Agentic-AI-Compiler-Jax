@@ -100,3 +100,18 @@ def test_feedback_is_unavailable_when_the_case_did_not_compile(tmp_path):
     work = _workdir(tmp_path, {"cand.py": COMPILE_ERROR}, CASES)
     result = worker.handle(_request("outputs", {"candidate": "cand.py"}, analyze_case="a"), work)
     assert "did not compile" in result["ir"]["unavailable"]["all"]
+
+
+def test_worker_output_stays_removable_by_the_workdir_owner(tmp_path, monkeypatch):
+    """In the container the worker is not the owner of the work directory: it must not restrict permissions."""
+    import os
+    previous = os.umask(0o022)
+    try:
+        monkeypatch.setattr(os, "getuid", lambda: tmp_path.stat().st_uid + 1)
+        worker.share_with_owner(tmp_path)
+        assert os.umask(0o022) == 0
+        monkeypatch.setattr(os, "getuid", lambda: tmp_path.stat().st_uid)
+        worker.share_with_owner(tmp_path)
+        assert os.umask(0o022) == 0o022
+    finally:
+        os.umask(previous)
