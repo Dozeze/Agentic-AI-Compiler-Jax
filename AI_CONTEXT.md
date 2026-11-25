@@ -37,6 +37,7 @@ Sergio Medina Hernandez (`SergioMedinaH`), Weizhuo "Harry" Sun.
 | `harry/batch-01` | Harry's batch 01: AIC-001, 031, 002, 003, 004. Harry's plan is local only (`docs/plans/` is git-ignored). |
 | `sergio/batch-02` | Sergio's batch 02: AIC-005, 006, 007, 008, 009 (from `harry/batch-01`). |
 | `sergio/batch-03` | Sergio's batch 03: AIC-010, AIC-018, G-01 gaps, P8 providers (from `sergio/batch-02`). |
+| `sergio/batch-04` | Sergio's batch 04: AIC-027 Pallas kernels (G-11), simplification proposal (from `sergio/batch-03`). |
 | `claude-experiment` | Sergio's separate HALO prototype (Gemini/Vertex, JAX 0.11, 18 tasks, results). Shares no code with `main`; AIC-1.1 does not use it. Reference only. |
 | `new_ver` | Stale ancestor of `main`. Ignore. |
 
@@ -74,6 +75,11 @@ Phase B, first run on the NV host (2026-11-18, reported by the team, evidence no
 passed (GPU suite, target probe, worker images, CPU and GPU containment). Step 6, the A/A calibration of softmax in
 the CUDA container, is unstable (IQR/median 0.107–0.33 > 0.10, one drift 0.116 > 0.05): no official δ yet. A
 protocol decision (for example longer blocks) is pending and must be taken before any search.
+
+Batch 04 (in progress on `sergio/batch-04`, Sergio): AIC-027 hand-written Pallas kernels `kernels/softmax_pallas.py`
+and `kernels/layer_norm_pallas.py` pass the correctness gate on CPU (interpret mode); native Triton lowering and
+correctness on CUDA are checked by `tests/test_pallas_kernels.py` (`needs_gpu`), not yet run on the NV host. No
+timing yet. The agent cannot propose Pallas yet: `source_policy.py` rejects `jax.experimental` (AIC-028).
 
 Current handoff: the integrated AIC-015–018 implementation and documentation on `sergio/batch-03`,
 verified by the 781-test offline suite. Target acceptance remains pending; local run artifacts stay excluded.
@@ -188,6 +194,9 @@ remains the default for subsequent work. Local run evidence and credentials are 
 - P26 GPU A/A calibration is unstable on the NV host (first phase-B run, 2026-11-18). What changes before any
   search? [none yet: rerun step 6 on a quiet machine with `--work-dir`, compare `--runner subprocess`, inspect the
   raw blocks; then decide, for example longer blocks. Never loosen the IQR/drift limits only to make it pass]
+- P27 Custom-kernel technology (AIC-021)? [Pallas from the pinned JAX 0.4.38: Triton lowering on CUDA,
+  interpret mode on CPU (CLAUDE.md rule 3). Kernels tile rows and pad to power-of-two blocks (Triton rule);
+  softmax and layer_norm first, matmul_gelu later (erfc and HIGHEST precision inside Triton unverified)]
 
 ## 7. Rules for code changes
 - One branch per person/batch; never push straight to `main`. One task per commit/PR; message starts with the task ID (`AIC-001: ...`).
@@ -342,6 +351,7 @@ Compiler feedback, held-out, providers (batch 03):
   than prune acceptance evidence; an active worker can exceed that limit before the host checks its files.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-25 Sergio — AIC-027: hand-written Pallas kernels for softmax and layer_norm (`kernels/`), row-tiled with power-of-two padding; pass every development, edge and extra odd-width case on CPU in interpret mode; `needs_gpu` test checks native Triton lowering + CUDA correctness (no speed claim). P27 (kernel technology). Offline suite 786 passed / 3 skipped / 20 deselected.
 - 2026-11-18 Sergio — AIC-009 fix: the worker clears its umask when it does not own the work directory, so the host can delete what a Linux container writes (phase-B calibration crashed on cleanup). Worker image hash changes: rebuild the images. Recorded the first phase-B run (steps 1–5 passed, A/A unstable on the GPU) and the host `ptxas` pitfall. Offline suite 782 passed / 2 skipped / 20 deselected.
 - 2026-11-17 Codex — User-requested GitHub handoff of the integrated AIC-015–018 implementation on `sergio/batch-03`: bounded controller, MVP validation tooling, three-workload suite and frozen final evaluation/replay. Offline suite 781 passed / 2 skipped / 20 deselected; CUDA/live acceptance remains blocked. No paid calls; local runs and credentials excluded.
 - 2026-11-17 Codex — AIC-018 offline software: pre-search split commitments, provider-free verified-best finalization, one-use split/version protection, separate per-shape correctness/timing release and artifact-only replay. Native 40-case references pass for all three families; development-valid shape overfit fails all 40 final cases. Shared suite 781 passed / 2 skipped / 20 deselected. Private CPU A/A noise yields explicit TIMING_INCOMPLETE; CUDA checks blocked. Official split untouched, no paid calls; target/M4 acceptance and AIC-019 recovery pending.
