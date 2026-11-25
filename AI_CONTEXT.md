@@ -197,6 +197,9 @@ remains the default for subsequent work. Local run evidence and credentials are 
 - P27 Custom-kernel technology (AIC-021)? [Pallas from the pinned JAX 0.4.38: Triton lowering on CUDA,
   interpret mode on CPU (CLAUDE.md rule 3). Kernels tile rows and pad to power-of-two blocks (Triton rule);
   softmax and layer_norm first, matmul_gelu later (erfc and HIGHEST precision inside Triton unverified)]
+- P28 Simplify before the final presentation? [proposal only: `docs/SIMPLIFICATION_PROPOSAL.md` lists dead code,
+  duplicate held-out guards, a redundant promotion recheck and over-built provider/storage accounting. Nothing is
+  removed until the team agrees; code by another member changes only with that member's agreement]
 
 ## 7. Rules for code changes
 - One branch per person/batch; never push straight to `main`. One task per commit/PR; message starts with the task ID (`AIC-001: ...`).
@@ -351,6 +354,7 @@ Compiler feedback, held-out, providers (batch 03):
   than prune acceptance evidence; an active worker can exceed that limit before the host checks its files.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-25 Sergio — P28: `docs/SIMPLIFICATION_PROPOSAL.md` (draft for team review; no code changed).
 - 2026-11-25 Sergio — AIC-027: hand-written Pallas kernels for softmax and layer_norm (`kernels/`), row-tiled with power-of-two padding; pass every development, edge and extra odd-width case on CPU in interpret mode; `needs_gpu` test checks native Triton lowering + CUDA correctness (no speed claim). P27 (kernel technology). Offline suite 786 passed / 3 skipped / 20 deselected.
 - 2026-11-18 Sergio — AIC-009 fix: the worker clears its umask when it does not own the work directory, so the host can delete what a Linux container writes (phase-B calibration crashed on cleanup). Worker image hash changes: rebuild the images. Recorded the first phase-B run (steps 1–5 passed, A/A unstable on the GPU) and the host `ptxas` pitfall. Offline suite 782 passed / 2 skipped / 20 deselected.
 - 2026-11-17 Codex — User-requested GitHub handoff of the integrated AIC-015–018 implementation on `sergio/batch-03`: bounded controller, MVP validation tooling, three-workload suite and frozen final evaluation/replay. Offline suite 781 passed / 2 skipped / 20 deselected; CUDA/live acceptance remains blocked. No paid calls; local runs and credentials excluded.
