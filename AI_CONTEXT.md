@@ -37,7 +37,7 @@ Sergio Medina Hernandez (`SergioMedinaH`), Weizhuo "Harry" Sun.
 | `harry/batch-01` | Harry's batch 01: AIC-001, 031, 002, 003, 004. Harry's plan is local only (`docs/plans/` is git-ignored). |
 | `sergio/batch-02` | Sergio's batch 02: AIC-005, 006, 007, 008, 009 (from `harry/batch-01`). |
 | `sergio/batch-03` | Sergio's batch 03: AIC-010, AIC-018, G-01 gaps, P8 providers (from `sergio/batch-02`). |
-| `sergio/batch-04` | Sergio's batch 04: AIC-027 Pallas kernels (G-11), simplification proposal (from `sergio/batch-03`). |
+| `sergio/batch-04` | Sergio's batch 04: AIC-027 Pallas kernels (G-11), simplification proposal, CPU quota fix (P29), headroom suite, prompt framing and the first live sweep (from `sergio/batch-03`). |
 | `claude-experiment` | Sergio's separate HALO prototype (Gemini/Vertex, JAX 0.11, 18 tasks, results). Shares no code with `main`; AIC-1.1 does not use it. Reference only. |
 | `new_ver` | Stale ancestor of `main`. Ignore. |
 
@@ -80,6 +80,9 @@ Batch 04 (in progress on `sergio/batch-04`, Sergio): AIC-027 hand-written Pallas
 and `kernels/layer_norm_pallas.py` pass the correctness gate on CPU (interpret mode); native Triton lowering and
 correctness on CUDA are checked by `tests/test_pallas_kernels.py` (`needs_gpu`), not yet run on the NV host. No
 timing yet. The agent cannot propose Pallas yet: `source_policy.py` rejects `jax.experimental` (AIC-028).
+Headroom suite (P30): five workloads where a known rewrite beats XLA on the user's code (`matmul_chain`,
+`pairwise_distances`, `attention_loop`, `layer_norm_loop`, `batched_matmul_loop`; rewrites in `workloads/ceilings/`);
+softmax, layer_norm and matmul_gelu are the controls.
 
 Current handoff: the integrated AIC-015–018 implementation and documentation on `sergio/batch-03`,
 verified by the 781-test offline suite. Target acceptance remains pending; local run artifacts stay excluded.
@@ -202,6 +205,12 @@ remains the default for subsequent work. Local run evidence and credentials are 
   (CFS throttling of XLA's thread pool). CPU time stays bounded by the parent's wall-clock deadline; memory, PID,
   network and filesystem limits are unchanged. `DockerRunner(cpuset=...)` pins fixed cores (the plan's preferred
   Linux control), `cpus=` restores a quota; not exposed on the CLI until a host needs it]
+- P30 Which workloads can show a speedup? [the AIC-1.1 three (softmax, layer_norm, matmul_gelu) are compiled well
+  by XLA: on `claude-experiment` such functions were the no-headroom controls. Five headroom workloads ported
+  from HALO join them: the reference is written as a user might write it, and a reviewed rewrite in
+  `workloads/ceilings/` (never shown to the agent) measures the available speedup before any search. Accepting a
+  change on a control is a false positive. Tolerances fixed from the measured reference/rewrite error vs float64
+  oracles (rewrites use at most a third of each); held-out seeds 1000–1019 and two unseen shapes each]
 - P28 Simplify before the final presentation? [proposal only: `docs/SIMPLIFICATION_PROPOSAL.md` lists dead code,
   duplicate held-out guards, a redundant promotion recheck and over-built provider/storage accounting. Nothing is
   removed until the team agrees; code by another member changes only with that member's agreement]
@@ -364,6 +373,7 @@ Compiler feedback, held-out, providers (batch 03):
   than prune acceptance evidence; an active worker can exceed that limit before the host checks its files.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-27 Sergio — AIC-017 (P30): headroom suite: `matmul_chain`, `pairwise_distances`, `attention_loop`, `layer_norm_loop`, `batched_matmul_loop` with float64 oracles, edge cases, disjoint held-out split and reviewed ceiling rewrites (`workloads/ceilings/`, also for the three controls); worker image includes the new references. 22 suite tests.
 - 2026-11-27 Sergio — AIC-009 (P29): no `--cpus` quota on worker containers by default; optional `cpuset`/`cpus` in `DockerRunner`; the CPU control is part of the measurement population label. On the Mac the default quota made Docker A/A unstable (matmul_gelu IQR/median ≈ 2); without it softmax, layer_norm and matmul_gelu calibrate in Docker (δ 5.2–5.6 %). Likely cause of P26. Full suite with Docker 801 passed / 11 skipped.
 - 2026-11-25 Sergio — P28: `docs/SIMPLIFICATION_PROPOSAL.md` (draft for team review; no code changed).
 - 2026-11-25 Sergio — AIC-027: hand-written Pallas kernels for softmax and layer_norm (`kernels/`), row-tiled with power-of-two padding; pass every development, edge and extra odd-width case on CPU in interpret mode; `needs_gpu` test checks native Triton lowering + CUDA correctness (no speed claim). P27 (kernel technology). Offline suite 786 passed / 3 skipped / 20 deselected.

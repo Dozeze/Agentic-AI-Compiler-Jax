@@ -13,7 +13,8 @@ from typing import Callable
 
 import numpy as np
 
-from workloads.oracles import add_f64, layer_norm_f64, matmul_gelu_f64, softmax_f64
+from workloads.oracles import (add_f64, attention_f64, batched_matmul_f64, layer_norm_f64, matmul_chain_f64,
+                              matmul_gelu_f64, pairwise_distances_f64, softmax_f64)
 
 WORKLOAD_SCHEMA = "workload/v1"
 HERE = Path(__file__).resolve().parent
@@ -251,6 +252,162 @@ MATMUL_GELU = WorkloadSpec(
 
 
 # ---------------------------------------------------------------------------
+# Headroom suite (batch 04, after HALO on `claude-experiment`). Each reference is written the way a user
+# might write it, and a known rewrite that XLA cannot find on its own is faster (workloads/ceilings/).
+# softmax, layer_norm and matmul_gelu above are the controls: XLA already compiles them well.
+# Tolerances are fixed before any search from the measured error of the reference and of the ceiling.
+# ---------------------------------------------------------------------------
+
+def _normal(rng, *shape):
+    return rng.standard_normal(shape).astype(np.float32)
+
+
+def _matmul_chain_inputs(seed, shape, dtype):
+    big, small = _checked_shape(shape, 2, "matmul_chain")
+    rng = np.random.default_rng(seed)
+    return _normal(rng, big, small), _normal(rng, small, big), _normal(rng, big, small)
+
+
+def _matmul_chain_edge(kind, shape):
+    a, b, c = _matmul_chain_inputs(EDGE_SEED, shape, "float32")
+    if kind == "zeros":
+        a, b, c = np.zeros_like(a), np.zeros_like(b), np.zeros_like(c)
+    elif kind == "zero_middle_factor":     # result is exactly zero: dropping an operand is caught
+        b = np.zeros_like(b)
+    elif kind == "asymmetric_scales":      # catches a transposed or swapped operand
+        a *= np.float32(4.0)
+        c = c * np.float32(0.25) + np.float32(1.0)
+    return a, b, c
+
+
+MATMUL_CHAIN = WorkloadSpec(
+    schema_version=WORKLOAD_SCHEMA, workload_id="matmul_chain", version=1,
+    reference_path=HERE / "matmul_chain.py", function_name="matmul_chain",
+    dtypes=("float32",), static_params={"shape_order": ["big", "small"],
+        "input_layout": "a[big,small], b[small,big], c[big,small]"},
+    development_shapes=((512, 32), (1024, 16)), heldout_shapes=((2048, 8), (768, 24)),
+    search_seeds=(0, 1, 2, 3, 4), input_factory=_matmul_chain_inputs, oracle=matmul_chain_f64,
+    output_contract="single float32 array [big,small] equal to the matrix product a @ b @ c",
+    tolerance=Tolerance(rtol=1e-4, atol=1e-3),
+    edge_cases=tuple(EdgeCase(n, lambda shape, kind=n: _matmul_chain_edge(kind, shape))
+                     for n in ("zeros", "zero_middle_factor", "asymmetric_scales")),
+    max_input_bytes=REPRESENTATIVE_MAX_INPUT_BYTES, scientific=True, heldout_seeds=tuple(range(1000, 1020)),
+)
+
+
+def _pairwise_inputs(seed, shape, dtype):
+    n, m, d = _checked_shape(shape, 3, "pairwise_distances")
+    rng = np.random.default_rng(seed)
+    return _normal(rng, n, d), _normal(rng, m, d)
+
+
+def _pairwise_edge(kind, shape):
+    a, b = _pairwise_inputs(EDGE_SEED, shape, "float32")
+    if kind == "zeros":
+        a, b = np.zeros_like(a), np.zeros_like(b)
+    elif kind == "asymmetric_sets":        # catches swapped operands or a transposed result
+        b = b * np.float32(4.0) + np.float32(10.0)
+    elif kind == "shared_points":          # identical rows: exact zeros on matching pairs
+        b[: min(len(a), len(b))] = a[: min(len(a), len(b))]
+    return a, b
+
+
+PAIRWISE_DISTANCES = WorkloadSpec(
+    schema_version=WORKLOAD_SCHEMA, workload_id="pairwise_distances", version=1,
+    reference_path=HERE / "pairwise_distances.py", function_name="pairwise_distances",
+    dtypes=("float32",), static_params={"shape_order": ["n", "m", "d"], "input_layout": "a[n,d], b[m,d]"},
+    development_shapes=((128, 512, 32), (256, 256, 64)), heldout_shapes=((200, 300, 48), (512, 128, 16)),
+    search_seeds=(0, 1, 2, 3, 4), input_factory=_pairwise_inputs, oracle=pairwise_distances_f64,
+    output_contract="single float32 array [n,m]; out[i,j] = sum_d (a[i,d] - b[j,d])**2",
+    tolerance=Tolerance(rtol=1e-4, atol=1e-3),
+    edge_cases=tuple(EdgeCase(n, lambda shape, kind=n: _pairwise_edge(kind, shape))
+                     for n in ("zeros", "asymmetric_sets", "shared_points")),
+    max_input_bytes=REPRESENTATIVE_MAX_INPUT_BYTES, scientific=True, heldout_seeds=tuple(range(1000, 1020)),
+)
+
+
+def _attention_inputs(seed, shape, dtype):
+    _checked_shape(shape, 4, "attention_loop")
+    _check_input_size(3 * int(np.prod(shape)), "attention_loop")
+    rng = np.random.default_rng(seed)
+    return _normal(rng, *shape), _normal(rng, *shape), _normal(rng, *shape)
+
+
+def _attention_edge(kind, shape):
+    q, k, v = _attention_inputs(EDGE_SEED, shape, "float32")
+    rng = np.random.default_rng(EDGE_SEED + 1)
+    if kind == "zeros":
+        q, k, v = np.zeros_like(q), np.zeros_like(k), np.zeros_like(v)
+    elif kind == "large_scores":           # scores near 200: overflow without max-subtraction
+        offset = np.float32(np.sqrt(200.0 * np.sqrt(shape[-1]) / shape[-1]))
+        q = q * np.float32(0.1) + offset
+        k = k * np.float32(0.1) + offset
+    elif kind == "uniform_keys":           # identical keys: every weight equal, catches axis mix-ups
+        k = np.broadcast_to(rng.standard_normal((1, 1, 1, shape[-1])).astype(np.float32), k.shape).copy()
+    return q, k, v
+
+
+ATTENTION_LOOP = WorkloadSpec(
+    schema_version=WORKLOAD_SCHEMA, workload_id="attention_loop", version=1,
+    reference_path=HERE / "attention_loop.py", function_name="attention_loop",
+    dtypes=("float32",), static_params={"shape_order": ["batch", "heads", "seq", "dim"], "mask": None,
+        "scale": "1/sqrt(dim)", "input_layout": "q, k, v [batch,heads,seq,dim]"},
+    development_shapes=((2, 4, 128, 32), (4, 8, 256, 64)), heldout_shapes=((2, 8, 192, 64), (1, 16, 128, 32)),
+    search_seeds=(0, 1, 2, 3, 4), input_factory=_attention_inputs, oracle=attention_f64,
+    output_contract="single float32 array, same shape as q; softmax(q @ k^T / sqrt(dim)) @ v per batch and head",
+    tolerance=Tolerance(rtol=1e-4, atol=1e-5),
+    edge_cases=tuple(EdgeCase(n, lambda shape, kind=n: _attention_edge(kind, shape))
+                     for n in ("zeros", "large_scores", "uniform_keys")),
+    max_input_bytes=REPRESENTATIVE_MAX_INPUT_BYTES, scientific=True, heldout_seeds=tuple(range(1000, 1020)),
+)
+
+
+LAYER_NORM_LOOP = WorkloadSpec(
+    schema_version=WORKLOAD_SCHEMA, workload_id="layer_norm_loop", version=1,
+    reference_path=HERE / "layer_norm_loop.py", function_name="layer_norm_loop",
+    dtypes=("float32",), static_params={**LAYER_NORM.static_params},
+    development_shapes=((16, 512), (32, 1024)), heldout_shapes=((24, 768), (48, 256)),
+    search_seeds=(0, 1, 2, 3, 4), input_factory=_layer_norm_inputs, oracle=layer_norm_f64,
+    output_contract=LAYER_NORM.output_contract, tolerance=LAYER_NORM.tolerance,
+    edge_cases=LAYER_NORM.edge_cases,
+    max_input_bytes=REPRESENTATIVE_MAX_INPUT_BYTES, scientific=True, heldout_seeds=tuple(range(1000, 1020)),
+)
+
+
+def _batched_matmul_inputs(seed, shape, dtype):
+    batch, rows, inner, cols = _checked_shape(shape, 4, "batched_matmul_loop")
+    rng = np.random.default_rng(seed)
+    return _normal(rng, batch, rows, inner), _normal(rng, batch, inner, cols)
+
+
+def _batched_matmul_edge(kind, shape):
+    a, b = _batched_matmul_inputs(EDGE_SEED, shape, "float32")
+    if kind == "zeros":
+        a, b = np.zeros_like(a), np.zeros_like(b)
+    elif kind == "per_batch_offset":       # catches one batch element broadcast over all of them
+        a = a + np.arange(a.shape[0], dtype=np.float32)[:, None, None]
+    return a, b
+
+
+BATCHED_MATMUL_LOOP = WorkloadSpec(
+    schema_version=WORKLOAD_SCHEMA, workload_id="batched_matmul_loop", version=1,
+    reference_path=HERE / "batched_matmul_loop.py", function_name="batched_matmul_loop",
+    dtypes=("float32",), static_params={"shape_order": ["batch", "rows", "inner", "cols"],
+        "input_layout": "a[batch,rows,inner], b[batch,inner,cols]"},
+    development_shapes=((16, 64, 32, 64), (32, 128, 64, 128)), heldout_shapes=((24, 96, 48, 80), (8, 256, 64, 32)),
+    search_seeds=(0, 1, 2, 3, 4), input_factory=_batched_matmul_inputs, oracle=batched_matmul_f64,
+    output_contract="single float32 array [batch,rows,cols]; out[i] = a[i] @ b[i]",
+    tolerance=Tolerance(rtol=1e-4, atol=1e-4),
+    edge_cases=tuple(EdgeCase(n, lambda shape, kind=n: _batched_matmul_edge(kind, shape))
+                     for n in ("zeros", "per_batch_offset")),
+    max_input_bytes=REPRESENTATIVE_MAX_INPUT_BYTES, scientific=True, heldout_seeds=tuple(range(1000, 1020)),
+)
+
+HEADROOM = (MATMUL_CHAIN, PAIRWISE_DISTANCES, ATTENTION_LOOP, LAYER_NORM_LOOP, BATCHED_MATMUL_LOOP)
+CONTROLS = (SOFTMAX, LAYER_NORM, MATMUL_GELU)
+
+
+# ---------------------------------------------------------------------------
 # example_add: legacy trusted-example adapter for workloads/example.py (not scientific)
 # ---------------------------------------------------------------------------
 
@@ -273,7 +430,7 @@ EXAMPLE_ADD = WorkloadSpec(
     scientific=False,
 )
 
-REGISTRY = {s.workload_id: s for s in (SOFTMAX, LAYER_NORM, MATMUL_GELU, EXAMPLE_ADD)}
+REGISTRY = {s.workload_id: s for s in (*CONTROLS, *HEADROOM, EXAMPLE_ADD)}
 
 
 def legacy_source_spec(source_path, function_name, args) -> WorkloadSpec:

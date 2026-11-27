@@ -46,7 +46,8 @@ DOCKERFILE = REPO / "docker" / "worker.Dockerfile"
 IMAGE_FILES = ("pyproject.toml", "uv.lock", "worker.py", "benchmark.py", "contracts.py", "environment.py",
                "array_io.py", "feedback.py", "workloads/__init__.py", "workloads/registry.py", "workloads/oracles.py",
                "workloads/softmax.py", "workloads/layer_norm.py", "workloads/matmul_gelu.py",
-               "workloads/example.py")
+               "workloads/example.py", "workloads/matmul_chain.py", "workloads/pairwise_distances.py",
+               "workloads/attention_loop.py", "workloads/layer_norm_loop.py", "workloads/batched_matmul_loop.py")
 IMAGE_REPOSITORY = "aic-worker"
 VARIANTS = {"cpu": "", "cuda12": "cuda12"}       # variant -> uv extra
 

@@ -35,3 +35,27 @@ def matmul_gelu_f64(x, weight, bias) -> np.ndarray:
     tail = np.fromiter((math.erfc(float(v)) for v in (-projected / math.sqrt(2.0)).flat),
                        dtype=np.float64, count=projected.size).reshape(projected.shape)
     return 0.5 * projected * tail
+
+
+# Headroom suite (batch 04): independent float64 NumPy oracles.
+
+def matmul_chain_f64(a, b, c) -> np.ndarray:
+    return np.asarray(a, np.float64) @ np.asarray(b, np.float64) @ np.asarray(c, np.float64)
+
+
+def pairwise_distances_f64(a, b) -> np.ndarray:
+    diff = np.asarray(a, np.float64)[:, None, :] - np.asarray(b, np.float64)[None, :, :]
+    return (diff ** 2).sum(axis=-1)
+
+
+def attention_f64(q, k, v) -> np.ndarray:
+    q, k, v = (np.asarray(t, np.float64) for t in (q, k, v))
+    scores = np.einsum("bhqd,bhkd->bhqk", q, k) / np.sqrt(q.shape[-1])
+    scores -= scores.max(axis=-1, keepdims=True)
+    weights = np.exp(scores)
+    weights /= weights.sum(axis=-1, keepdims=True)
+    return np.einsum("bhqk,bhkd->bhqd", weights, v)
+
+
+def batched_matmul_f64(a, b) -> np.ndarray:
+    return np.einsum("bij,bjk->bik", np.asarray(a, np.float64), np.asarray(b, np.float64))
