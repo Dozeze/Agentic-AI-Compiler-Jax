@@ -81,9 +81,12 @@ class _Messages:
                 blocks.append(SimpleNamespace(type="text", text=part.text))
         meta = response.usage_metadata
         out, thoughts = getattr(meta, "candidates_token_count", None), getattr(meta, "thoughts_token_count", None)
+        # Vertex implicit caching (P32): cached_content_token_count is a subset of prompt_token_count, billed
+        # at a discount. Charging every prompt token at the full input price is an upper bound, so the cached
+        # count is kept for diagnostics only and not reported as separate cache billing.
         usage = SimpleNamespace(input_tokens=getattr(meta, "prompt_token_count", None),
                                 output_tokens=out + (thoughts or 0) if out is not None else None,
-                                cache_read_input_tokens=getattr(meta, "cached_content_token_count", None))
+                                implicit_cached_input_tokens=getattr(meta, "cached_content_token_count", None))
         finish = str(getattr(candidate, "finish_reason", "") or "")
         stop = ("max_tokens" if "MAX_TOKENS" in finish else "refusal" if any(
             word in finish for word in ("SAFETY", "BLOCKLIST", "PROHIBITED_CONTENT", "RECITATION")) else

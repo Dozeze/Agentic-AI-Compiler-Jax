@@ -65,6 +65,17 @@ def test_response_comes_back_in_anthropic_shape_with_usage():
     assert (message.usage.input_tokens, message.usage.output_tokens) == (10, 5)
 
 
+def test_implicit_cache_hits_are_charged_as_full_price_input():
+    # P32: Vertex reported 1,622 cached prompt tokens; they are part of prompt_token_count, so the
+    # provider must neither stop the run nor bill them twice.
+    response = _response(types.Part(text="ok"), prompt=2260, out=400, thoughts=15)
+    response.usage_metadata.cached_content_token_count = 1622
+    client, _ = _client(response)
+    usage = client.messages.create(model="m", max_tokens=10, messages=[{"role": "user", "content": "go"}]).usage
+    assert (usage.input_tokens, usage.output_tokens, usage.implicit_cached_input_tokens) == (2260, 415, 1622)
+    assert getattr(usage, "cache_read_input_tokens", None) is None
+
+
 def test_history_round_trip_names_responses_and_keeps_signatures():
     call = SimpleNamespace(type="tool_use", id="gemini_call_1", name="benchmark_code", input={"x": "1"},
                            thought_signature=b"sig")

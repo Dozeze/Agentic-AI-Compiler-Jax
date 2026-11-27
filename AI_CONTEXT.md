@@ -221,9 +221,10 @@ remains the default for subsequent work. Local run evidence and credentials are 
   `compiler_complement` (adds the division of labour: XLA does the mechanical work, the agent looks for a different
   computation with the same result). After HALO's framing study, but HALO's prompt named the exact identities of
   two of its tasks; this one names no rewrite or workload, and a test checks that]
-- P32 Implicit prompt caching on Vertex? [pending: Gemini on Vertex reported 1,622 cached input tokens in one
-  request and `providers.py` stopped the run as unpriced billing (`unexpected_cache_usage`). Proposal: charge
-  cached tokens at the full input price, a safe upper bound, instead of stopping. Not applied (P20 owner)]
+- P32 Implicit prompt caching on Vertex? [Gemini reported 1,622 cached input tokens in one request and
+  `providers.py` stopped the run as unpriced billing. Vertex's cached count is a subset of `prompt_token_count`,
+  billed at a discount, so `gemini.py` now charges all prompt tokens at the full input price (an upper bound)
+  and keeps the cached count as a diagnostic only. Anthropic cache billing still stops the run (P20 unchanged)]
 - P28 Simplify before the final presentation? [proposal only: `docs/SIMPLIFICATION_PROPOSAL.md` lists dead code,
   duplicate held-out guards, a redundant promotion recheck and over-built provider/storage accounting. Nothing is
   removed until the team agrees; code by another member changes only with that member's agreement]
@@ -388,6 +389,7 @@ Compiler feedback, held-out, providers (batch 03):
   than prune acceptance evidence; an active worker can exceed that limit before the host checks its files.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-27 Sergio — P8 (P32): `gemini.py` charges Vertex implicit-cache hits as full-price input instead of reporting separate cache billing, which stopped one sweep cell; regression test added.
 - 2026-11-27 Sergio — AIC-016: first live sweep on the Mac (CPU, Docker, gemini-2.5-flash): `scripts/measure_ceilings.py`, `scripts/search_sweep.py`, `configs/live_gemini_flash.json` (dated prices, USD 0.30 cap per run), `docs/EXPERIMENTS.md`. 10/10 headroom cells at ~100 % of ceiling, 0 false positives on controls, USD 0.10. Calibration records, ceiling results and the sweep summary in `evidence/` (raw work directories ignored). P32 pending.
 - 2026-11-27 Sergio — AIC-014 (P31): `run_config.prompt_framing` = `baseline` | `compiler_complement`; the second adds a task-neutral "work alongside XLA" framing to the system prompt. Tests check validation, that it reaches the prompt and that it names no workload or rewrite.
 - 2026-11-27 Sergio — AIC-017 (P30): headroom suite: `matmul_chain`, `pairwise_distances`, `attention_loop`, `layer_norm_loop`, `batched_matmul_loop` with float64 oracles, edge cases, disjoint held-out split and reviewed ceiling rewrites (`workloads/ceilings/`, also for the three controls); worker image includes the new references. 22 suite tests.
