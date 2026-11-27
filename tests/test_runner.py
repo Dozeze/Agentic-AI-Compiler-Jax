@@ -130,12 +130,29 @@ def test_docker_argv_applies_every_control(tmp_path):
     argv = runner.DockerRunner(selected_backend="cpu", image="img:tag").argv(tmp_path, "c1")
     joined = " ".join(argv)
     for flag in ("--network none", "--read-only", "--cap-drop ALL", "--security-opt no-new-privileges",
-                 "--user 65534:65534", "--pids-limit 128", "--memory 2g", "--memory-swap 2g", "--cpus 2",
+                 "--user 65534:65534", "--pids-limit 128", "--memory 2g", "--memory-swap 2g",
                  "--env HOME=/tmp", f"source={tmp_path.resolve()},target=/work"):
         assert flag in joined, flag
     assert "--privileged" not in joined and "--gpus" not in joined
     assert argv[-2:] == ["img:tag", "/work"]
     assert "--gpus all" in " ".join(runner.DockerRunner(selected_backend="cuda", image="i").argv(tmp_path, "c2"))
+
+
+def test_docker_has_no_cpu_quota_by_default(tmp_path):
+    # P29: a --cpus quota throttled XLA's thread pool and made container timing bimodal.
+    docker = runner.DockerRunner(selected_backend="cpu", image="img:tag")
+    argv = docker.argv(tmp_path, "c1")
+    assert "--cpus" not in argv and "--cpuset-cpus" not in argv
+    assert docker.cpu_control() == "none"
+
+
+def test_docker_cpu_control_is_explicit_and_exclusive(tmp_path):
+    pinned = runner.DockerRunner(selected_backend="cpu", image="i", cpuset="0-3")
+    assert pinned.argv(tmp_path, "c1")[-4:-2] == ["--cpuset-cpus", "0-3"] and pinned.cpu_control() == "cpuset=0-3"
+    quota = runner.DockerRunner(selected_backend="cpu", image="i", cpus=2)
+    assert quota.argv(tmp_path, "c2")[-4:-2] == ["--cpus", "2"] and quota.cpu_control() == "cpus=2"
+    with pytest.raises(ValueError):
+        runner.DockerRunner(selected_backend="cpu", cpus=2, cpuset="0-1")
 
 
 def test_docker_variant_follows_the_backend():
@@ -160,3 +177,14 @@ def test_calibrate_aa_script_writes_or_refuses(repo_root, clean_env, tmp_path):
         assert len(written) == 1 and json.loads(written[0].read_text())["label"] == "test"
     else:
         assert "not calibrated" in proc.stderr
+
+
+def test_cpu_control_separates_measurement_populations(tmp_path, monkeypatch):
+    # A calibration taken under a CPU quota must not be reused for a search without one (P29).
+    from controller import Evaluator
+    from workloads.registry import SOFTMAX
+    monkeypatch.setattr(runner, "_docker", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("no docker")))
+    labels = {Evaluator(SOFTMAX, runner.DockerRunner(selected_backend="cpu", image="img:tag", **limit),
+                        MeasurementProtocol(), tmp_path / str(i), selected_backend="cpu").runner_label
+              for i, limit in enumerate(({}, {"cpus": 2}, {"cpuset": "0-3"}))}
+    assert labels == {"img:tag|cpu none", "img:tag|cpu cpus=2", "img:tag|cpu cpuset=0-3"}

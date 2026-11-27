@@ -194,9 +194,14 @@ remains the default for subsequent work. Local run evidence and credentials are 
 - P26 GPU A/A calibration is unstable on the NV host (first phase-B run, 2026-11-18). What changes before any
   search? [none yet: rerun step 6 on a quiet machine with `--work-dir`, compare `--runner subprocess`, inspect the
   raw blocks; then decide, for example longer blocks. Never loosen the IQR/drift limits only to make it pass]
+  Likely cause found on the Mac on 2026-11-27: the container's `--cpus 2` quota (P29). Rerun step 6 with P29.
 - P27 Custom-kernel technology (AIC-021)? [Pallas from the pinned JAX 0.4.38: Triton lowering on CUDA,
   interpret mode on CPU (CLAUDE.md rule 3). Kernels tile rows and pad to power-of-two blocks (Triton rule);
   softmax and layer_norm first, matmul_gelu later (erfc and HIGHEST precision inside Triton unverified)]
+- P29 CPU limit for worker containers (AIC-009)? [no CPU-time quota by default: `--cpus 2` made timing bimodal
+  (CFS throttling of XLA's thread pool). CPU time stays bounded by the parent's wall-clock deadline; memory, PID,
+  network and filesystem limits are unchanged. `DockerRunner(cpuset=...)` pins fixed cores (the plan's preferred
+  Linux control), `cpus=` restores a quota; not exposed on the CLI until a host needs it]
 - P28 Simplify before the final presentation? [proposal only: `docs/SIMPLIFICATION_PROPOSAL.md` lists dead code,
   duplicate held-out guards, a redundant promotion recheck and over-built provider/storage accounting. Nothing is
   removed until the team agrees; code by another member changes only with that member's agreement]
@@ -314,6 +319,11 @@ Evaluation pipeline (AIC-005 … 009):
 - On a busy Mac, tiny workloads (x + y, µs per call) usually fail the 10 % / 5 % instability limits: the run then
   stops with "no usable A/A calibration" instead of guessing a threshold. That is the protocol working.
 - A measurement population is device + JAX version + runner/image: a change mid-run stops the run (INTERRUPTED).
+- Never put a `--cpus` quota on a timing container (P29): XLA sizes its CPU thread pool from all visible cores,
+  uses up the quota early in each period and the container is throttled until the next one. On the Mac (M5)
+  matmul_gelu blocks alternated between ~375 and ~1,130 µs per call and A/A failed with IQR/median ≈ 2. Without
+  the quota all three workloads calibrate in Docker (δ ≈ 5 %; native subprocess δ 0.3–1 %). The CPU control
+  (`none`, `cpus=…`, `cpuset=…`) is part of the population label.
 
 Compiler feedback, held-out, providers (batch 03):
 - `feedback.py` runs in the worker (it is in the image): summaries per level + estimates, never measurements.
@@ -354,6 +364,7 @@ Compiler feedback, held-out, providers (batch 03):
   than prune acceptance evidence; an active worker can exceed that limit before the host checks its files.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-27 Sergio — AIC-009 (P29): no `--cpus` quota on worker containers by default; optional `cpuset`/`cpus` in `DockerRunner`; the CPU control is part of the measurement population label. On the Mac the default quota made Docker A/A unstable (matmul_gelu IQR/median ≈ 2); without it softmax, layer_norm and matmul_gelu calibrate in Docker (δ 5.2–5.6 %). Likely cause of P26. Full suite with Docker 801 passed / 11 skipped.
 - 2026-11-25 Sergio — P28: `docs/SIMPLIFICATION_PROPOSAL.md` (draft for team review; no code changed).
 - 2026-11-25 Sergio — AIC-027: hand-written Pallas kernels for softmax and layer_norm (`kernels/`), row-tiled with power-of-two padding; pass every development, edge and extra odd-width case on CPU in interpret mode; `needs_gpu` test checks native Triton lowering + CUDA correctness (no speed claim). P27 (kernel technology). Offline suite 786 passed / 3 skipped / 20 deselected.
 - 2026-11-18 Sergio — AIC-009 fix: the worker clears its umask when it does not own the work directory, so the host can delete what a Linux container writes (phase-B calibration crashed on cleanup). Worker image hash changes: rebuild the images. Recorded the first phase-B run (steps 1–5 passed, A/A unstable on the GPU) and the host `ptxas` pitfall. Offline suite 782 passed / 2 skipped / 20 deselected.

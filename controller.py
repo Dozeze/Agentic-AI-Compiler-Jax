@@ -196,6 +196,8 @@ class Evaluator:
         self.measure_shape = tuple(shape)
         identity = runner.identity()
         self.runner_label = identity.get("image") or identity["runner"]
+        if identity.get("cpu_control"):     # P29: a CPU quota, fixed cores or neither are different populations
+            self.runner_label += f"|cpu {identity['cpu_control']}"
         self.calibration = calibration
         self._calibration_checked = calibration is None
         self.fingerprint = None

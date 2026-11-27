@@ -259,21 +259,29 @@ class DockerRunner:
     """One locked-down container per request: the only path for model-written code (AIC-009).
 
     Controls (AIC-1.1 §7): no network; read-only root filesystem; all capabilities dropped and
-    no-new-privileges (Docker's default seccomp profile stays on); a non-root user; CPU, memory (no swap)
+    no-new-privileges (Docker's default seccomp profile stays on); a non-root user; memory (no swap)
     and PID limits; a size-limited tmpfs as the only scratch space; only the request's own work directory
     mounted; no inherited environment, so no credentials. A GPU is exposed only for backend `cuda`
     (`--gpus all`, the only form WSL2 supports). The parent owns the deadline, kills the container on
     timeout, inspects it for an out-of-memory kill, removes it and verifies it is gone.
+
+    CPU: no CPU-time quota by default. A `--cpus` quota throttles the whole container once XLA's thread
+    pool (sized from all visible cores) has used the period's share, which made timing bimodal (P29:
+    matmul_gelu blocks of about 375 and 1,130 µs). CPU time stays bounded by the parent's wall-clock
+    deadline. `cpuset` pins the container to fixed cores (`--cpuset-cpus`, the plan's preferred Linux
+    control); `cpus` restores a quota. The choice is part of the measurement population (`cpu_control`).
     """
     name = "docker/v1"
     isolated = True
 
-    def __init__(self, *, selected_backend: str | None, image: str | None = None, memory: str = "2g", cpus: float = 2,
-                 pids: int = 128, scratch_mb: int = 256, max_log_bytes: int = 1 << 20):
+    def __init__(self, *, selected_backend: str | None, image: str | None = None, memory: str = "2g", cpus: float | None = None,
+                 cpuset: str | None = None, pids: int = 128, scratch_mb: int = 256, max_log_bytes: int = 1 << 20):
         self.variant = "cuda12" if selected_backend == "cuda" else "cpu"
         self.image = image or image_reference(self.variant)
         self.gpus = selected_backend == "cuda"
-        self.limits = {"memory": memory, "cpus": cpus, "pids": pids, "scratch_mb": scratch_mb}
+        if cpus is not None and cpuset is not None:
+            raise ValueError("choose either a CPU quota (cpus) or fixed cores (cpuset), not both")
+        self.limits = {"memory": memory, "cpus": cpus, "cpuset": cpuset, "pids": pids, "scratch_mb": scratch_mb}
         self.max_log_bytes = max_log_bytes
 
     def identity(self) -> dict:
@@ -284,7 +292,15 @@ class DockerRunner:
         except (OSError, subprocess.TimeoutExpired):
             pass
         return {"runner": self.name, "isolated": True, "image": self.image, "image_id": image_id,
-                "gpus": self.gpus, "limits": self.limits}
+                "gpus": self.gpus, "limits": self.limits, "cpu_control": self.cpu_control()}
+
+    def cpu_control(self) -> str:
+        """How CPU is constrained: "none", "cpus=<quota>" or "cpuset=<cores>". Timings differ across these."""
+        if self.limits["cpuset"] is not None:
+            return f"cpuset={self.limits['cpuset']}"
+        if self.limits["cpus"] is not None:
+            return f"cpus={self.limits['cpus']}"
+        return "none"
 
     def preflight(self) -> str | None:
         """None when containers can run; otherwise why not (the run is then ISOLATION_UNAVAILABLE)."""
@@ -306,10 +322,14 @@ class DockerRunner:
                 "--network", "none", "--read-only", "--cap-drop", "ALL",
                 "--security-opt", "no-new-privileges",
                 "--user", "65534:65534", "--pids-limit", str(limits["pids"]),
-                "--memory", limits["memory"], "--memory-swap", limits["memory"], "--cpus", str(limits["cpus"]),
+                "--memory", limits["memory"], "--memory-swap", limits["memory"],
                 "--tmpfs", f"/tmp:rw,nosuid,nodev,size={limits['scratch_mb']}m,mode=1777",
                 "--env", "HOME=/tmp", "--workdir", "/work",
                 "--mount", f"type=bind,source={Path(workdir).resolve()},target=/work"]
+        if limits["cpuset"] is not None:
+            argv += ["--cpuset-cpus", str(limits["cpuset"])]
+        elif limits["cpus"] is not None:
+            argv += ["--cpus", str(limits["cpus"])]
         if self.gpus:
             argv += ["--gpus", "all"]
         return argv + [self.image, "/work"]
