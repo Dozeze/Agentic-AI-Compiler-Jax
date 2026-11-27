@@ -1,7 +1,7 @@
 # Experiments (batch 04, 2026-11-27)
 
-First end-to-end results of the AIC-1.1 pipeline with a live model: ceiling study, then one agent search
-per workload and prompt framing. CPU only (Sergio's Mac), so these are development results, not the
+Sections 1–2: sweep 01, the first end-to-end results (op tier, gemini-2.5-flash, n = 1). Section 3: sweep 02,
+the main CPU study (14 workloads, two models, two framings, n = 3). CPU only (Sergio's Mac), so these are development results, not the
 CUDA target evidence that M3/M4 require.
 
 ## Setup
@@ -101,3 +101,67 @@ cosmetic change, which used fewer evaluations (12 vs 21 in total).
 7. Model-written code had two avoidable failures: escaped newlines in the source (POLICY_REJECTED syntax
    error) and calls such as `jax.nn.layer_norm` that do not exist in JAX 0.4.38 (COMPILE_FAILED). Both
    cost a candidate slot and were reported back to the model in the next request.
+
+## 3. Sweep 02: 14 workloads × 2 models × 2 framings × 3 repetitions (168 searches)
+Same host and protocol as above, new worker image `aic-worker:cpu-d00f283409f6fb94` (block tier added), so every
+calibration and ceiling was measured again for this population (`evidence/calibration/mac-m5-cpu-docker-sweep2/`,
+δ 4.5–6.1 %; top_k_rows 0.6 %). gqa_decode never passed A/A calibration (four attempts); its cells calibrate
+lazily. Models: gemini-2.5-flash and gemini-2.5-flash-lite, thinking off; framings `baseline` and
+`compiler_complement`; context C2; 3 candidates and 3 requests per search. 493 requests, USD 0.64 in total,
+61 minutes wall time. Summary: `evidence/sweeps/mac-m5-cpu-docker-sweep-02.json`; cells under `runs/sweep-02/`.
+
+### Ceilings (Docker, frozen δ)
+| Tier | Workload | Ceiling | | Tier | Workload | Ceiling |
+|---|---|---|---|---|---|---|
+| op | matmul_chain | 13.5× | | block | top_k_rows | 161× |
+| op | layer_norm_loop | 4.3× | | block | embedding_lookup | ~52× (session unstable, see below) |
+| op | pairwise_distances | 2.3× | | block | gqa_decode | 2.2× |
+| op | attention_loop | 1.9× | | block | conv3x3 | 2.0× |
+| op | batched_matmul_loop | 1.3× | | block | rnn_layer | 1.7× |
+| control | softmax, layer_norm, matmul_gelu | 1.00× (no change) | | block | cross_entropy | 1.3× |
+
+### Share of the ceiling reached (mean over cells, capped at 100 %; 95 % bootstrap CI, runs resampled within workload)
+| Tier | Model | baseline framing | compiler_complement | after 1 candidate → after 3 |
+|---|---|---|---|---|
+| op (5 workloads) | flash | 83 % [70, 97] | 97 % [95, 98] | 65 → 83 % / 84 → 97 % |
+| op | flash-lite | 37 % | 37 % [23, 52] | no gain from iterating |
+| block (6 workloads) | flash | 31 % [29, 33] | 42 % [21, 63] | 15 → 31 % / 25 → 42 % |
+| block | flash-lite | 22 % [6, 39] | 24 % [11, 39] | 22 → 22 % / 17 → 24 % |
+
+Differences (percentage points, 95 % CI): flash − flash-lite +31 [21, 42] over all headroom cells (+53 on the op
+tier, +13 [−4, 30] on the block tier). compiler_complement − baseline: +12 [0, 26] with flash, +1 [−12, 13] with
+flash-lite. Iterating (best after 3 candidates − best after 1): +16 [8, 25] with flash (11 of 66 cells improved
+after the first candidate), +2 [0, 6] with flash-lite.
+
+### Controls
+0 of 48 control cells accepted a change on softmax or layer_norm. On matmul_gelu, 2 of 24 cells accepted a 1.17× and
+a 1.20× rewrite (one per model). Both replace `jax.nn.gelu(approximate=False)`, which lowers through `erfc`, by
+0.5·x·(1 + erf(x/√2)). It passes every declared case: its largest absolute error against the float64 oracle is
+2.5e-6, the same as the reference. But for x < −5.5 it returns 0 where GELU is about 1e-9, a 100 % relative error that
+the declared atol (1e-5) allows. The contract permits it; the reference author chose `erfc` for that tail. We report
+it as accepted on a control under a contract that does not protect the tail, not as a clean speedup, and the
+tolerance is not changed after the fact.
+
+### What the agent found vs what the harness accepted
+15 correct candidates were rejected as MEASUREMENT_UNSTABLE, 12 of them with every session's CI lower bound far above
+1 + δ: 9 of 12 embedding_lookup cells (48–60×), one matmul_chain (~15×), one cross_entropy (1.33×), one
+batched_matmul_loop (~1.1×). Cause: calls per block are calibrated on the reference only (AIC-1.1 §5.3), so a 50×
+faster candidate runs blocks of well under a millisecond, whose dispersion exceeds the 10 % IQR limit. The agent then
+resubmitted the same correct program 18 times, and the duplicate rule refused to measure it again. Counting those
+candidates as found raises the block-tier share from 36 % to 53 % (flash) and from 23 % to 31 % (flash-lite);
+embedding_lookup goes from 17 % to 100 % with flash. The official metric stays "accepted"; "found" is a diagnostic of
+the protocol, not of the agent.
+
+### Where the agent fails
+Most failures are the model's: flash-lite produced 50 COMPILE_FAILED attempts (flash 16), mostly calls to JAX APIs
+with invented keyword arguments (`gather(..., axis_size=)`, `expand_dims(..., axis=)`), and 20 CORRECTNESS_FAILED
+(flash 13). gqa_decode (grouping query heads) and rnn_layer (hoisting the input projection out of `scan`) are the
+hardest: 1 accepted of 6 flash cells each, none with flash-lite. On cross_entropy, flash found
+`jax.nn.log_softmax` + `take_along_axis`, 1.31×, slightly faster than our ceiling rewrite (1.27×): the ceiling is
+the best rewrite we knew, not an upper bound.
+
+### Lessons for the protocol (proposed, not applied to these results)
+1. Calibrate calls per block so that *both* sides reach the minimum block duration (more calls only lengthen both
+   sides equally), or accept when every session's CI lower bound clears 1 + δ by a wide margin despite dispersion.
+2. Let a candidate rejected only as MEASUREMENT_UNSTABLE be measured again once when it is resubmitted unchanged.
+3. Declare an elementwise relative tolerance for functions with small tails (GELU), or test the tail explicitly.

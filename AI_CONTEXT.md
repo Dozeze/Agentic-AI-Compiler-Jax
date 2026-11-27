@@ -89,6 +89,11 @@ First live sweep (2026-11-27, Mac CPU in Docker, gemini-2.5-flash, one run per c
 ceilings 1.31–13.1×; the agent reached ~100 % of the ceiling in 10/10 headroom cells (up to 13.5× on
 matmul_chain) and accepted no change on the controls; USD 0.10 for 46 requests. Development evidence only:
 n = 1, CPU, no held-out evaluation; the tasks are too easy to separate the two prompt framings.
+Sweep 02 (n = 3, 14 workloads, flash and flash-lite, both framings, USD 0.64, `docs/EXPERIMENTS.md` §3): flash reaches
+90 % of the ceiling on the op tier and 36 % on the block tier, flash-lite 37 % and 23 %; flash − lite +31 pp [21, 42];
+compiler_complement +12 pp [0, 26] with flash only; iterating adds +16 pp [8, 25] with flash. 2/72 control cells
+accepted the erf form of GELU on matmul_gelu (contract allows it, P34). 12 clearly faster candidates were rejected
+as MEASUREMENT_UNSTABLE (P33).
 
 Current handoff: the integrated AIC-015–018 implementation and documentation on `sergio/batch-03`,
 verified by the 781-test offline suite. Target acceptance remains pending; local run artifacts stay excluded.
@@ -228,6 +233,14 @@ remains the default for subsequent work. Local run evidence and credentials are 
   `providers.py` stopped the run as unpriced billing. Vertex's cached count is a subset of `prompt_token_count`,
   billed at a discount, so `gemini.py` now charges all prompt tokens at the full input price (an upper bound)
   and keeps the cached count as a diagnostic only. Anthropic cache billing still stops the run (P20 unchanged)]
+- P33 Fast candidates rejected as unstable? [pending: calls per block are calibrated on the reference only, so a
+  ~50x faster candidate runs sub-millisecond blocks that fail the 10 % IQR limit (9/12 embedding_lookup cells), and
+  the duplicate rule then refuses the unchanged resubmission. Proposal: calibrate calls so both sides reach the
+  minimum block duration, and allow one re-measurement of a resubmitted MEASUREMENT_UNSTABLE candidate. Change only
+  for a new protocol version; sweep 02 results stay under the frozen protocol]
+- P34 GELU tail on matmul_gelu? [the erf form of GELU is accepted (1.17–1.20x on CPU) because atol 1e-5 does not
+  protect the tail where GELU ~1e-9. Tolerances are not changed after a search; a new workload version would declare
+  an elementwise relative check for the tail]
 - P28 Simplify before the final presentation? [proposal only: `docs/SIMPLIFICATION_PROPOSAL.md` lists dead code,
   duplicate held-out guards, a redundant promotion recheck and over-built provider/storage accounting. Nothing is
   removed until the team agrees; code by another member changes only with that member's agreement]
@@ -392,6 +405,7 @@ Compiler feedback, held-out, providers (batch 03):
   than prune acceptance evidence; an active worker can exceed that limit before the host checks its files.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-27 Sergio — AIC-016: sweep 02 on the Mac (168 searches: 14 workloads × flash/flash-lite × 2 framings × 3), `scripts/search_sweep.py` rewritten (models, repetitions, resume, share after k candidates, aggregates), `configs/live_gemini_flash_lite.json`, results in `docs/EXPERIMENTS.md` §3 and `evidence/`. P33 and P34 pending.
 - 2026-11-27 Sergio — AIC-017 (P30): block tier of the headroom suite: `gqa_decode`, `top_k_rows`, `cross_entropy` (int32 labels), `conv3x3`, `embedding_lookup` (int32 ids), `rnn_layer`, with float64 oracles, edge cases, held-out splits and ceiling rewrites; worker image includes them. Docker CPU ceilings 1.27–161×.
 - 2026-11-27 Sergio — P8 (P32): `gemini.py` charges Vertex implicit-cache hits as full-price input instead of reporting separate cache billing, which stopped one sweep cell; regression test added.
 - 2026-11-27 Sergio — AIC-016: first live sweep on the Mac (CPU, Docker, gemini-2.5-flash): `scripts/measure_ceilings.py`, `scripts/search_sweep.py`, `configs/live_gemini_flash.json` (dated prices, USD 0.30 cap per run), `docs/EXPERIMENTS.md`. 10/10 headroom cells at ~100 % of ceiling, 0 false positives on controls, USD 0.10. Calibration records, ceiling results and the sweep summary in `evidence/` (raw work directories ignored). P32 pending.

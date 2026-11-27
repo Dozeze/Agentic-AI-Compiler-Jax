@@ -1,0 +1,26 @@
+{
+  "schema_version": "aa_calibration/v1",
+  "label": "mac-m5-cpu-docker-sweep2",
+  "workload_id": "conv3x3",
+  "shape": [
+    8,
+    32,
+    32,
+    32,
+    64
+  ],
+  "dtype": "float32",
+  "protocol_hash": "fd6148b5e8ca2ec71c470716ef432e3226a32bc45901fd8c6d2d88aeb6c308d0",
+  "fingerprint": "cpu|cpu|jax 0.4.38|aic-worker:cpu-d00f283409f6fb94|cpu none",
+  "repeats": 8,
+  "delta": 0.06082647732763008,
+  "aa_relative_differences": [
+    0.0021485272542192124,
+    0.004989171720102381,
+    0.004055858266596601,
+    0.005283205488170406,
+    0.0031308444339426256
+  ],
+  "timer_resolution_s": 0.001,
+  "created_utc": "2026-11-27T14:45:48Z"
+}

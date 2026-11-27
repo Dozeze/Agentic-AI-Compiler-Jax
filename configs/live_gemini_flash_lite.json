@@ -1,0 +1,31 @@
+{
+  "schema_version": "run_config/v1",
+  "backend": "cpu",
+  "runner": "docker",
+  "context_condition": "C2",
+  "model": {
+    "provider": "gemini-vertex",
+    "model_id": "gemini-2.5-flash-lite",
+    "project": "dd2430-508012",
+    "max_tokens": 4096,
+    "request_timeout_s": 60.0,
+    "prices": {
+      "provider": "gemini-vertex",
+      "model_id": "gemini-2.5-flash-lite",
+      "currency": "USD",
+      "input_per_million": 0.10,
+      "output_per_million": 0.40,
+      "checked_date": "2026-11-27",
+      "source_url": "https://cloud.google.com/vertex-ai/generative-ai/pricing"
+    }
+  },
+  "budgets": {
+    "max_candidates": 3,
+    "max_provider_requests": 3,
+    "max_output_tokens_per_request": 4096,
+    "max_total_tokens": 120000,
+    "run_wall_s": 1500.0,
+    "money_cap": 0.30,
+    "currency": "USD"
+  }
+}

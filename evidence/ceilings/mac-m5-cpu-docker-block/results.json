@@ -1,0 +1,222 @@
+[
+  {
+    "workload": "gqa_decode",
+    "class": "headroom",
+    "shape": [
+      1,
+      32,
+      4,
+      1024,
+      128
+    ],
+    "state": "ACCEPTED",
+    "reason": "speedup 2.161x, 95% CI [2.144, 2.179]; lower bound clears 1 + delta = 1.052; confirmed in 1 fresh session(s)",
+    "delta": 0.05164144661945021,
+    "speedup": [
+      2.160557228372425,
+      2.3474378915484437
+    ],
+    "ci": [
+      [
+        2.1440596879862373,
+        2.1786856017999385
+      ],
+      [
+        2.288418549512574,
+        2.4077757345127755
+      ]
+    ],
+    "reference_median_s": [
+      0.00121841925,
+      0.00132778384375
+    ],
+    "ceiling_median_s": [
+      0.0005670755,
+      0.0005648763125
+    ],
+    "fingerprint": "cpu|cpu|jax 0.4.38|aic-worker:cpu-d00f283409f6fb94|cpu none",
+    "calibration": "lazy"
+  },
+  {
+    "workload": "top_k_rows",
+    "class": "headroom",
+    "shape": [
+      64,
+      16384
+    ],
+    "state": "ACCEPTED",
+    "reason": "speedup 161.379x, 95% CI [158.921, 163.870]; lower bound clears 1 + delta = 1.006; confirmed in 1 fresh session(s)",
+    "delta": 0.005503744584213521,
+    "speedup": [
+      161.37938004767557,
+      158.2763132364601
+    ],
+    "ci": [
+      [
+        158.92149490661768,
+        163.8698439655559
+      ],
+      [
+        154.99516823917142,
+        161.72113320530113
+      ]
+    ],
+    "reference_median_s": [
+      0.2884407295,
+      0.2863325
+    ],
+    "ceiling_median_s": [
+      0.0017892705,
+      0.001805229
+    ],
+    "fingerprint": "cpu|cpu|jax 0.4.38|aic-worker:cpu-d00f283409f6fb94|cpu none",
+    "calibration": "evidence/calibration/mac-m5-cpu-docker-sweep2/top_k_rows-64x16384.json"
+  },
+  {
+    "workload": "cross_entropy",
+    "class": "headroom",
+    "shape": [
+      384,
+      4096
+    ],
+    "state": "ACCEPTED",
+    "reason": "speedup 1.274x, 95% CI [1.268, 1.280]; lower bound clears 1 + delta = 1.050; confirmed in 1 fresh session(s)",
+    "delta": 0.050248206038548016,
+    "speedup": [
+      1.2740884727484985,
+      1.274474722949423
+    ],
+    "ci": [
+      [
+        1.267574448570547,
+        1.2798049858049099
+      ],
+      [
+        1.267595894229333,
+        1.2795263320002623
+      ]
+    ],
+    "reference_median_s": [
+      0.00081108332,
+      0.00081201166
+    ],
+    "ceiling_median_s": [
+      0.00063613086,
+      0.00063599166
+    ],
+    "fingerprint": "cpu|cpu|jax 0.4.38|aic-worker:cpu-d00f283409f6fb94|cpu none",
+    "calibration": "evidence/calibration/mac-m5-cpu-docker-sweep2/cross_entropy-384x4096.json"
+  },
+  {
+    "workload": "conv3x3",
+    "class": "headroom",
+    "shape": [
+      8,
+      32,
+      32,
+      32,
+      64
+    ],
+    "state": "ACCEPTED",
+    "reason": "speedup 2.020x, 95% CI [1.997, 2.044]; lower bound clears 1 + delta = 1.061; confirmed in 1 fresh session(s)",
+    "delta": 0.06082647732763008,
+    "speedup": [
+      2.020072207663008,
+      2.023766625744375
+    ],
+    "ci": [
+      [
+        1.9967927639257927,
+        2.0441999202235457
+      ],
+      [
+        2.0027757811954894,
+        2.043337593690033
+      ]
+    ],
+    "reference_median_s": [
+      0.0021359427499999997,
+      0.002145122375
+    ],
+    "ceiling_median_s": [
+      0.0010636953125,
+      0.001056502625
+    ],
+    "fingerprint": "cpu|cpu|jax 0.4.38|aic-worker:cpu-d00f283409f6fb94|cpu none",
+    "calibration": "evidence/calibration/mac-m5-cpu-docker-sweep2/conv3x3-8x32x32x32x64.json"
+  },
+  {
+    "workload": "embedding_lookup",
+    "class": "headroom",
+    "shape": [
+      8,
+      128,
+      4096,
+      256
+    ],
+    "state": "MEASUREMENT_UNSTABLE",
+    "reason": "baseline drift 0.079 > 0.05",
+    "delta": 0.044364342159988905,
+    "speedup": [
+      51.243661511839356,
+      52.834534106747476
+    ],
+    "ci": [
+      [
+        49.46027438711457,
+        53.34301792286917
+      ],
+      [
+        51.07738435611265,
+        54.72363145554045
+      ]
+    ],
+    "reference_median_s": [
+      0.00623346875,
+      0.0062388489999999994
+    ],
+    "ceiling_median_s": [
+      0.00012182800000000001,
+      0.00011381250000000001
+    ],
+    "fingerprint": "cpu|cpu|jax 0.4.38|aic-worker:cpu-d00f283409f6fb94|cpu none",
+    "calibration": "evidence/calibration/mac-m5-cpu-docker-sweep2/embedding_lookup-8x128x4096x256.json"
+  },
+  {
+    "workload": "rnn_layer",
+    "class": "headroom",
+    "shape": [
+      128,
+      32,
+      256,
+      256
+    ],
+    "state": "ACCEPTED",
+    "reason": "speedup 1.724x, 95% CI [1.711, 1.736]; lower bound clears 1 + delta = 1.045; confirmed in 1 fresh session(s)",
+    "delta": 0.04507812467247925,
+    "speedup": [
+      1.7241068710533782,
+      1.735407023062509
+    ],
+    "ci": [
+      [
+        1.7105570229321438,
+        1.7363234550619353
+      ],
+      [
+        1.7298313365642752,
+        1.740947501048778
+      ]
+    ],
+    "reference_median_s": [
+      0.022416145999999998,
+      0.022410854
+    ],
+    "ceiling_median_s": [
+      0.013022812500000001,
+      0.0128888755
+    ],
+    "fingerprint": "cpu|cpu|jax 0.4.38|aic-worker:cpu-d00f283409f6fb94|cpu none",
+    "calibration": "evidence/calibration/mac-m5-cpu-docker-sweep2/rnn_layer-128x32x256x256.json"
+  }
+]
