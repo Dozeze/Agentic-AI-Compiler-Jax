@@ -1,7 +1,8 @@
 # Experiments (batch 04, 2026-11-27)
 
 Sections 1–2: sweep 01, the first end-to-end results (op tier, gemini-2.5-flash, n = 1). Section 3: sweep 02,
-the main CPU study (14 workloads, two models, two framings, n = 3). CPU only (Sergio's Mac), so these are development results, not the
+the main CPU study (14 workloads, two models, two framings, n = 3) under protocol v1. Section 4: sweep 03, the same
+design under protocol v2 (P33); it is the result we report. CPU only (Sergio's Mac), so these are development results, not the
 CUDA target evidence that M3/M4 require.
 
 ## Setup
@@ -134,7 +135,7 @@ flash-lite. Iterating (best after 3 candidates − best after 1): +16 [8, 25] wi
 after the first candidate), +2 [0, 6] with flash-lite.
 
 ### Controls
-0 of 48 control cells accepted a change on softmax or layer_norm. On matmul_gelu, 2 of 24 cells accepted a 1.17× and
+0 of 24 control cells accepted a change on softmax or layer_norm. On matmul_gelu, 2 of 12 cells accepted a 1.17× and
 a 1.20× rewrite (one per model). Both replace `jax.nn.gelu(approximate=False)`, which lowers through `erfc`, by
 0.5·x·(1 + erf(x/√2)). It passes every declared case: its largest absolute error against the float64 oracle is
 2.5e-6, the same as the reference. But for x < −5.5 it returns 0 where GELU is about 1e-9, a 100 % relative error that
@@ -160,8 +161,76 @@ hardest: 1 accepted of 6 flash cells each, none with flash-lite. On cross_entrop
 `jax.nn.log_softmax` + `take_along_axis`, 1.31×, slightly faster than our ceiling rewrite (1.27×): the ceiling is
 the best rewrite we knew, not an upper bound.
 
-### Lessons for the protocol (proposed, not applied to these results)
+### Lessons for the protocol (1 and 2 applied in protocol v2, see §4)
 1. Calibrate calls per block so that *both* sides reach the minimum block duration (more calls only lengthen both
    sides equally), or accept when every session's CI lower bound clears 1 + δ by a wide margin despite dispersion.
 2. Let a candidate rejected only as MEASUREMENT_UNSTABLE be measured again once when it is resubmitted unchanged.
 3. Declare an elementwise relative tolerance for functions with small tails (GELU), or test the tail explicitly.
+
+## 4. Sweep 03: the same 168 searches under protocol `paired_blocks/v2`
+Same design, host and models as sweep 02; only the measurement protocol changed (P33): calls per block are doubled for
+both sides until the faster side's block reaches `min_block_s`, and a candidate rejected only as MEASUREMENT_UNSTABLE
+is measured once more when resubmitted unchanged. Worker image `aic-worker:cpu-714d46b24c147bfe`; every calibration
+and ceiling measured again (`evidence/calibration/mac-m5-cpu-docker-v2/`, `evidence/ceilings/mac-m5-cpu-docker-v2/`).
+All 14 workloads passed A/A calibration this time, gqa_decode included (conv3x3 on the third attempt): δ 4.2–6.0 %,
+top_k_rows 0.8 %. 492 requests, USD 0.67, 75 minutes for the searches. Summary:
+`evidence/sweeps/mac-m5-cpu-docker-sweep-03.json`; cells under `runs/sweep-03/` (not committed).
+
+### Ceilings (geometric mean of the provisional and confirmation sessions, as declared before the search)
+| Tier | Workload | Ceiling | | Tier | Workload | Ceiling |
+|---|---|---|---|---|---|---|
+| op | matmul_chain | 13.9× | | block | top_k_rows | 169× |
+| op | layer_norm_loop | 3.6× | | block | embedding_lookup | 61× (now stable) |
+| op | pairwise_distances | 2.9× (see note) | | block | gqa_decode | 2.2× |
+| op | attention_loop | 1.9× | | block | rnn_layer | 1.7× |
+| op | batched_matmul_loop | 1.3× | | block | conv3x3 | 1.7× |
+| control | softmax, layer_norm, matmul_gelu | 1.00× (no change) | | block | cross_entropy | 1.3× |
+
+Note on pairwise_distances: in the provisional session the reference ran at 0.52 ms per call against 0.29 ms in the
+two confirmation sessions (the ceiling program was stable at 0.12 ms), so that session measured 4.36× and the two
+confirmations 2.35× and 2.41×. The declared ceiling is the geometric mean of all three, 2.9×; we keep it. Agent
+candidates that match the rewrite measure 2.4–2.5×, which this ceiling scores as 82–86 % rather than ~100 %, so
+the op-tier shares below are slightly conservative.
+
+### Share of the ceiling reached (mean over cells, capped at 100 %; 95 % bootstrap CI, runs resampled within workload)
+| Tier | Model | baseline framing | compiler_complement | after 1 candidate → after 3 (baseline / complement) |
+|---|---|---|---|---|
+| op (5 workloads) | flash | 90 % [79, 96] | 90 % [77, 97] | 72 → 90 % / 77 → 90 % |
+| op | flash-lite | 52 % [32, 72] | 51 % [33, 71] | 34 → 52 % / 36 → 51 % |
+| block (6 workloads) | flash | 55 % [39, 71] | 55 % [38, 71] | 49 → 55 % / 27 → 55 % |
+| block | flash-lite | 17 % [2, 33] | 30 % [19, 42] | 17 → 17 % / 29 → 30 % |
+
+Per model, both framings: flash 90 % [81, 96] (op) and 55 % [41, 68] (block); flash-lite 52 % [36, 67] and
+24 % [13, 34].
+
+Differences (percentage points, 95 % CI): flash − flash-lite +34 [22, 46] over all headroom cells (+38 [22, 54] op,
++31 [14, 48] block). compiler_complement − baseline: −0 [−13, 14] with flash, +7 [−9, 22] with flash-lite. Iterating
+(best after 3 − best after 1): +16 [8, 25] with flash (12 of 66 cells improved after the first candidate), +8 [3, 14]
+with flash-lite (7 of 66).
+
+Per workload (mean of 3 cells; flash baseline / complement, flash-lite baseline / complement): matmul_chain 99/99,
+66/99; layer_norm_loop 99/66, 95/66; pairwise_distances 56/84, 0/27; attention_loop 95/100, 33/31;
+batched_matmul_loop 100/100, 67/33; top_k_rows 99/34, 36/40; embedding_lookup 100/67, 33/100; gqa_decode 0/33, 0/0;
+conv3x3 66/99, 33/33; rnn_layer 33/0, 0/7; cross_entropy 31/95, 0/0.
+
+### What changed from sweep 02 (v1) and what did not
+- The block-tier share with flash rose from 36 % to 55 %, mostly on embedding_lookup (17 % → 83 % with flash):
+  the ~60× gather is now accepted in 9 of 12 cells, where v1 rejected it as unstable in 9 of 12.
+- Rejected-but-correct-and-faster candidates fell from 12 to 4 cells: conv3x3 (flash, 1.7×), embedding_lookup
+  (flash, ~62×), pairwise_distances (flash, 2.4–2.6×) and rnn_layer (flash-lite, 1.1×). Counting them as found
+  moves flash from 90 to 93 % (op) and 55 to 60 % (block); flash-lite does not change. 15 attempts were still
+  MEASUREMENT_UNSTABLE, but the cause is now mostly the reference's drift between the first and last blocks of a
+  session (> 5 %), not the dispersion of short blocks. The re-measurement rule fired 4 times: 2 accepted on the
+  second measurement (embedding_lookup, matmul_chain), 2 unstable again.
+- The compiler_complement effect seen in sweep 02 (+12 [0, 26] with flash) did not replicate (−0 [−13, 14]). With
+  three runs per cell neither sweep shows a reliable framing effect; we report none.
+- The model gap (+31 → +34 pp) and the value of iterating with flash (+16 → +16 pp) did replicate.
+- Controls: 0 of 36 control cells accepted a change. No correct erf form of GELU was proposed this time (flash-lite
+  proposed four incorrect ones), so the P34 loophole was not exercised; it remains in the contract.
+
+### Where the agent fails
+Flash-lite: 35 COMPILE_FAILED, 21 CORRECTNESS_FAILED and 10 PROPOSAL_INVALID of 150 measured attempts; flash: 20,
+8 and 3 of 167. Both models resubmit the same program often (166 DUPLICATE attempts in total), which uses a
+candidate slot without new information. gqa_decode (1 of 12 cells, flash) and rnn_layer (1 flash cell at 1.71×,
+1 flash-lite cell at 1.12×) remain the hardest; cross_entropy is solved by flash with the complement framing
+(95 %) but never by flash-lite.

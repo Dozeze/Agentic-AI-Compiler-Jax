@@ -91,9 +91,13 @@ matmul_chain) and accepted no change on the controls; USD 0.10 for 46 requests. 
 n = 1, CPU, no held-out evaluation; the tasks are too easy to separate the two prompt framings.
 Sweep 02 (n = 3, 14 workloads, flash and flash-lite, both framings, USD 0.64, `docs/EXPERIMENTS.md` §3): flash reaches
 90 % of the ceiling on the op tier and 36 % on the block tier, flash-lite 37 % and 23 %; flash − lite +31 pp [21, 42];
-compiler_complement +12 pp [0, 26] with flash only; iterating adds +16 pp [8, 25] with flash. 2/72 control cells
+compiler_complement +12 pp [0, 26] with flash only; iterating adds +16 pp [8, 25] with flash. 2/36 control cells
 accepted the erf form of GELU on matmul_gelu (contract allows it, P34). 12 clearly faster candidates were rejected
 as MEASUREMENT_UNSTABLE (P33).
+Sweep 03 (same design under protocol v2, USD 0.67, `docs/EXPERIMENTS.md` §4, the result to report): flash 90 % (op)
+and 55 % (block), flash-lite 52 % and 24 %; flash − lite +34 pp [22, 46]; iterating +16 pp [8, 25] with flash, +8 [3, 14]
+with flash-lite; the framing effect did not replicate (−0 [−13, 14] with flash). 0/36 control cells accepted. Only 4
+correct, faster candidates lost to MEASUREMENT_UNSTABLE (12 under v1); the remaining cause is reference drift (P35).
 
 Current handoff: the integrated AIC-015–018 implementation and documentation on `sergio/batch-03`,
 verified by the 781-test offline suite. Target acceptance remains pending; local run artifacts stay excluded.
@@ -244,6 +248,12 @@ remains the default for subsequent work. Local run evidence and credentials are 
 - P28 Simplify before the final presentation? [proposal only: `docs/SIMPLIFICATION_PROPOSAL.md` lists dead code,
   duplicate held-out guards, a redundant promotion recheck and over-built provider/storage accounting. Nothing is
   removed until the team agrees; code by another member changes only with that member's agreement]
+
+- P35 What sweep 03 leaves open? [the remaining MEASUREMENT_UNSTABLE rejections come from the reference drifting by
+  more than 5 % within a session, not from short blocks; the drift limit is not loosened after the search. The
+  pairwise_distances ceiling (2.9x) includes a provisional session in which the reference ran 1.8x slower; it is kept
+  as declared (geometric mean of all sessions) and the effect, a slightly conservative op-tier share, is reported.
+  The framing result of sweep 02 is reported as not replicated.] Sergio, 2026-11-27.
 
 ## 7. Rules for code changes
 - One branch per person/batch; never push straight to `main`. One task per commit/PR; message starts with the task ID (`AIC-001: ...`).
@@ -405,6 +415,7 @@ Compiler feedback, held-out, providers (batch 03):
   than prune acceptance evidence; an active worker can exceed that limit before the host checks its files.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-27 Sergio — AIC-016 (P35): sweep 03, the 168-search design of sweep 02 rerun under protocol v2 with fresh calibrations (all 14 workloads pass) and ceilings; results in `docs/EXPERIMENTS.md` §4 and `evidence/sweeps/mac-m5-cpu-docker-sweep-03.json`. Corrected the sweep-02 control count (2/36, not 2/72).
 - 2026-11-27 Sergio — AIC-005/AIC-015 (P33): measurement protocol v2 raises calls per block for both sides until the faster one reaches the block floor; one re-measurement of an unstable candidate resubmitted unchanged. New protocol hash: every calibration must be redone. Full suite with Docker 867 passed / 11 skipped.
 - 2026-11-27 Sergio — AIC-016: sweep 02 on the Mac (168 searches: 14 workloads × flash/flash-lite × 2 framings × 3), `scripts/search_sweep.py` rewritten (models, repetitions, resume, share after k candidates, aggregates), `configs/live_gemini_flash_lite.json`, results in `docs/EXPERIMENTS.md` §3 and `evidence/`. P33 and P34 pending.
 - 2026-11-27 Sergio — AIC-017 (P30): block tier of the headroom suite: `gqa_decode`, `top_k_rows`, `cross_entropy` (int32 labels), `conv3x3`, `embedding_lookup` (int32 ids), `rnn_layer`, with float64 oracles, edge cases, held-out splits and ceiling rewrites; worker image includes them. Docker CPU ceilings 1.27–161×.

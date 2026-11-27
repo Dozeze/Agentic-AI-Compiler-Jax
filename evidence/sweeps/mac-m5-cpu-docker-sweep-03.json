@@ -1,0 +1,4462 @@
+{
+  "cells": [
+    {
+      "cell": "attention_loop-baseline-25-flash-lite-r1",
+      "workload": "attention_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 1.8569257518960605,
+      "best_after": [
+        1.0,
+        1.8569257518960605,
+        1.8569257518960605
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "CORRECTNESS_FAILED",
+        "ACCEPTED",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.8766796190325044,
+      "share_of_ceiling": 0.9831903282949023,
+      "cost_usd": 0.0017804,
+      "requests": 3
+    },
+    {
+      "cell": "attention_loop-baseline-25-flash-lite-r2",
+      "workload": "attention_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "COMPILE_FAILED",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 3,
+      "states": [
+        "COMPILE_FAILED",
+        "COMPILE_FAILED",
+        "COMPILE_FAILED"
+      ],
+      "ceiling": 1.8766796190325044,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0014437999999999999,
+      "requests": 3
+    },
+    {
+      "cell": "attention_loop-baseline-25-flash-lite-r3",
+      "workload": "attention_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "CORRECTNESS_FAILED",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 3,
+      "states": [
+        "COMPILE_FAILED",
+        "COMPILE_FAILED",
+        "CORRECTNESS_FAILED"
+      ],
+      "ceiling": 1.8766796190325044,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0014258,
+      "requests": 3
+    },
+    {
+      "cell": "attention_loop-baseline-25-flash-r1",
+      "workload": "attention_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 1.7909047304162888,
+      "best_after": [
+        1.7909047304162888,
+        1.7909047304162888,
+        1.7909047304162888
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.8766796190325044,
+      "share_of_ceiling": 0.9256825643725176,
+      "cost_usd": 0.0069018,
+      "requests": 3
+    },
+    {
+      "cell": "attention_loop-baseline-25-flash-r2",
+      "workload": "attention_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "ACCEPTED",
+      "speedup": 1.7956348635090988,
+      "best_after": [
+        1.0,
+        1.0,
+        1.7956348635090988
+      ],
+      "accepted": 1,
+      "evaluated": 3,
+      "states": [
+        "COMPILE_FAILED",
+        "COMPILE_FAILED",
+        "ACCEPTED"
+      ],
+      "ceiling": 1.8766796190325044,
+      "share_of_ceiling": 0.9298727131780019,
+      "cost_usd": 0.0061145,
+      "requests": 3
+    },
+    {
+      "cell": "attention_loop-baseline-25-flash-r3",
+      "workload": "attention_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 1.8695520018448133,
+      "best_after": [
+        1.8695520018448133,
+        1.8695520018448133,
+        1.8695520018448133
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.8766796190325044,
+      "share_of_ceiling": 0.9939552028891805,
+      "cost_usd": 0.00679,
+      "requests": 3
+    },
+    {
+      "cell": "attention_loop-compiler_complement-25-flash-lite-r1",
+      "workload": "attention_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 1.803362254538126,
+      "best_after": [
+        1.0,
+        1.0,
+        1.803362254538126
+      ],
+      "accepted": 1,
+      "evaluated": 3,
+      "states": [
+        "CORRECTNESS_FAILED",
+        "CORRECTNESS_FAILED",
+        "ACCEPTED"
+      ],
+      "ceiling": 1.8766796190325044,
+      "share_of_ceiling": 0.9366942703191722,
+      "cost_usd": 0.0019711999999999998,
+      "requests": 3
+    },
+    {
+      "cell": "attention_loop-compiler_complement-25-flash-lite-r2",
+      "workload": "attention_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "COMPILE_FAILED",
+      "speedup": 1.0,
+      "best_after": [
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "COMPILE_FAILED"
+      ],
+      "ceiling": 1.8766796190325044,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0021846,
+      "requests": 2
+    },
+    {
+      "cell": "attention_loop-compiler_complement-25-flash-lite-r3",
+      "workload": "attention_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "COMPILE_FAILED",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 3,
+      "states": [
+        "COMPILE_FAILED",
+        "COMPILE_FAILED",
+        "COMPILE_FAILED"
+      ],
+      "ceiling": 1.8766796190325044,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0018372,
+      "requests": 3
+    },
+    {
+      "cell": "attention_loop-compiler_complement-25-flash-r1",
+      "workload": "attention_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 1.8731998493378652,
+      "best_after": [
+        1.8731998493378652,
+        1.8731998493378652,
+        1.8731998493378652
+      ],
+      "accepted": 1,
+      "evaluated": 1,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.8766796190325044,
+      "share_of_ceiling": 0.9970517467825524,
+      "cost_usd": 0.0070641,
+      "requests": 3
+    },
+    {
+      "cell": "attention_loop-compiler_complement-25-flash-r2",
+      "workload": "attention_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "ACCEPTED",
+      "speedup": 1.8703480008590845,
+      "best_after": [
+        1.8703480008590845,
+        1.8703480008590845,
+        1.8703480008590845
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.8766796190325044,
+      "share_of_ceiling": 0.9946314166584764,
+      "cost_usd": 0.0081654,
+      "requests": 3
+    },
+    {
+      "cell": "attention_loop-compiler_complement-25-flash-r3",
+      "workload": "attention_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 1.9049819764414793,
+      "best_after": [
+        1.9049819764414793,
+        1.9049819764414793,
+        1.9049819764414793
+      ],
+      "accepted": 1,
+      "evaluated": 3,
+      "states": [
+        "ACCEPTED",
+        "VALID_NO_CHANGE",
+        "CORRECTNESS_FAILED"
+      ],
+      "ceiling": 1.8766796190325044,
+      "share_of_ceiling": 1.0237782298147708,
+      "cost_usd": 0.0074192,
+      "requests": 3
+    },
+    {
+      "cell": "batched_matmul_loop-baseline-25-flash-lite-r1",
+      "workload": "batched_matmul_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 1.2968041534704065,
+      "best_after": [
+        1.072039653983927,
+        1.2968041534704065,
+        1.2968041534704065
+      ],
+      "accepted": 2,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "ACCEPTED",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.29331770383135,
+      "share_of_ceiling": 1.010466567791015,
+      "cost_usd": 0.0016025,
+      "requests": 3
+    },
+    {
+      "cell": "batched_matmul_loop-baseline-25-flash-lite-r2",
+      "workload": "batched_matmul_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "ACCEPTED",
+      "speedup": 1.3034305811295794,
+      "best_after": [
+        1.3034305811295794,
+        1.3034305811295794,
+        1.3034305811295794
+      ],
+      "accepted": 1,
+      "evaluated": 1,
+      "states": [
+        "ACCEPTED",
+        "PROPOSAL_INVALID",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.29331770383135,
+      "share_of_ceiling": 1.0302822338495816,
+      "cost_usd": 0.0014533999999999999,
+      "requests": 3
+    },
+    {
+      "cell": "batched_matmul_loop-baseline-25-flash-lite-r3",
+      "workload": "batched_matmul_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.29331770383135,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0012963,
+      "requests": 3
+    },
+    {
+      "cell": "batched_matmul_loop-baseline-25-flash-r1",
+      "workload": "batched_matmul_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 1.3260823679037765,
+      "best_after": [
+        1.3260823679037765,
+        1.3260823679037765,
+        1.3260823679037765
+      ],
+      "accepted": 1,
+      "evaluated": 3,
+      "states": [
+        "ACCEPTED",
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 1.29331770383135,
+      "share_of_ceiling": 1.097267412972508,
+      "cost_usd": 0.0052619,
+      "requests": 3
+    },
+    {
+      "cell": "batched_matmul_loop-baseline-25-flash-r2",
+      "workload": "batched_matmul_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "ACCEPTED",
+      "speedup": 1.309180481533403,
+      "best_after": [
+        1.309180481533403,
+        1.309180481533403,
+        1.309180481533403
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.29331770383135,
+      "share_of_ceiling": 1.0473952709059335,
+      "cost_usd": 0.0051091,
+      "requests": 3
+    },
+    {
+      "cell": "batched_matmul_loop-baseline-25-flash-r3",
+      "workload": "batched_matmul_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 1.3066646663036687,
+      "best_after": [
+        1.3066646663036687,
+        1.3066646663036687,
+        1.3066646663036687
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.29331770383135,
+      "share_of_ceiling": 1.0399168884227408,
+      "cost_usd": 0.0054936,
+      "requests": 3
+    },
+    {
+      "cell": "batched_matmul_loop-compiler_complement-25-flash-lite-r1",
+      "workload": "batched_matmul_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 1.312841043568639,
+      "best_after": [
+        1.1011004020746231,
+        1.1011004020746231,
+        1.312841043568639
+      ],
+      "accepted": 2,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "ACCEPTED"
+      ],
+      "ceiling": 1.29331770383135,
+      "share_of_ceiling": 1.0582508408415312,
+      "cost_usd": 0.0015195,
+      "requests": 3
+    },
+    {
+      "cell": "batched_matmul_loop-compiler_complement-25-flash-lite-r2",
+      "workload": "batched_matmul_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "COMPILE_FAILED",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.29331770383135,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0012985000000000002,
+      "requests": 3
+    },
+    {
+      "cell": "batched_matmul_loop-compiler_complement-25-flash-lite-r3",
+      "workload": "batched_matmul_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "COMPILE_FAILED",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.29331770383135,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0010361,
+      "requests": 3
+    },
+    {
+      "cell": "batched_matmul_loop-compiler_complement-25-flash-r1",
+      "workload": "batched_matmul_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 1.3136153635899137,
+      "best_after": [
+        1.3136153635899137,
+        1.3136153635899137,
+        1.3136153635899137
+      ],
+      "accepted": 1,
+      "evaluated": 3,
+      "states": [
+        "ACCEPTED",
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 1.29331770383135,
+      "share_of_ceiling": 1.0605432447131986,
+      "cost_usd": 0.0054222,
+      "requests": 3
+    },
+    {
+      "cell": "batched_matmul_loop-compiler_complement-25-flash-r2",
+      "workload": "batched_matmul_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "ACCEPTED",
+      "speedup": 1.3200920601099517,
+      "best_after": [
+        1.0,
+        1.3200920601099517,
+        1.3200920601099517
+      ],
+      "accepted": 1,
+      "evaluated": 3,
+      "states": [
+        "COMPILE_FAILED",
+        "ACCEPTED",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 1.29331770383135,
+      "share_of_ceiling": 1.0796649985985172,
+      "cost_usd": 0.0047668,
+      "requests": 3
+    },
+    {
+      "cell": "batched_matmul_loop-compiler_complement-25-flash-r3",
+      "workload": "batched_matmul_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 1.3212384285397039,
+      "best_after": [
+        1.3212384285397039,
+        1.3212384285397039,
+        1.3212384285397039
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.29331770383135,
+      "share_of_ceiling": 1.0830397542172152,
+      "cost_usd": 0.0061365,
+      "requests": 3
+    },
+    {
+      "cell": "conv3x3-baseline-25-flash-lite-r1",
+      "workload": "conv3x3",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "COMPILE_FAILED",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 3,
+      "states": [
+        "COMPILE_FAILED",
+        "COMPILE_FAILED",
+        "COMPILE_FAILED"
+      ],
+      "ceiling": 1.672608504640814,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0014341,
+      "requests": 3
+    },
+    {
+      "cell": "conv3x3-baseline-25-flash-lite-r2",
+      "workload": "conv3x3",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "NO_CANDIDATE",
+      "speedup": 1.0,
+      "best_after": [],
+      "accepted": 0,
+      "evaluated": 0,
+      "states": [],
+      "ceiling": 1.672608504640814,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0008406,
+      "requests": 1
+    },
+    {
+      "cell": "conv3x3-baseline-25-flash-lite-r3",
+      "workload": "conv3x3",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 1.6767005400812625,
+      "best_after": [
+        1.6767005400812625,
+        1.6767005400812625,
+        1.6767005400812625
+      ],
+      "accepted": 1,
+      "evaluated": 1,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.672608504640814,
+      "share_of_ceiling": 1.0047503608183668,
+      "cost_usd": 0.0016697,
+      "requests": 3
+    },
+    {
+      "cell": "conv3x3-baseline-25-flash-r1",
+      "workload": "conv3x3",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 1.6471879354944516,
+      "best_after": [
+        1.6471879354944516,
+        1.6471879354944516
+      ],
+      "accepted": 1,
+      "evaluated": 1,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.672608504640814,
+      "share_of_ceiling": 0.9702268681180058,
+      "cost_usd": 0.019228699999999998,
+      "requests": 3
+    },
+    {
+      "cell": "conv3x3-baseline-25-flash-r2",
+      "workload": "conv3x3",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "MEASUREMENT_UNSTABLE",
+        "MEASUREMENT_UNSTABLE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.672608504640814,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0062572,
+      "requests": 3
+    },
+    {
+      "cell": "conv3x3-baseline-25-flash-r3",
+      "workload": "conv3x3",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 1.7356330029593405,
+      "best_after": [
+        1.7356330029593405,
+        1.7356330029593405,
+        1.7356330029593405
+      ],
+      "accepted": 1,
+      "evaluated": 3,
+      "states": [
+        "ACCEPTED",
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 1.672608504640814,
+      "share_of_ceiling": 1.071906932616125,
+      "cost_usd": 0.0061545,
+      "requests": 3
+    },
+    {
+      "cell": "conv3x3-compiler_complement-25-flash-lite-r1",
+      "workload": "conv3x3",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 1.659173991096768,
+      "best_after": [
+        1.659173991096768,
+        1.659173991096768,
+        1.659173991096768
+      ],
+      "accepted": 1,
+      "evaluated": 1,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.672608504640814,
+      "share_of_ceiling": 0.984322028344694,
+      "cost_usd": 0.0020708,
+      "requests": 3
+    },
+    {
+      "cell": "conv3x3-compiler_complement-25-flash-lite-r2",
+      "workload": "conv3x3",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "COMPILE_FAILED",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 3,
+      "states": [
+        "CORRECTNESS_FAILED",
+        "CORRECTNESS_FAILED",
+        "COMPILE_FAILED"
+      ],
+      "ceiling": 1.672608504640814,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0015826,
+      "requests": 3
+    },
+    {
+      "cell": "conv3x3-compiler_complement-25-flash-lite-r3",
+      "workload": "conv3x3",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "COMPILE_FAILED",
+        "COMPILE_FAILED",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.672608504640814,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0017437,
+      "requests": 3
+    },
+    {
+      "cell": "conv3x3-compiler_complement-25-flash-r1",
+      "workload": "conv3x3",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 1.6517658127745896,
+      "best_after": [
+        1.6517658127745896,
+        1.6517658127745896,
+        1.6517658127745896
+      ],
+      "accepted": 1,
+      "evaluated": 1,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.672608504640814,
+      "share_of_ceiling": 0.9756223522079205,
+      "cost_usd": 0.0058801,
+      "requests": 3
+    },
+    {
+      "cell": "conv3x3-compiler_complement-25-flash-r2",
+      "workload": "conv3x3",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "ACCEPTED",
+      "speedup": 1.6810006244242814,
+      "best_after": [
+        1.0,
+        1.6810006244242814,
+        1.6810006244242814
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "VALID_SLOWER",
+        "ACCEPTED",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.672608504640814,
+      "share_of_ceiling": 1.009729765096062,
+      "cost_usd": 0.0084721,
+      "requests": 3
+    },
+    {
+      "cell": "conv3x3-compiler_complement-25-flash-r3",
+      "workload": "conv3x3",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 1.7128583248796656,
+      "best_after": [
+        1.7128583248796656,
+        1.7128583248796656,
+        1.7128583248796656
+      ],
+      "accepted": 1,
+      "evaluated": 1,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.672608504640814,
+      "share_of_ceiling": 1.046228314961591,
+      "cost_usd": 0.0069598,
+      "requests": 3
+    },
+    {
+      "cell": "cross_entropy-baseline-25-flash-lite-r1",
+      "workload": "cross_entropy",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "CORRECTNESS_FAILED",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.331441157840837,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0011501,
+      "requests": 3
+    },
+    {
+      "cell": "cross_entropy-baseline-25-flash-lite-r2",
+      "workload": "cross_entropy",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "VALID_SLOWER",
+        "VALID_SLOWER",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.331441157840837,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0014886,
+      "requests": 3
+    },
+    {
+      "cell": "cross_entropy-baseline-25-flash-lite-r3",
+      "workload": "cross_entropy",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.331441157840837,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0013340000000000001,
+      "requests": 3
+    },
+    {
+      "cell": "cross_entropy-baseline-25-flash-r1",
+      "workload": "cross_entropy",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "VALID_NO_CHANGE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 1.331441157840837,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0048682000000000005,
+      "requests": 3
+    },
+    {
+      "cell": "cross_entropy-baseline-25-flash-r2",
+      "workload": "cross_entropy",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "ACCEPTED",
+      "speedup": 1.3018621290965298,
+      "best_after": [
+        1.3018621290965298,
+        1.3018621290965298,
+        1.3018621290965298
+      ],
+      "accepted": 1,
+      "evaluated": 3,
+      "states": [
+        "ACCEPTED",
+        "VALID_SLOWER",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 1.331441157840837,
+      "share_of_ceiling": 0.9215184284741951,
+      "cost_usd": 0.0073043,
+      "requests": 3
+    },
+    {
+      "cell": "cross_entropy-baseline-25-flash-r3",
+      "workload": "cross_entropy",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "VALID_NO_CHANGE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "VALID_NO_CHANGE",
+        "PROPOSAL_INVALID",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 1.331441157840837,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0050333,
+      "requests": 3
+    },
+    {
+      "cell": "cross_entropy-compiler_complement-25-flash-lite-r1",
+      "workload": "cross_entropy",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "POLICY_REJECTED",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE",
+        "POLICY_REJECTED"
+      ],
+      "ceiling": 1.331441157840837,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0015142999999999999,
+      "requests": 3
+    },
+    {
+      "cell": "cross_entropy-compiler_complement-25-flash-lite-r2",
+      "workload": "cross_entropy",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.331441157840837,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0013226,
+      "requests": 3
+    },
+    {
+      "cell": "cross_entropy-compiler_complement-25-flash-lite-r3",
+      "workload": "cross_entropy",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.331441157840837,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0014176,
+      "requests": 3
+    },
+    {
+      "cell": "cross_entropy-compiler_complement-25-flash-r1",
+      "workload": "cross_entropy",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 1.3031170896635353,
+      "best_after": [
+        1.3031170896635353
+      ],
+      "accepted": 1,
+      "evaluated": 1,
+      "states": [
+        "ACCEPTED"
+      ],
+      "ceiling": 1.331441157840837,
+      "share_of_ceiling": 0.9248842590130065,
+      "cost_usd": 0.0172654,
+      "requests": 2
+    },
+    {
+      "cell": "cross_entropy-compiler_complement-25-flash-r2",
+      "workload": "cross_entropy",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "ACCEPTED",
+      "speedup": 1.3158549821755592,
+      "best_after": [
+        1.3158549821755592,
+        1.3158549821755592,
+        1.3158549821755592
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 1.331441157840837,
+      "share_of_ceiling": 0.9588652885984683,
+      "cost_usd": 0.0061698,
+      "requests": 3
+    },
+    {
+      "cell": "cross_entropy-compiler_complement-25-flash-r3",
+      "workload": "cross_entropy",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 1.3136627190098904,
+      "best_after": [
+        1.0,
+        1.0,
+        1.3136627190098904
+      ],
+      "accepted": 1,
+      "evaluated": 3,
+      "states": [
+        "VALID_NO_CHANGE",
+        "MEASUREMENT_UNSTABLE",
+        "ACCEPTED"
+      ],
+      "ceiling": 1.331441157840837,
+      "share_of_ceiling": 0.9530404608751107,
+      "cost_usd": 0.0060959,
+      "requests": 3
+    },
+    {
+      "cell": "embedding_lookup-baseline-25-flash-lite-r1",
+      "workload": "embedding_lookup",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "COMPILE_FAILED",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 3,
+      "states": [
+        "COMPILE_FAILED",
+        "VALID_NO_CHANGE",
+        "COMPILE_FAILED"
+      ],
+      "ceiling": 60.641024467103676,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0012438,
+      "requests": 3
+    },
+    {
+      "cell": "embedding_lookup-baseline-25-flash-lite-r2",
+      "workload": "embedding_lookup",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 60.641024467103676,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0012159,
+      "requests": 3
+    },
+    {
+      "cell": "embedding_lookup-baseline-25-flash-lite-r3",
+      "workload": "embedding_lookup",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 61.41565669396233,
+      "best_after": [
+        61.41565669396233,
+        61.41565669396233,
+        61.41565669396233
+      ],
+      "accepted": 1,
+      "evaluated": 1,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 60.641024467103676,
+      "share_of_ceiling": 1.0030921437107252,
+      "cost_usd": 0.0014666,
+      "requests": 3
+    },
+    {
+      "cell": "embedding_lookup-baseline-25-flash-r1",
+      "workload": "embedding_lookup",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 61.47071675769325,
+      "best_after": [
+        61.47071675769325,
+        61.47071675769325,
+        61.47071675769325
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 60.641024467103676,
+      "share_of_ceiling": 1.0033104432635689,
+      "cost_usd": 0.0055344,
+      "requests": 3
+    },
+    {
+      "cell": "embedding_lookup-baseline-25-flash-r2",
+      "workload": "embedding_lookup",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "ACCEPTED",
+      "speedup": 60.86715239371737,
+      "best_after": [
+        60.86715239371737,
+        60.86715239371737,
+        60.86715239371737
+      ],
+      "accepted": 1,
+      "evaluated": 3,
+      "states": [
+        "ACCEPTED",
+        "COMPILE_FAILED",
+        "CORRECTNESS_FAILED"
+      ],
+      "ceiling": 60.641024467103676,
+      "share_of_ceiling": 1.0009067113089158,
+      "cost_usd": 0.0054667,
+      "requests": 3
+    },
+    {
+      "cell": "embedding_lookup-baseline-25-flash-r3",
+      "workload": "embedding_lookup",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 62.46563810403772,
+      "best_after": [
+        62.46563810403772,
+        62.46563810403772,
+        62.46563810403772
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 60.641024467103676,
+      "share_of_ceiling": 1.0072217258514213,
+      "cost_usd": 0.0058758000000000005,
+      "requests": 3
+    },
+    {
+      "cell": "embedding_lookup-compiler_complement-25-flash-lite-r1",
+      "workload": "embedding_lookup",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 60.818223217659735,
+      "best_after": [
+        60.818223217659735,
+        60.818223217659735,
+        60.818223217659735
+      ],
+      "accepted": 1,
+      "evaluated": 1,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 60.641024467103676,
+      "share_of_ceiling": 1.0007108045706086,
+      "cost_usd": 0.0015146,
+      "requests": 3
+    },
+    {
+      "cell": "embedding_lookup-compiler_complement-25-flash-lite-r2",
+      "workload": "embedding_lookup",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "ACCEPTED",
+      "speedup": 60.48003681185857,
+      "best_after": [
+        60.48003681185857,
+        60.48003681185857,
+        60.48003681185857
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "COMPILE_FAILED"
+      ],
+      "ceiling": 60.641024467103676,
+      "share_of_ceiling": 0.9993524206398605,
+      "cost_usd": 0.0016422,
+      "requests": 3
+    },
+    {
+      "cell": "embedding_lookup-compiler_complement-25-flash-lite-r3",
+      "workload": "embedding_lookup",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 61.24878786571746,
+      "best_after": [
+        61.24878786571746,
+        61.24878786571746,
+        61.24878786571746
+      ],
+      "accepted": 1,
+      "evaluated": 1,
+      "states": [
+        "ACCEPTED",
+        "PROPOSAL_INVALID",
+        "DUPLICATE"
+      ],
+      "ceiling": 60.641024467103676,
+      "share_of_ceiling": 1.0024293526799575,
+      "cost_usd": 0.0014769000000000002,
+      "requests": 3
+    },
+    {
+      "cell": "embedding_lookup-compiler_complement-25-flash-r1",
+      "workload": "embedding_lookup",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 61.41187047057518,
+      "best_after": [
+        61.41187047057518,
+        61.41187047057518,
+        61.41187047057518
+      ],
+      "accepted": 1,
+      "evaluated": 1,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 60.641024467103676,
+      "share_of_ceiling": 1.0030771250792587,
+      "cost_usd": 0.0055388,
+      "requests": 3
+    },
+    {
+      "cell": "embedding_lookup-compiler_complement-25-flash-r2",
+      "workload": "embedding_lookup",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "ACCEPTED",
+      "speedup": 60.54407371758632,
+      "best_after": [
+        1.0,
+        60.54407371758632,
+        60.54407371758632
+      ],
+      "accepted": 1,
+      "evaluated": 3,
+      "states": [
+        "MEASUREMENT_UNSTABLE",
+        "ACCEPTED",
+        "COMPILE_FAILED"
+      ],
+      "ceiling": 60.641024467103676,
+      "share_of_ceiling": 0.9996102179103079,
+      "cost_usd": 0.0067131,
+      "requests": 3
+    },
+    {
+      "cell": "embedding_lookup-compiler_complement-25-flash-r3",
+      "workload": "embedding_lookup",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "MEASUREMENT_UNSTABLE",
+        "MEASUREMENT_UNSTABLE",
+        "DUPLICATE"
+      ],
+      "ceiling": 60.641024467103676,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0057411,
+      "requests": 3
+    },
+    {
+      "cell": "gqa_decode-baseline-25-flash-lite-r1",
+      "workload": "gqa_decode",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "PROPOSAL_INVALID",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "COMPILE_FAILED",
+        "PROPOSAL_INVALID",
+        "PROPOSAL_INVALID"
+      ],
+      "ceiling": 2.230933196996445,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0015803,
+      "requests": 3
+    },
+    {
+      "cell": "gqa_decode-baseline-25-flash-lite-r2",
+      "workload": "gqa_decode",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "COMPILE_FAILED",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "VALID_NO_CHANGE",
+        "COMPILE_FAILED"
+      ],
+      "ceiling": 2.230933196996445,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0031073,
+      "requests": 3
+    },
+    {
+      "cell": "gqa_decode-baseline-25-flash-lite-r3",
+      "workload": "gqa_decode",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "COMPILE_FAILED",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 2.230933196996445,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0014006000000000001,
+      "requests": 3
+    },
+    {
+      "cell": "gqa_decode-baseline-25-flash-r1",
+      "workload": "gqa_decode",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "COMPILE_FAILED",
+        "CORRECTNESS_FAILED",
+        "DUPLICATE"
+      ],
+      "ceiling": 2.230933196996445,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0097465,
+      "requests": 3
+    },
+    {
+      "cell": "gqa_decode-baseline-25-flash-r2",
+      "workload": "gqa_decode",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "COMPILE_FAILED",
+        "CORRECTNESS_FAILED",
+        "DUPLICATE"
+      ],
+      "ceiling": 2.230933196996445,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0073127999999999995,
+      "requests": 3
+    },
+    {
+      "cell": "gqa_decode-baseline-25-flash-r3",
+      "workload": "gqa_decode",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "VALID_SLOWER",
+        "CORRECTNESS_FAILED",
+        "DUPLICATE"
+      ],
+      "ceiling": 2.230933196996445,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0061608999999999995,
+      "requests": 3
+    },
+    {
+      "cell": "gqa_decode-compiler_complement-25-flash-lite-r1",
+      "workload": "gqa_decode",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "PROPOSAL_INVALID",
+        "DUPLICATE"
+      ],
+      "ceiling": 2.230933196996445,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0029438,
+      "requests": 3
+    },
+    {
+      "cell": "gqa_decode-compiler_complement-25-flash-lite-r2",
+      "workload": "gqa_decode",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "NO_CANDIDATE",
+      "speedup": 1.0,
+      "best_after": [],
+      "accepted": 0,
+      "evaluated": 0,
+      "states": [],
+      "ceiling": 2.230933196996445,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0018662,
+      "requests": 1
+    },
+    {
+      "cell": "gqa_decode-compiler_complement-25-flash-lite-r3",
+      "workload": "gqa_decode",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "COMPILE_FAILED",
+        "COMPILE_FAILED",
+        "DUPLICATE"
+      ],
+      "ceiling": 2.230933196996445,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0017955,
+      "requests": 3
+    },
+    {
+      "cell": "gqa_decode-compiler_complement-25-flash-r1",
+      "workload": "gqa_decode",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "COMPILE_FAILED",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 3,
+      "states": [
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE",
+        "COMPILE_FAILED"
+      ],
+      "ceiling": 2.230933196996445,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0075756999999999994,
+      "requests": 3
+    },
+    {
+      "cell": "gqa_decode-compiler_complement-25-flash-r2",
+      "workload": "gqa_decode",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "CORRECTNESS_FAILED",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 3,
+      "states": [
+        "COMPILE_FAILED",
+        "COMPILE_FAILED",
+        "CORRECTNESS_FAILED"
+      ],
+      "ceiling": 2.230933196996445,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0058202,
+      "requests": 3
+    },
+    {
+      "cell": "gqa_decode-compiler_complement-25-flash-r3",
+      "workload": "gqa_decode",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 2.2616349222215275,
+      "best_after": [
+        1.0,
+        1.0,
+        2.2616349222215275
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "COMPILE_FAILED",
+        "PROPOSAL_INVALID",
+        "ACCEPTED"
+      ],
+      "ceiling": 2.230933196996445,
+      "share_of_ceiling": 1.0170334702637602,
+      "cost_usd": 0.0088524,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm-baseline-25-flash-lite-r1",
+      "workload": "layer_norm",
+      "tier": "control",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 0.9946412208276437,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0014556,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm-baseline-25-flash-lite-r2",
+      "workload": "layer_norm",
+      "tier": "control",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "VALID_NO_CHANGE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 0.9946412208276437,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0016628,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm-baseline-25-flash-lite-r3",
+      "workload": "layer_norm",
+      "tier": "control",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 0.9946412208276437,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0015449,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm-baseline-25-flash-r1",
+      "workload": "layer_norm",
+      "tier": "control",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "VALID_NO_CHANGE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 3,
+      "states": [
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 0.9946412208276437,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0064147,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm-baseline-25-flash-r2",
+      "workload": "layer_norm",
+      "tier": "control",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 0.9946412208276437,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0058602,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm-baseline-25-flash-r3",
+      "workload": "layer_norm",
+      "tier": "control",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "VALID_NO_CHANGE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 3,
+      "states": [
+        "COMPILE_FAILED",
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 0.9946412208276437,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0058586,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm-compiler_complement-25-flash-lite-r1",
+      "workload": "layer_norm",
+      "tier": "control",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 0.9946412208276437,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0016011,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm-compiler_complement-25-flash-lite-r2",
+      "workload": "layer_norm",
+      "tier": "control",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "VALID_NO_CHANGE",
+        "COMPILE_FAILED",
+        "DUPLICATE"
+      ],
+      "ceiling": 0.9946412208276437,
+      "share_of_ceiling": null,
+      "cost_usd": 0.001608,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm-compiler_complement-25-flash-lite-r3",
+      "workload": "layer_norm",
+      "tier": "control",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 0.9946412208276437,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0017288,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm-compiler_complement-25-flash-r1",
+      "workload": "layer_norm",
+      "tier": "control",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "COMPILE_FAILED",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 0.9946412208276437,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0055919,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm-compiler_complement-25-flash-r2",
+      "workload": "layer_norm",
+      "tier": "control",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 0.9946412208276437,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0060795,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm-compiler_complement-25-flash-r3",
+      "workload": "layer_norm",
+      "tier": "control",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 0.9946412208276437,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0057371,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm_loop-baseline-25-flash-lite-r1",
+      "workload": "layer_norm_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 3.5373699609650484,
+      "best_after": [
+        3.5373699609650484,
+        3.5373699609650484,
+        3.5373699609650484
+      ],
+      "accepted": 1,
+      "evaluated": 1,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 3.608596777528377,
+      "share_of_ceiling": 0.9844656780831047,
+      "cost_usd": 0.001553,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm_loop-baseline-25-flash-lite-r2",
+      "workload": "layer_norm_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "ACCEPTED",
+      "speedup": 3.141342824781148,
+      "best_after": [
+        3.141342824781148,
+        3.141342824781148,
+        3.141342824781148
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "COMPILE_FAILED"
+      ],
+      "ceiling": 3.608596777528377,
+      "share_of_ceiling": 0.8919453124302225,
+      "cost_usd": 0.0015963000000000001,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm_loop-baseline-25-flash-lite-r3",
+      "workload": "layer_norm_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 3.5440785566024706,
+      "best_after": [
+        3.5440785566024706,
+        3.5440785566024706,
+        3.5440785566024706
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 3.608596777528377,
+      "share_of_ceiling": 0.9859420814169672,
+      "cost_usd": 0.0015603,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm_loop-baseline-25-flash-r1",
+      "workload": "layer_norm_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 3.600691286653989,
+      "best_after": [
+        3.600691286653989,
+        3.600691286653989,
+        3.600691286653989
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 3.608596777528377,
+      "share_of_ceiling": 0.9982910395557136,
+      "cost_usd": 0.0059332,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm_loop-baseline-25-flash-r2",
+      "workload": "layer_norm_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "ACCEPTED",
+      "speedup": 3.576402401287541,
+      "best_after": [
+        1.0,
+        3.576402401287541,
+        3.576402401287541
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "POLICY_REJECTED",
+        "ACCEPTED",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 3.608596777528377,
+      "share_of_ceiling": 0.993016846753101,
+      "cost_usd": 0.0048259,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm_loop-baseline-25-flash-r3",
+      "workload": "layer_norm_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 3.5720226872585896,
+      "best_after": [
+        3.5720226872585896,
+        3.5720226872585896,
+        3.5720226872585896
+      ],
+      "accepted": 1,
+      "evaluated": 3,
+      "states": [
+        "ACCEPTED",
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 3.608596777528377,
+      "share_of_ceiling": 0.9920620062951997,
+      "cost_usd": 0.0058662,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm_loop-compiler_complement-25-flash-lite-r1",
+      "workload": "layer_norm_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 3.599645691868639,
+      "best_after": [
+        3.599645691868639,
+        3.599645691868639,
+        3.599645691868639
+      ],
+      "accepted": 1,
+      "evaluated": 1,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 3.608596777528377,
+      "share_of_ceiling": 0.9980647283993859,
+      "cost_usd": 0.0015882000000000001,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm_loop-compiler_complement-25-flash-lite-r2",
+      "workload": "layer_norm_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "COMPILE_FAILED",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 3.608596777528377,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0012334,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm_loop-compiler_complement-25-flash-lite-r3",
+      "workload": "layer_norm_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 3.554550707724811,
+      "best_after": [
+        3.554550707724811,
+        3.554550707724811,
+        3.554550707724811
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 3.608596777528377,
+      "share_of_ceiling": 0.9882411773582499,
+      "cost_usd": 0.0015711,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm_loop-compiler_complement-25-flash-r1",
+      "workload": "layer_norm_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 3.573192327635169,
+      "best_after": [
+        3.573192327635169,
+        3.573192327635169,
+        3.573192327635169
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 3.608596777528377,
+      "share_of_ceiling": 0.9923171191999045,
+      "cost_usd": 0.0060011,
+      "requests": 3
+    },
+    {
+      "cell": "layer_norm_loop-compiler_complement-25-flash-r2",
+      "workload": "layer_norm_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "NO_CANDIDATE",
+      "speedup": 1.0,
+      "best_after": [],
+      "accepted": 0,
+      "evaluated": 0,
+      "states": [],
+      "ceiling": 3.608596777528377,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0108722,
+      "requests": 1
+    },
+    {
+      "cell": "layer_norm_loop-compiler_complement-25-flash-r3",
+      "workload": "layer_norm_loop",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 3.5686043947359836,
+      "best_after": [
+        1.0,
+        3.5686043947359836,
+        3.5686043947359836
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "POLICY_REJECTED",
+        "ACCEPTED",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 3.608596777528377,
+      "share_of_ceiling": 0.9913159557029437,
+      "cost_usd": 0.0053015,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_chain-baseline-25-flash-lite-r1",
+      "workload": "matmul_chain",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 13.533211451188428,
+      "best_after": [
+        13.533211451188428,
+        13.533211451188428,
+        13.533211451188428
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "COMPILE_FAILED"
+      ],
+      "ceiling": 13.936957227838153,
+      "share_of_ceiling": 0.9888415861852391,
+      "cost_usd": 0.0014722,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_chain-baseline-25-flash-lite-r2",
+      "workload": "matmul_chain",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 13.936957227838153,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0013484,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_chain-baseline-25-flash-lite-r3",
+      "workload": "matmul_chain",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 13.7410898287611,
+      "best_after": [
+        1.0,
+        1.0,
+        13.7410898287611
+      ],
+      "accepted": 1,
+      "evaluated": 3,
+      "states": [
+        "MEASUREMENT_UNSTABLE",
+        "MEASUREMENT_UNSTABLE",
+        "ACCEPTED"
+      ],
+      "ceiling": 13.936957227838153,
+      "share_of_ceiling": 0.9946277219151057,
+      "cost_usd": 0.0015067,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_chain-baseline-25-flash-r1",
+      "workload": "matmul_chain",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 13.918352108201972,
+      "best_after": [
+        13.918352108201972,
+        13.918352108201972,
+        13.918352108201972
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "VALID_SLOWER",
+        "PROPOSAL_INVALID"
+      ],
+      "ceiling": 13.936957227838153,
+      "share_of_ceiling": 0.9994929520070277,
+      "cost_usd": 0.006216,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_chain-baseline-25-flash-r2",
+      "workload": "matmul_chain",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "ACCEPTED",
+      "speedup": 13.699849801472785,
+      "best_after": [
+        13.699849801472785,
+        13.699849801472785,
+        13.699849801472785
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "VALID_SLOWER",
+        "DUPLICATE"
+      ],
+      "ceiling": 13.936957227838153,
+      "share_of_ceiling": 0.9934868291798907,
+      "cost_usd": 0.0052511,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_chain-baseline-25-flash-r3",
+      "workload": "matmul_chain",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 13.476743276525868,
+      "best_after": [
+        13.476743276525868,
+        13.476743276525868,
+        13.476743276525868
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "VALID_SLOWER",
+        "DUPLICATE"
+      ],
+      "ceiling": 13.936957227838153,
+      "share_of_ceiling": 0.9872544834212671,
+      "cost_usd": 0.0049511,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_chain-compiler_complement-25-flash-lite-r1",
+      "workload": "matmul_chain",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 13.343897945394659,
+      "best_after": [
+        13.343897945394659,
+        13.343897945394659,
+        13.343897945394659
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "VALID_SLOWER",
+        "DUPLICATE"
+      ],
+      "ceiling": 13.936957227838153,
+      "share_of_ceiling": 0.9834943330527364,
+      "cost_usd": 0.0015978,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_chain-compiler_complement-25-flash-lite-r2",
+      "workload": "matmul_chain",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "ACCEPTED",
+      "speedup": 13.776578949727513,
+      "best_after": [
+        13.776578949727513,
+        13.776578949727513,
+        13.776578949727513
+      ],
+      "accepted": 1,
+      "evaluated": 1,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 13.936957227838153,
+      "share_of_ceiling": 0.9956067797933437,
+      "cost_usd": 0.0016708,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_chain-compiler_complement-25-flash-lite-r3",
+      "workload": "matmul_chain",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 13.726902660325042,
+      "best_after": [
+        13.726902660325042,
+        13.726902660325042,
+        13.726902660325042
+      ],
+      "accepted": 1,
+      "evaluated": 1,
+      "states": [
+        "ACCEPTED",
+        "PROPOSAL_INVALID",
+        "PROPOSAL_INVALID"
+      ],
+      "ceiling": 13.936957227838153,
+      "share_of_ceiling": 0.9942356250539455,
+      "cost_usd": 0.0013856,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_chain-compiler_complement-25-flash-r1",
+      "workload": "matmul_chain",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 13.896118785337265,
+      "best_after": [
+        13.896118785337265,
+        13.896118785337265,
+        13.896118785337265
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "VALID_SLOWER"
+      ],
+      "ceiling": 13.936957227838153,
+      "share_of_ceiling": 0.998886134381938,
+      "cost_usd": 0.0070137,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_chain-compiler_complement-25-flash-r2",
+      "workload": "matmul_chain",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "ACCEPTED",
+      "speedup": 13.321627800854612,
+      "best_after": [
+        13.321627800854612,
+        13.321627800854612,
+        13.321627800854612
+      ],
+      "accepted": 1,
+      "evaluated": 1,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 13.936957227838153,
+      "share_of_ceiling": 0.9828603210087021,
+      "cost_usd": 0.005232,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_chain-compiler_complement-25-flash-r3",
+      "workload": "matmul_chain",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 13.450672353738147,
+      "best_after": [
+        13.450672353738147,
+        13.450672353738147,
+        13.450672353738147
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "VALID_SLOWER"
+      ],
+      "ceiling": 13.936957227838153,
+      "share_of_ceiling": 0.9865194850318535,
+      "cost_usd": 0.00631,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_gelu-baseline-25-flash-lite-r1",
+      "workload": "matmul_gelu",
+      "tier": "control",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "CORRECTNESS_FAILED",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 0.993464962065627,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0013285,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_gelu-baseline-25-flash-lite-r2",
+      "workload": "matmul_gelu",
+      "tier": "control",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "COMPILE_FAILED",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 3,
+      "states": [
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE",
+        "COMPILE_FAILED"
+      ],
+      "ceiling": 0.993464962065627,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0018695,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_gelu-baseline-25-flash-lite-r3",
+      "workload": "matmul_gelu",
+      "tier": "control",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "MEASUREMENT_UNSTABLE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "VALID_SLOWER",
+        "DUPLICATE",
+        "MEASUREMENT_UNSTABLE"
+      ],
+      "ceiling": 0.993464962065627,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0016323,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_gelu-baseline-25-flash-r1",
+      "workload": "matmul_gelu",
+      "tier": "control",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "NO_CANDIDATE",
+      "speedup": 1.0,
+      "best_after": [],
+      "accepted": 0,
+      "evaluated": 0,
+      "states": [],
+      "ceiling": 0.993464962065627,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0138145,
+      "requests": 1
+    },
+    {
+      "cell": "matmul_gelu-baseline-25-flash-r2",
+      "workload": "matmul_gelu",
+      "tier": "control",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "VALID_NO_CHANGE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 3,
+      "states": [
+        "CORRECTNESS_FAILED",
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 0.993464962065627,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0063882999999999995,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_gelu-baseline-25-flash-r3",
+      "workload": "matmul_gelu",
+      "tier": "control",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 0.993464962065627,
+      "share_of_ceiling": null,
+      "cost_usd": 0.006933,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_gelu-compiler_complement-25-flash-lite-r1",
+      "workload": "matmul_gelu",
+      "tier": "control",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "CORRECTNESS_FAILED",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 3,
+      "states": [
+        "CORRECTNESS_FAILED",
+        "CORRECTNESS_FAILED",
+        "CORRECTNESS_FAILED"
+      ],
+      "ceiling": 0.993464962065627,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0015668000000000001,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_gelu-compiler_complement-25-flash-lite-r2",
+      "workload": "matmul_gelu",
+      "tier": "control",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "CORRECTNESS_FAILED",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 0.993464962065627,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0015206999999999998,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_gelu-compiler_complement-25-flash-lite-r3",
+      "workload": "matmul_gelu",
+      "tier": "control",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "CORRECTNESS_FAILED",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "CORRECTNESS_FAILED",
+        "DUPLICATE",
+        "CORRECTNESS_FAILED"
+      ],
+      "ceiling": 0.993464962065627,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0016591,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_gelu-compiler_complement-25-flash-r1",
+      "workload": "matmul_gelu",
+      "tier": "control",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "VALID_NO_CHANGE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "DUPLICATE",
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 0.993464962065627,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0061661,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_gelu-compiler_complement-25-flash-r2",
+      "workload": "matmul_gelu",
+      "tier": "control",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 0,
+      "states": [
+        "DUPLICATE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 0.993464962065627,
+      "share_of_ceiling": null,
+      "cost_usd": 0.005587,
+      "requests": 3
+    },
+    {
+      "cell": "matmul_gelu-compiler_complement-25-flash-r3",
+      "workload": "matmul_gelu",
+      "tier": "control",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 0,
+      "states": [
+        "DUPLICATE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 0.993464962065627,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0053226,
+      "requests": 3
+    },
+    {
+      "cell": "pairwise_distances-baseline-25-flash-lite-r1",
+      "workload": "pairwise_distances",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "COMPILE_FAILED",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 2.9106388826673726,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0010811,
+      "requests": 3
+    },
+    {
+      "cell": "pairwise_distances-baseline-25-flash-lite-r2",
+      "workload": "pairwise_distances",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "VALID_NO_CHANGE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "DUPLICATE",
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 2.9106388826673726,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0011091,
+      "requests": 3
+    },
+    {
+      "cell": "pairwise_distances-baseline-25-flash-lite-r3",
+      "workload": "pairwise_distances",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "PROPOSAL_INVALID",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_SLOWER",
+        "PROPOSAL_INVALID",
+        "PROPOSAL_INVALID"
+      ],
+      "ceiling": 2.9106388826673726,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0012692,
+      "requests": 3
+    },
+    {
+      "cell": "pairwise_distances-baseline-25-flash-r1",
+      "workload": "pairwise_distances",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "MEASUREMENT_UNSTABLE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 3,
+      "states": [
+        "VALID_NO_CHANGE",
+        "MEASUREMENT_UNSTABLE",
+        "MEASUREMENT_UNSTABLE"
+      ],
+      "ceiling": 2.9106388826673726,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.005541,
+      "requests": 3
+    },
+    {
+      "cell": "pairwise_distances-baseline-25-flash-r2",
+      "workload": "pairwise_distances",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "ACCEPTED",
+      "speedup": 2.445959971230747,
+      "best_after": [
+        1.0,
+        2.445959971230747,
+        2.445959971230747
+      ],
+      "accepted": 1,
+      "evaluated": 3,
+      "states": [
+        "VALID_NO_CHANGE",
+        "ACCEPTED",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 2.9106388826673726,
+      "share_of_ceiling": 0.8371963755531074,
+      "cost_usd": 0.0057834,
+      "requests": 3
+    },
+    {
+      "cell": "pairwise_distances-baseline-25-flash-r3",
+      "workload": "pairwise_distances",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 2.4466408084479823,
+      "best_after": [
+        2.4466408084479823,
+        2.4466408084479823,
+        2.4466408084479823
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 2.9106388826673726,
+      "share_of_ceiling": 0.8374568773738529,
+      "cost_usd": 0.006547600000000001,
+      "requests": 3
+    },
+    {
+      "cell": "pairwise_distances-compiler_complement-25-flash-lite-r1",
+      "workload": "pairwise_distances",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 2.408242171908825,
+      "best_after": [
+        1.0,
+        2.408242171908825,
+        2.408242171908825
+      ],
+      "accepted": 1,
+      "evaluated": 1,
+      "states": [
+        "DUPLICATE",
+        "ACCEPTED",
+        "DUPLICATE"
+      ],
+      "ceiling": 2.9106388826673726,
+      "share_of_ceiling": 0.8226503454918057,
+      "cost_usd": 0.0014905,
+      "requests": 3
+    },
+    {
+      "cell": "pairwise_distances-compiler_complement-25-flash-lite-r2",
+      "workload": "pairwise_distances",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "VALID_NO_CHANGE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 3,
+      "states": [
+        "COMPILE_FAILED",
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 2.9106388826673726,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0012401,
+      "requests": 3
+    },
+    {
+      "cell": "pairwise_distances-compiler_complement-25-flash-lite-r3",
+      "workload": "pairwise_distances",
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "MEASUREMENT_UNSTABLE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 3,
+      "states": [
+        "MEASUREMENT_UNSTABLE",
+        "COMPILE_FAILED",
+        "MEASUREMENT_UNSTABLE"
+      ],
+      "ceiling": 2.9106388826673726,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0015239,
+      "requests": 3
+    },
+    {
+      "cell": "pairwise_distances-compiler_complement-25-flash-r1",
+      "workload": "pairwise_distances",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 2.371200034423082,
+      "best_after": [
+        2.371200034423082,
+        2.371200034423082,
+        2.371200034423082
+      ],
+      "accepted": 1,
+      "evaluated": 1,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 2.9106388826673726,
+      "share_of_ceiling": 0.8081414359420795,
+      "cost_usd": 0.0061025,
+      "requests": 3
+    },
+    {
+      "cell": "pairwise_distances-compiler_complement-25-flash-r2",
+      "workload": "pairwise_distances",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "ACCEPTED",
+      "speedup": 2.5106336436851984,
+      "best_after": [
+        2.5106336436851984,
+        2.5106336436851984,
+        2.5106336436851984
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 2.9106388826673726,
+      "share_of_ceiling": 0.861623711784471,
+      "cost_usd": 0.007054599999999999,
+      "requests": 3
+    },
+    {
+      "cell": "pairwise_distances-compiler_complement-25-flash-r3",
+      "workload": "pairwise_distances",
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 2.4879321099108327,
+      "best_after": [
+        2.4879321099108327,
+        2.4879321099108327,
+        2.4879321099108327
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "VALID_SLOWER",
+        "DUPLICATE"
+      ],
+      "ceiling": 2.9106388826673726,
+      "share_of_ceiling": 0.8531217327569157,
+      "cost_usd": 0.0067545999999999995,
+      "requests": 3
+    },
+    {
+      "cell": "rnn_layer-baseline-25-flash-lite-r1",
+      "workload": "rnn_layer",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.6974343094896647,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0013847,
+      "requests": 3
+    },
+    {
+      "cell": "rnn_layer-baseline-25-flash-lite-r2",
+      "workload": "rnn_layer",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "CORRECTNESS_FAILED",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "CORRECTNESS_FAILED",
+        "PROPOSAL_INVALID",
+        "CORRECTNESS_FAILED"
+      ],
+      "ceiling": 1.6974343094896647,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.002155,
+      "requests": 3
+    },
+    {
+      "cell": "rnn_layer-baseline-25-flash-lite-r3",
+      "workload": "rnn_layer",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "MEASUREMENT_UNSTABLE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.6974343094896647,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0014512,
+      "requests": 3
+    },
+    {
+      "cell": "rnn_layer-baseline-25-flash-r1",
+      "workload": "rnn_layer",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.6974343094896647,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0057402,
+      "requests": 3
+    },
+    {
+      "cell": "rnn_layer-baseline-25-flash-r2",
+      "workload": "rnn_layer",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "VALID_NO_CHANGE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "DUPLICATE",
+        "COMPILE_FAILED",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 1.6974343094896647,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0050435,
+      "requests": 3
+    },
+    {
+      "cell": "rnn_layer-baseline-25-flash-r3",
+      "workload": "rnn_layer",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 1.7115053437933987,
+      "best_after": [
+        1.7115053437933987,
+        1.7115053437933987,
+        1.7115053437933987
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.6974343094896647,
+      "share_of_ceiling": 1.0156022320269666,
+      "cost_usd": 0.0069157,
+      "requests": 3
+    },
+    {
+      "cell": "rnn_layer-compiler_complement-25-flash-lite-r1",
+      "workload": "rnn_layer",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.6974343094896647,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0014463,
+      "requests": 3
+    },
+    {
+      "cell": "rnn_layer-compiler_complement-25-flash-lite-r2",
+      "workload": "rnn_layer",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "ACCEPTED",
+      "speedup": 1.1203984615957001,
+      "best_after": [
+        1.0,
+        1.0,
+        1.1203984615957001
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "MEASUREMENT_UNSTABLE",
+        "DUPLICATE",
+        "ACCEPTED"
+      ],
+      "ceiling": 1.6974343094896647,
+      "share_of_ceiling": 0.2148564532260257,
+      "cost_usd": 0.0015781999999999999,
+      "requests": 3
+    },
+    {
+      "cell": "rnn_layer-compiler_complement-25-flash-lite-r3",
+      "workload": "rnn_layer",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "COMPILE_FAILED",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.6974343094896647,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.001302,
+      "requests": 3
+    },
+    {
+      "cell": "rnn_layer-compiler_complement-25-flash-r1",
+      "workload": "rnn_layer",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.6974343094896647,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.005366,
+      "requests": 3
+    },
+    {
+      "cell": "rnn_layer-compiler_complement-25-flash-r2",
+      "workload": "rnn_layer",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.6974343094896647,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0052245,
+      "requests": 3
+    },
+    {
+      "cell": "rnn_layer-compiler_complement-25-flash-r3",
+      "workload": "rnn_layer",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 0,
+      "states": [
+        "DUPLICATE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 1.6974343094896647,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0049288,
+      "requests": 3
+    },
+    {
+      "cell": "softmax-baseline-25-flash-lite-r1",
+      "workload": "softmax",
+      "tier": "control",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 0.9989673716575871,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0011083999999999998,
+      "requests": 3
+    },
+    {
+      "cell": "softmax-baseline-25-flash-lite-r2",
+      "workload": "softmax",
+      "tier": "control",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 0.9989673716575871,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0014198000000000001,
+      "requests": 3
+    },
+    {
+      "cell": "softmax-baseline-25-flash-lite-r3",
+      "workload": "softmax",
+      "tier": "control",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "VALID_NO_CHANGE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 3,
+      "states": [
+        "CORRECTNESS_FAILED",
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 0.9989673716575871,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0014740999999999999,
+      "requests": 3
+    },
+    {
+      "cell": "softmax-baseline-25-flash-r1",
+      "workload": "softmax",
+      "tier": "control",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 0.9989673716575871,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0037411,
+      "requests": 3
+    },
+    {
+      "cell": "softmax-baseline-25-flash-r2",
+      "workload": "softmax",
+      "tier": "control",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "VALID_NO_CHANGE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 3,
+      "states": [
+        "CORRECTNESS_FAILED",
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 0.9989673716575871,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0041295,
+      "requests": 3
+    },
+    {
+      "cell": "softmax-baseline-25-flash-r3",
+      "workload": "softmax",
+      "tier": "control",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 0.9989673716575871,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0038967,
+      "requests": 3
+    },
+    {
+      "cell": "softmax-compiler_complement-25-flash-lite-r1",
+      "workload": "softmax",
+      "tier": "control",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 0.9989673716575871,
+      "share_of_ceiling": null,
+      "cost_usd": 0.001161,
+      "requests": 3
+    },
+    {
+      "cell": "softmax-compiler_complement-25-flash-lite-r2",
+      "workload": "softmax",
+      "tier": "control",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 0.9989673716575871,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0012316,
+      "requests": 3
+    },
+    {
+      "cell": "softmax-compiler_complement-25-flash-lite-r3",
+      "workload": "softmax",
+      "tier": "control",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "NO_CANDIDATE",
+      "speedup": 1.0,
+      "best_after": [],
+      "accepted": 0,
+      "evaluated": 0,
+      "states": [],
+      "ceiling": 0.9989673716575871,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0018351,
+      "requests": 1
+    },
+    {
+      "cell": "softmax-compiler_complement-25-flash-r1",
+      "workload": "softmax",
+      "tier": "control",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "VALID_NO_CHANGE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 3,
+      "states": [
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 0.9989673716575871,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0061655,
+      "requests": 3
+    },
+    {
+      "cell": "softmax-compiler_complement-25-flash-r2",
+      "workload": "softmax",
+      "tier": "control",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "VALID_NO_CHANGE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "VALID_NO_CHANGE",
+        "DUPLICATE",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 0.9989673716575871,
+      "share_of_ceiling": null,
+      "cost_usd": 0.004843699999999999,
+      "requests": 3
+    },
+    {
+      "cell": "softmax-compiler_complement-25-flash-r3",
+      "workload": "softmax",
+      "tier": "control",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "VALID_NO_CHANGE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "DUPLICATE",
+        "DUPLICATE",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 0.9989673716575871,
+      "share_of_ceiling": null,
+      "cost_usd": 0.0036612,
+      "requests": 3
+    },
+    {
+      "cell": "top_k_rows-baseline-25-flash-lite-r1",
+      "workload": "top_k_rows",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "CORRECTNESS_FAILED",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 3,
+      "states": [
+        "CORRECTNESS_FAILED",
+        "CORRECTNESS_FAILED",
+        "CORRECTNESS_FAILED"
+      ],
+      "ceiling": 169.14320776071312,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0013300999999999999,
+      "requests": 3
+    },
+    {
+      "cell": "top_k_rows-baseline-25-flash-lite-r2",
+      "workload": "top_k_rows",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "ACCEPTED",
+      "speedup": 1.709404586208589,
+      "best_after": [
+        1.709404586208589,
+        1.709404586208589,
+        1.709404586208589
+      ],
+      "accepted": 1,
+      "evaluated": 1,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 169.14320776071312,
+      "share_of_ceiling": 0.10449652778047094,
+      "cost_usd": 0.00183,
+      "requests": 3
+    },
+    {
+      "cell": "top_k_rows-baseline-25-flash-lite-r3",
+      "workload": "top_k_rows",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 155.75674732634513,
+      "best_after": [
+        155.75674732634513,
+        155.75674732634513,
+        155.75674732634513
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "COMPILE_FAILED",
+        "DUPLICATE"
+      ],
+      "ceiling": 169.14320776071312,
+      "share_of_ceiling": 0.9839301604018397,
+      "cost_usd": 0.0018673,
+      "requests": 3
+    },
+    {
+      "cell": "top_k_rows-baseline-25-flash-r1",
+      "workload": "top_k_rows",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 170.9190674365683,
+      "best_after": [
+        170.9190674365683,
+        170.9190674365683,
+        170.9190674365683
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "COMPILE_FAILED",
+        "DUPLICATE"
+      ],
+      "ceiling": 169.14320776071312,
+      "share_of_ceiling": 1.0020356524871104,
+      "cost_usd": 0.0053072,
+      "requests": 3
+    },
+    {
+      "cell": "top_k_rows-baseline-25-flash-r2",
+      "workload": "top_k_rows",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 2,
+      "state": "ACCEPTED",
+      "speedup": 168.87347327640705,
+      "best_after": [
+        1.0,
+        1.2006967139399585,
+        168.87347327640705
+      ],
+      "accepted": 2,
+      "evaluated": 3,
+      "states": [
+        "COMPILE_FAILED",
+        "ACCEPTED",
+        "ACCEPTED"
+      ],
+      "ceiling": 169.14320776071312,
+      "share_of_ceiling": 0.9996889373023097,
+      "cost_usd": 0.0050309000000000005,
+      "requests": 3
+    },
+    {
+      "cell": "top_k_rows-baseline-25-flash-r3",
+      "workload": "top_k_rows",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 156.53648391128098,
+      "best_after": [
+        156.53648391128098,
+        156.53648391128098,
+        156.53648391128098
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "DUPLICATE",
+        "VALID_NO_CHANGE"
+      ],
+      "ceiling": 169.14320776071312,
+      "share_of_ceiling": 0.9849034357991847,
+      "cost_usd": 0.0058106,
+      "requests": 3
+    },
+    {
+      "cell": "top_k_rows-compiler_complement-25-flash-lite-r1",
+      "workload": "top_k_rows",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 157.6398683226837,
+      "best_after": [
+        157.6398683226837,
+        157.6398683226837,
+        157.6398683226837
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "VALID_NO_CHANGE",
+        "DUPLICATE"
+      ],
+      "ceiling": 169.14320776071312,
+      "share_of_ceiling": 0.9862724395531478,
+      "cost_usd": 0.0016485,
+      "requests": 3
+    },
+    {
+      "cell": "top_k_rows-compiler_complement-25-flash-lite-r2",
+      "workload": "top_k_rows",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 1,
+      "states": [
+        "CORRECTNESS_FAILED",
+        "DUPLICATE",
+        "DUPLICATE"
+      ],
+      "ceiling": 169.14320776071312,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0014299,
+      "requests": 3
+    },
+    {
+      "cell": "top_k_rows-compiler_complement-25-flash-lite-r3",
+      "workload": "top_k_rows",
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 2.8095823951926593,
+      "best_after": [
+        2.8095823951926593,
+        2.8095823951926593,
+        2.8095823951926593
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "ACCEPTED",
+        "VALID_SLOWER",
+        "DUPLICATE"
+      ],
+      "ceiling": 169.14320776071312,
+      "share_of_ceiling": 0.20134224360001302,
+      "cost_usd": 0.0020411,
+      "requests": 3
+    },
+    {
+      "cell": "top_k_rows-compiler_complement-25-flash-r1",
+      "workload": "top_k_rows",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 1,
+      "state": "ACCEPTED",
+      "speedup": 169.49215412137528,
+      "best_after": [
+        1.0,
+        1.0,
+        169.49215412137528
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "DUPLICATE",
+        "COMPILE_FAILED",
+        "ACCEPTED"
+      ],
+      "ceiling": 169.14320776071312,
+      "share_of_ceiling": 1.0004016761282484,
+      "cost_usd": 0.0039264,
+      "requests": 3
+    },
+    {
+      "cell": "top_k_rows-compiler_complement-25-flash-r2",
+      "workload": "top_k_rows",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 2,
+      "state": "DUPLICATE",
+      "speedup": 1.0,
+      "best_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accepted": 0,
+      "evaluated": 2,
+      "states": [
+        "COMPILE_FAILED",
+        "COMPILE_FAILED",
+        "DUPLICATE"
+      ],
+      "ceiling": 169.14320776071312,
+      "share_of_ceiling": 0.0,
+      "cost_usd": 0.0043853,
+      "requests": 3
+    },
+    {
+      "cell": "top_k_rows-compiler_complement-25-flash-r3",
+      "workload": "top_k_rows",
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "rep": 3,
+      "state": "ACCEPTED",
+      "speedup": 1.192648397424484,
+      "best_after": [
+        1.0,
+        1.192648397424484,
+        1.192648397424484
+      ],
+      "accepted": 1,
+      "evaluated": 2,
+      "states": [
+        "COMPILE_FAILED",
+        "ACCEPTED",
+        "DUPLICATE"
+      ],
+      "ceiling": 169.14320776071312,
+      "share_of_ceiling": 0.03433738237570757,
+      "cost_usd": 0.0049384,
+      "requests": 3
+    }
+  ],
+  "groups": [
+    {
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "cells": 18,
+      "cost_usd": 0.1227914,
+      "evaluated": 2.1666666666666665,
+      "reached_90pct": 10,
+      "mean_share": 0.5542956315137668,
+      "mean_share_after_1": 0.4987573572191941,
+      "mean_share_after_2": 0.5007378142148728,
+      "mean_share_after_3": 0.5542956315137668
+    },
+    {
+      "tier": "block",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "cells": 18,
+      "cost_usd": 0.1198538,
+      "evaluated": 1.7777777777777777,
+      "reached_90pct": 10,
+      "mean_share": 0.5512683506949689,
+      "mean_share_after_1": 0.2727042966589025,
+      "mean_share_after_2": 0.3862419280690179,
+      "mean_share_after_3": 0.5512683506949689
+    },
+    {
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "cells": 18,
+      "cost_usd": 0.0279499,
+      "evaluated": 1.5555555555555556,
+      "reached_90pct": 3,
+      "mean_share": 0.17201495515063348,
+      "mean_share_after_1": 0.17201495515063348,
+      "mean_share_after_2": 0.17201495515063348,
+      "mean_share_after_3": 0.17201495515063348
+    },
+    {
+      "tier": "block",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "cells": 18,
+      "cost_usd": 0.0303368,
+      "evaluated": 1.5,
+      "reached_90pct": 5,
+      "mean_share": 0.2994047634785726,
+      "mean_share_after_1": 0.2874682938549045,
+      "mean_share_after_2": 0.2874682938549045,
+      "mean_share_after_3": 0.2994047634785726
+    },
+    {
+      "tier": "control",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "cells": 9,
+      "cost_usd": 0.0570366,
+      "evaluated": 1.7777777777777777,
+      "false_positives": 0
+    },
+    {
+      "tier": "control",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "cells": 9,
+      "cost_usd": 0.0491546,
+      "evaluated": 1.3333333333333333,
+      "false_positives": 0
+    },
+    {
+      "tier": "control",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "cells": 9,
+      "cost_usd": 0.0134959,
+      "evaluated": 1.7777777777777777,
+      "false_positives": 0
+    },
+    {
+      "tier": "control",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "cells": 9,
+      "cost_usd": 0.0139122,
+      "evaluated": 1.4444444444444444,
+      "false_positives": 0
+    },
+    {
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "baseline",
+      "cells": 15,
+      "cost_usd": 0.08658640000000001,
+      "evaluated": 2.3333333333333335,
+      "reached_90pct": 12,
+      "mean_share": 0.9114898308586695,
+      "mean_share_after_1": 0.7274841018263888,
+      "mean_share_after_2": 0.8494983166468028,
+      "mean_share_after_3": 0.9114898308586695
+    },
+    {
+      "tier": "op",
+      "model": "gemini-2.5-flash",
+      "framing": "compiler_complement",
+      "cells": 15,
+      "cost_usd": 0.0996164,
+      "evaluated": 1.8666666666666667,
+      "reached_90pct": 11,
+      "mean_share": 0.9142330191062359,
+      "mean_share_after_1": 0.7761676221528052,
+      "mean_share_after_2": 0.9142330191062359,
+      "mean_share_after_3": 0.9142330191062359
+    },
+    {
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "baseline",
+      "cells": 15,
+      "cost_usd": 0.0214985,
+      "evaluated": 1.8666666666666667,
+      "reached_90pct": 7,
+      "mean_share": 0.5246507673310759,
+      "mean_share_after_1": 0.3434618957245616,
+      "mean_share_after_2": 0.4583422525367355,
+      "mean_share_after_3": 0.5246507673310759
+    },
+    {
+      "tier": "op",
+      "model": "gemini-2.5-flash-lite",
+      "framing": "compiler_complement",
+      "cells": 15,
+      "cost_usd": 0.0231485,
+      "evaluated": 1.8,
+      "reached_90pct": 7,
+      "mean_share": 0.5184825400206781,
+      "mean_share_after_1": 0.35560552013820645,
+      "mean_share_after_2": 0.4104488765043268,
+      "mean_share_after_3": 0.5184825400206781
+    }
+  ]
+}
