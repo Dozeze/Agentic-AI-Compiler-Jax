@@ -415,6 +415,7 @@ Compiler feedback, held-out, providers (batch 03):
   than prune acceptance evidence; an active worker can exceed that limit before the host checks its files.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-27 Sergio — AIC-016: corrected the pairwise_distances share range in `docs/EXPERIMENTS.md` §4 (81–86 %); the draft report's results now use sweep 03 (protocol v2).
 - 2026-11-27 Sergio — AIC-016 (P35): sweep 03, the 168-search design of sweep 02 rerun under protocol v2 with fresh calibrations (all 14 workloads pass) and ceilings; results in `docs/EXPERIMENTS.md` §4 and `evidence/sweeps/mac-m5-cpu-docker-sweep-03.json`. Corrected the sweep-02 control count (2/36, not 2/72).
 - 2026-11-27 Sergio — AIC-005/AIC-015 (P33): measurement protocol v2 raises calls per block for both sides until the faster one reaches the block floor; one re-measurement of an unstable candidate resubmitted unchanged. New protocol hash: every calibration must be redone. Full suite with Docker 867 passed / 11 skipped.
 - 2026-11-27 Sergio — AIC-016: sweep 02 on the Mac (168 searches: 14 workloads × flash/flash-lite × 2 framings × 3), `scripts/search_sweep.py` rewritten (models, repetitions, resume, share after k candidates, aggregates), `configs/live_gemini_flash_lite.json`, results in `docs/EXPERIMENTS.md` §3 and `evidence/`. P33 and P34 pending.

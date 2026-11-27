@@ -189,7 +189,7 @@ top_k_rows 0.8 %. 492 requests, USD 0.67, 75 minutes for the searches. Summary:
 Note on pairwise_distances: in the provisional session the reference ran at 0.52 ms per call against 0.29 ms in the
 two confirmation sessions (the ceiling program was stable at 0.12 ms), so that session measured 4.36× and the two
 confirmations 2.35× and 2.41×. The declared ceiling is the geometric mean of all three, 2.9×; we keep it. Agent
-candidates that match the rewrite measure 2.4–2.5×, which this ceiling scores as 82–86 % rather than ~100 %, so
+candidates that match the rewrite measure 2.4–2.5×, which this ceiling scores as 81–86 % rather than ~100 %, so
 the op-tier shares below are slightly conservative.
 
 ### Share of the ceiling reached (mean over cells, capped at 100 %; 95 % bootstrap CI, runs resampled within workload)
