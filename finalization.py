@@ -10,7 +10,7 @@ from pathlib import Path
 import benchmark
 import heldout
 from contracts import from_dict, to_dict, protocol_hash
-from controller import BaselineFailed, EvaluationError, Evaluator, decide
+from controller import BaselineFailed, EvaluationError, Evaluator, _repeats_match, decide
 from source_policy import check_source
 from storage import RunStore, StorageError, atomic_write_json, sha256, verified_final_result
 from workloads import registry
@@ -53,7 +53,8 @@ def _load_selection(parent):
 def _session_record(evaluator, candidate, calibration, protocol):
     session, _ = evaluator.session(evaluator.baseline_source, candidate,
                                    trusted=candidate == evaluator.baseline_source)
-    if (type(session.repeats) is not int or session.repeats < 1 or session.repeats != calibration.repeats
+    if (type(session.repeats) is not int or session.repeats < 1
+            or not _repeats_match(session.repeats, calibration.repeats, protocol)
             or len(session.blocks) != protocol.n_blocks
             or type(calibration.delta) not in (int, float) or not math.isfinite(calibration.delta) or calibration.delta < 0
             or any(block.index != i or block.order not in ("AB", "BA") or block.repeats != session.repeats

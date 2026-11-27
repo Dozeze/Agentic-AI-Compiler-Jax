@@ -233,11 +233,11 @@ remains the default for subsequent work. Local run evidence and credentials are 
   `providers.py` stopped the run as unpriced billing. Vertex's cached count is a subset of `prompt_token_count`,
   billed at a discount, so `gemini.py` now charges all prompt tokens at the full input price (an upper bound)
   and keeps the cached count as a diagnostic only. Anthropic cache billing still stops the run (P20 unchanged)]
-- P33 Fast candidates rejected as unstable? [pending: calls per block are calibrated on the reference only, so a
-  ~50x faster candidate runs sub-millisecond blocks that fail the 10 % IQR limit (9/12 embedding_lookup cells), and
-  the duplicate rule then refuses the unchanged resubmission. Proposal: calibrate calls so both sides reach the
-  minimum block duration, and allow one re-measurement of a resubmitted MEASUREMENT_UNSTABLE candidate. Change only
-  for a new protocol version; sweep 02 results stay under the frozen protocol]
+- P33 Fast candidates rejected as unstable? [protocol `paired_blocks/v2` (default since 2026-11-27): a session may
+  double the frozen calls per block, for both sides, until the faster side's block also reaches `min_block_s`; never
+  fewer calls than frozen, so the A/A δ stays conservative. A resubmitted program whose only measured attempt was
+  MEASUREMENT_UNSTABLE is measured once more. v1 stays valid for replaying old evidence. Under v1, 9/12
+  embedding_lookup cells lost a ~50x win this way; sweep 02 results remain v1]
 - P34 GELU tail on matmul_gelu? [the erf form of GELU is accepted (1.17–1.20x on CPU) because atol 1e-5 does not
   protect the tail where GELU ~1e-9. Tolerances are not changed after a search; a new workload version would declare
   an elementwise relative check for the tail]
@@ -405,6 +405,7 @@ Compiler feedback, held-out, providers (batch 03):
   than prune acceptance evidence; an active worker can exceed that limit before the host checks its files.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-27 Sergio — AIC-005/AIC-015 (P33): measurement protocol v2 raises calls per block for both sides until the faster one reaches the block floor; one re-measurement of an unstable candidate resubmitted unchanged. New protocol hash: every calibration must be redone. Full suite with Docker 867 passed / 11 skipped.
 - 2026-11-27 Sergio — AIC-016: sweep 02 on the Mac (168 searches: 14 workloads × flash/flash-lite × 2 framings × 3), `scripts/search_sweep.py` rewritten (models, repetitions, resume, share after k candidates, aggregates), `configs/live_gemini_flash_lite.json`, results in `docs/EXPERIMENTS.md` §3 and `evidence/`. P33 and P34 pending.
 - 2026-11-27 Sergio — AIC-017 (P30): block tier of the headroom suite: `gqa_decode`, `top_k_rows`, `cross_entropy` (int32 labels), `conv3x3`, `embedding_lookup` (int32 ids), `rnn_layer`, with float64 oracles, edge cases, held-out splits and ceiling rewrites; worker image includes them. Docker CPU ceilings 1.27–161×.
 - 2026-11-27 Sergio — P8 (P32): `gemini.py` charges Vertex implicit-cache hits as full-price input instead of reporting separate cache billing, which stopped one sweep cell; regression test added.

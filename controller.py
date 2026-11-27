@@ -117,6 +117,13 @@ def read_python_source(source_path):
     return path.read_bytes().decode("utf-8")
 
 
+def _repeats_match(session_repeats, frozen_repeats, protocol):
+    """v1 uses the frozen count exactly; v2 may raise it for both sides (P33), never lower it."""
+    if protocol.protocol == "paired_blocks/v1":
+        return session_repeats == frozen_repeats
+    return session_repeats >= frozen_repeats
+
+
 def same_program(a, b):
     """Are two sources the same program, ignoring formatting and comments? (compared as syntax trees)"""
     try:
@@ -645,7 +652,8 @@ class Controller:
                 raise ContractError("claimed promotion measured different sources")
             raw = session["raw"]
             blocks = raw["blocks"]
-            if (type(raw.get("repeats")) is not int or raw["repeats"] != calibration.repeats
+            if (type(raw.get("repeats")) is not int or not _repeats_match(raw["repeats"], calibration.repeats,
+                                                                           self.evaluator.protocol)
                     or len(blocks) != self.evaluator.protocol.n_blocks
                     or [block.get("index") for block in blocks] != list(range(len(blocks)))
                     or any(block.get("order") not in ("AB", "BA") or block.get("repeats") != raw["repeats"]
@@ -752,7 +760,7 @@ class Controller:
         duplicate = self._seen_sources.get(storage.sha256(source.encode()))
         if duplicate is None:
             duplicate = next((e["iteration"] for e in self.history if e["code"] and same_program(e["code"], source)), None)
-        if duplicate is not None:
+        if duplicate is not None and not self._remeasure_unstable(source):
             return self._record(DUPLICATE, f"same program as iteration {duplicate}; not measured again",
                                 source, proposal, None, started)
         try:
@@ -775,6 +783,12 @@ class Controller:
                               {"evaluation": "failed"}, failure_category="EVALUATOR_INVALID"))
         entry = self._record(verdict.state, verdict.reason, source, proposal, verdict, started)
         return entry
+
+    def _remeasure_unstable(self, source):
+        """P33: a resubmitted program whose only measured attempt was unstable is measured once more."""
+        measured = [e for e in self.history[1:] if e["code"] and e["state"] != DUPLICATE
+                    and same_program(e["code"], source)]
+        return len(measured) == 1 and measured[0]["state"] == MEASUREMENT_UNSTABLE
 
     def _record(self, state, reason, code, proposal, verdict, started, *, submitted_proposal=None):
         number = self.iteration + 1

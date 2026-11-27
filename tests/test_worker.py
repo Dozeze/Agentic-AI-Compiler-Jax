@@ -70,7 +70,9 @@ def test_measure_mode_returns_a_raw_session(tmp_path):
     result = worker.handle(_request("measure", {"a": "a.py", "b": "b.py"}, case="m",
                                     protocol=dataclasses.asdict(SMALL), repeats=3), work)
     session = PairedSession.from_json(result["session"])
-    assert session.repeats == 3 and len(session.blocks) == SMALL.n_blocks
+    # Protocol v2 may raise the frozen count for both sides, never lower it (P33).
+    assert session.repeats >= 3 and len(session.blocks) == SMALL.n_blocks
+    assert all(block.repeats == session.repeats for block in session.blocks)
     assert set(result["compile"]) == {"a", "b"}
 
 

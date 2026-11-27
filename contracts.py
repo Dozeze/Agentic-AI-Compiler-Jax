@@ -23,6 +23,7 @@ RUN_CONFIG_SCHEMA = "run_config/v1"
 SPLITS = ("development", "heldout")
 CONTEXT_CONDITIONS = ("C0", "C1", "C2", "C3", "C4", "K")
 RUNNERS = ("docker", "subprocess")
+PROTOCOL_VERSIONS = ("paired_blocks/v1", "paired_blocks/v2")   # v2: block floor for both sides (P33)
 # How the job is framed in the system prompt (batch 04). "baseline" is the original wording;
 # "compiler_complement" adds the division of labour between XLA and the agent, without task hints.
 PROMPT_FRAMINGS = ("baseline", "compiler_complement")
@@ -120,8 +121,13 @@ class MeasurementProtocol:
     Each block runs the same number of synchronised calls of A (incumbent) and B (candidate) back to back,
     in a balanced, seeded AB/BA order. The repeat count is calibrated from the baseline only so that one
     block lasts about `target_block_s`, then frozen for both sides.
+
+    v2 (P33): a session may raise the frozen count, never lower it, for both sides alike, until the faster
+    side's block also lasts `min_block_s`. Under v1 a candidate 50x faster than the reference ran blocks of
+    well under a millisecond and was rejected as unstable. More calls per block only lengthen both sides,
+    so the A/A threshold calibrated at the frozen count stays conservative.
     """
-    protocol: str = "paired_blocks/v1"
+    protocol: str = "paired_blocks/v2"
     warmup_calls: int = 5                  # per executable, before any timed block
     min_block_s: float = 0.010             # calibration grows the repeat count until a block reaches this
     target_block_s: float = 0.020          # ... then scales it to this
@@ -336,8 +342,8 @@ def validate_model(model: ModelSettings):
 
 def validate_protocol(p: MeasurementProtocol, path: str = "measurement") -> None:
     """The AIC-1.1 §5 minimums. Tests may build smaller protocols directly; a run config never can."""
-    if p.protocol != "paired_blocks/v1":
-        raise ConfigError(f"{path}.protocol: expected 'paired_blocks/v1', got {p.protocol!r}")
+    if p.protocol not in PROTOCOL_VERSIONS:
+        raise ConfigError(f"{path}.protocol: expected one of {PROTOCOL_VERSIONS}, got {p.protocol!r}")
     if p.warmup_calls < 5:
         raise ConfigError(f"{path}.warmup_calls: AIC-1.1 requires at least 5")
     if p.n_blocks < 20:

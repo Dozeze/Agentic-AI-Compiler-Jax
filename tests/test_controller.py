@@ -207,6 +207,23 @@ def test_unstable_measurements_exhaust_the_fixed_retry_without_promotion(tmp_pat
     assert controller.history[-1]["state"] == MEASUREMENT_UNSTABLE and len(observations) == 2
 
 
+def test_resubmitted_unstable_candidate_is_measured_once_more(tmp_path):
+    # P33: an unstable but correct candidate resubmitted unchanged gets one more measurement, not two.
+    controller, _ = build(tmp_path, [call(), call(), call()], limit=3)
+    calls = []
+    def session(*args, **kwargs):
+        calls.append(True)
+        noisy = len(calls) <= 2                    # the first attempt and its fixed retry are unstable
+        blocks = tuple(benchmark.Block(i, "AB", 1, 1_000_000,
+                                        (1_000_000 if i % 2 else 2_000_000) if noisy else 500_000,
+                                        4*i, 4*i+1) for i in range(P.n_blocks))
+        session = benchmark.PairedSession(protocol_hash(P), 1, blocks)
+        return session, benchmark.analyze_session(session, P)
+    controller.evaluator.session = session
+    controller.optimize()
+    assert [row["state"] for row in controller.history[1:]] == [MEASUREMENT_UNSTABLE, ACCEPTED, DUPLICATE]
+
+
 def test_optional_profile_expiry_preserves_an_already_confirmed_incumbent(tmp_path):
     clock = Clock()
     controller, _ = build(tmp_path, [call()], limit=1, clock=clock, ratios=[.5, .5], budgets=Budgets(run_wall_s=1.))

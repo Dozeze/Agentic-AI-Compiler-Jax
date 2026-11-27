@@ -31,7 +31,9 @@ class FakeClock:
         return run
 
 
-SMALL = MeasurementProtocol(warmup_calls=2, n_blocks=6, bootstrap_samples=500, aa_sessions=5)
+SMALL = MeasurementProtocol(protocol="paired_blocks/v1", warmup_calls=2, n_blocks=6, bootstrap_samples=500,
+                           aa_sessions=5)          # v1 mechanics: the frozen count is used exactly
+SMALL_V2 = MeasurementProtocol(warmup_calls=2, n_blocks=6, bootstrap_samples=500, aa_sessions=5)
 
 
 def test_calibrate_repeats_targets_the_block_duration():
@@ -99,6 +101,22 @@ def test_measure_paired_calibrates_from_a_only():
     session = benchmark.measure_paired(counted("a", 1_000_000), counted("b", 7), (), SMALL, clock=clock)
     assert session.repeats == 20                                # from A's 1 ms per call
     assert calls["b"] == SMALL.warmup_calls + SMALL.n_blocks * 20   # B never ran during calibration
+
+
+def test_v2_raises_calls_per_block_until_the_faster_side_reaches_the_floor():
+    # P33: a 50x faster candidate at the reference's frozen count runs blocks far below min_block_s.
+    clock = FakeClock()
+    session = benchmark.measure_paired(clock.fn(1_000_000), clock.fn(20_000), (), SMALL_V2, repeats=20, clock=clock)
+    assert session.repeats == 640                  # 20 -> 640 calls: B's block reaches 12.8 ms >= 10 ms
+    assert all(block.repeats == 640 and block.b_ns == 640 * 20_000 for block in session.blocks)
+
+
+def test_v2_never_lowers_the_frozen_count_and_leaves_equal_sides_alone():
+    clock = FakeClock()
+    assert benchmark.measure_paired(clock.fn(1_000_000), clock.fn(1_000_000), (), SMALL_V2, repeats=20,
+                                    clock=clock).repeats == 20
+    assert benchmark.measure_paired(clock.fn(1_000_000), clock.fn(1), (), SMALL_V2, repeats=20,
+                                    clock=clock).repeats == SMALL_V2.max_repeats
 
 
 def test_session_json_roundtrip():

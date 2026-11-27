@@ -409,6 +409,20 @@ def calibrate_repeats(baseline, args, protocol, *, clock=time.perf_counter_ns):
     return max(1, min(protocol.max_repeats, round(protocol.target_block_s / per_call_s)))
 
 
+def floor_repeats(a, b, args, repeats, protocol, *, clock=time.perf_counter_ns):
+    """Protocol v2 (P33): double the calls per block, for both sides, until both blocks last min_block_s.
+
+    Never returns fewer calls than `repeats`, the count frozen from the baseline, and never more than
+    max_repeats. It only matters when one side is much faster than the other.
+    """
+    while repeats < protocol.max_repeats:
+        shortest = min(_run_block(fn, args, repeats, clock)[1] for fn in (a, b))
+        if shortest >= protocol.min_block_s * 1e9:
+            break
+        repeats = min(protocol.max_repeats, repeats * 2)
+    return repeats
+
+
 def block_order(n_blocks, seed):
     """Balanced AB/BA order, shuffled with a fixed seed: neither side systematically runs first."""
     import random
@@ -467,6 +481,8 @@ def measure_paired(a, b, args, protocol, *, repeats=None, clock=time.perf_counte
     warm_up(b, args, protocol.warmup_calls)
     if repeats is None:
         repeats = calibrate_repeats(a, args, protocol, clock=clock)
+    if protocol.protocol != "paired_blocks/v1":
+        repeats = floor_repeats(a, b, args, repeats, protocol, clock=clock)
     origin = clock()
     blocks = []
     for index, order in enumerate(block_order(protocol.n_blocks, protocol.order_seed)):
