@@ -23,6 +23,9 @@ RUN_CONFIG_SCHEMA = "run_config/v1"
 SPLITS = ("development", "heldout")
 CONTEXT_CONDITIONS = ("C0", "C1", "C2", "C3", "C4", "K")
 RUNNERS = ("docker", "subprocess")
+# How the job is framed in the system prompt (batch 04). "baseline" is the original wording;
+# "compiler_complement" adds the division of labour between XLA and the agent, without task hints.
+PROMPT_FRAMINGS = ("baseline", "compiler_complement")
 
 
 class ContractError(ValueError):
@@ -178,6 +181,7 @@ class RunConfig:
     seeds: tuple[int, ...] = (0, 1, 2, 3, 4)
     correctness_policy_hash: str | None = None   # filled from the workload policy once the registry is wired in
     context_condition: str = "C2"
+    prompt_framing: str = "baseline"
     runner: str = "docker"           # docker: isolated containers; subprocess: trusted code only (AIC-009)
     calibration_path: str | None = None   # a frozen A/A calibration; without it the run calibrates at start
     output_dir: str | None = None     # None: unique runs/<run-id>; explicit paths must not already exist
@@ -274,6 +278,9 @@ def validate(cfg: RunConfig) -> None:
     if cfg.context_condition not in CONTEXT_CONDITIONS:
         raise ConfigError(f"run_config.context_condition: must be one of {CONTEXT_CONDITIONS}, "
                           f"got {cfg.context_condition!r}")
+    if cfg.prompt_framing not in PROMPT_FRAMINGS:
+        raise ConfigError(f"run_config.prompt_framing: must be one of {PROMPT_FRAMINGS}, "
+                          f"got {cfg.prompt_framing!r}")
     if not cfg.seeds:
         raise ConfigError("run_config.seeds: must not be empty")
     if len(set(cfg.seeds)) != len(cfg.seeds):

@@ -211,6 +211,10 @@ remains the default for subsequent work. Local run evidence and credentials are 
   `workloads/ceilings/` (never shown to the agent) measures the available speedup before any search. Accepting a
   change on a control is a false positive. Tolerances fixed from the measured reference/rewrite error vs float64
   oracles (rewrites use at most a third of each); held-out seeds 1000–1019 and two unseen shapes each]
+- P31 Prompt framing? [`run_config.prompt_framing`: `baseline` (default, the original system prompt) or
+  `compiler_complement` (adds the division of labour: XLA does the mechanical work, the agent looks for a different
+  computation with the same result). After HALO's framing study, but HALO's prompt named the exact identities of
+  two of its tasks; this one names no rewrite or workload, and a test checks that]
 - P28 Simplify before the final presentation? [proposal only: `docs/SIMPLIFICATION_PROPOSAL.md` lists dead code,
   duplicate held-out guards, a redundant promotion recheck and over-built provider/storage accounting. Nothing is
   removed until the team agrees; code by another member changes only with that member's agreement]
@@ -373,6 +377,7 @@ Compiler feedback, held-out, providers (batch 03):
   than prune acceptance evidence; an active worker can exceed that limit before the host checks its files.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-27 Sergio — AIC-014 (P31): `run_config.prompt_framing` = `baseline` | `compiler_complement`; the second adds a task-neutral "work alongside XLA" framing to the system prompt. Tests check validation, that it reaches the prompt and that it names no workload or rewrite.
 - 2026-11-27 Sergio — AIC-017 (P30): headroom suite: `matmul_chain`, `pairwise_distances`, `attention_loop`, `layer_norm_loop`, `batched_matmul_loop` with float64 oracles, edge cases, disjoint held-out split and reviewed ceiling rewrites (`workloads/ceilings/`, also for the three controls); worker image includes the new references. 22 suite tests.
 - 2026-11-27 Sergio — AIC-009 (P29): no `--cpus` quota on worker containers by default; optional `cpuset`/`cpus` in `DockerRunner`; the CPU control is part of the measurement population label. On the Mac the default quota made Docker A/A unstable (matmul_gelu IQR/median ≈ 2); without it softmax, layer_norm and matmul_gelu calibrate in Docker (δ 5.2–5.6 %). Likely cause of P26. Full suite with Docker 801 passed / 11 skipped.
 - 2026-11-25 Sergio — P28: `docs/SIMPLIFICATION_PROPOSAL.md` (draft for team review; no code changed).

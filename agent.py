@@ -67,9 +67,24 @@ def _load_source_workload(source_path, function_name):
     return source, jax.jit(function), args
 
 
+# Batch 04, after the framing study on `claude-experiment` (HALO). It states the division of labour only;
+# it names no identity, rewrite or workload, so it cannot hand the agent a task's answer.
+COMPILER_COMPLEMENT = (
+    "You work alongside XLA, not in place of it. XLA already does the mechanical work well: it fuses "
+    "elementwise operations, assigns layouts, schedules and picks kernels. What it cannot do is change "
+    "the algorithm: it compiles faithfully whatever computation it is given. Your job is the part only "
+    "you can do: find a different computation that gives the same result, within the tolerance, for less "
+    "work or less memory traffic. Reason from the mathematics and the structure of the code first. A clean "
+    "compiler summary only says the given algorithm was lowered well, not that a better one does not "
+    "exist. If you find no such change, say so and submit the current code unchanged rather than a "
+    "cosmetic rewrite."
+)
+
+
 def build_controller(client, max_iterations=DEFAULT_ITERATIONS, source_path=None, function_name="bad_func",
                      output_dir=None, *, workload_id=None, runner=None, selected_backend=None, protocol=None,
-                     calibration=None, context_condition="C2", budgets=None, model_settings=None):
+                     calibration=None, context_condition="C2", budgets=None, model_settings=None,
+                     prompt_framing="baseline"):
     """Build the controller for a registered workload (`workload_id`) or a trusted --source file.
 
     Without either, the registered `example_add` workload (the original x + y example) is used. The
@@ -102,6 +117,8 @@ def build_controller(client, max_iterations=DEFAULT_ITERATIONS, source_path=None
         "@jax.jit or call jax.jit in the candidate. Inspect the current code "
         "and the measured history provided in context before proposing a candidate."
     )
+    if prompt_framing == "compiler_complement":
+        prompt += " " + COMPILER_COMPLEMENT
     store = RunStore(output_dir, budgets=budgets)
     workdir = store.path / "work"
     evaluator = Evaluator(spec, runner or DockerRunner(selected_backend=selected_backend),
@@ -359,6 +376,7 @@ def main(argv=None):
         protocol=cfg.measurement,
         calibration=Calibration.load(cfg.calibration_path) if cfg.calibration_path else None,
         context_condition=cfg.context_condition,
+        prompt_framing=cfg.prompt_framing,
         budgets=cfg.budgets,
         model_settings=cfg.model,
     )
