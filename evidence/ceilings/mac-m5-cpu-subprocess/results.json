@@ -1,0 +1,230 @@
+[
+  {
+    "workload": "matmul_chain",
+    "class": "headroom",
+    "shape": [
+      1024,
+      16
+    ],
+    "state": "ACCEPTED",
+    "reason": "speedup 9.139x, 95% CI [8.958, 9.280]; lower bound clears 1 + delta = 1.006; confirmed in 1 fresh session(s)",
+    "delta": 0.0056788079052277,
+    "speedup": [
+      9.139015279757055,
+      9.175853758579377
+    ],
+    "ci": [
+      [
+        8.957788231770056,
+        9.28041619757848
+      ],
+      [
+        9.054651832199896,
+        9.301022842736321
+      ]
+    ],
+    "reference_median_s": [
+      0.0004261354130434783,
+      0.0004272871413043478
+    ],
+    "ceiling_median_s": [
+      4.652807608695652e-05,
+      4.642754347826087e-05
+    ],
+    "fingerprint": "cpu|cpu|jax 0.4.38|trusted-subprocess/v1"
+  },
+  {
+    "workload": "pairwise_distances",
+    "class": "headroom",
+    "shape": [
+      256,
+      256,
+      64
+    ],
+    "state": "INTERRUPTED",
+    "reason": "no usable A/A calibration: unstable A/A sessions: session 0: A IQR/median 0.248 > 0.1; B IQR/median 0.308 > 0.1; baseline drift 0.235 > 0.05 | session 4: B IQR/median 0.122 > 0.1",
+    "delta": null,
+    "speedup": [],
+    "ci": [],
+    "reference_median_s": [],
+    "ceiling_median_s": [],
+    "fingerprint": "cpu|cpu|jax 0.4.38|trusted-subprocess/v1"
+  },
+  {
+    "workload": "attention_loop",
+    "class": "headroom",
+    "shape": [
+      4,
+      8,
+      256,
+      64
+    ],
+    "state": "ACCEPTED",
+    "reason": "speedup 1.929x, 95% CI [1.922, 1.935]; lower bound clears 1 + delta = 1.016; confirmed in 1 fresh session(s)",
+    "delta": 0.015509000208828904,
+    "speedup": [
+      1.9288940517877045,
+      1.9112700093911574
+    ],
+    "ci": [
+      [
+        1.9224045334193884,
+        1.9352518407911294
+      ],
+      [
+        1.9004845040322809,
+        1.9208817297865821
+      ]
+    ],
+    "reference_median_s": [
+      0.0071116875,
+      0.007079611166666667
+    ],
+    "ceiling_median_s": [
+      0.0036879235,
+      0.0036988125
+    ],
+    "fingerprint": "cpu|cpu|jax 0.4.38|trusted-subprocess/v1"
+  },
+  {
+    "workload": "layer_norm_loop",
+    "class": "headroom",
+    "shape": [
+      32,
+      1024
+    ],
+    "state": "ACCEPTED",
+    "reason": "speedup 5.095x, 95% CI [5.072, 5.118]; lower bound clears 1 + delta = 1.003; confirmed in 1 fresh session(s)",
+    "delta": 0.003383861988484038,
+    "speedup": [
+      5.094970167771019,
+      5.21056648829076
+    ],
+    "ci": [
+      [
+        5.072020076476619,
+        5.118336675221132
+      ],
+      [
+        5.148931469720945,
+        5.285557507867709
+      ]
+    ],
+    "reference_median_s": [
+      0.00015597819140624998,
+      0.00015777815625
+    ],
+    "ceiling_median_s": [
+      3.056640234375e-05,
+      3.0252769531250003e-05
+    ],
+    "fingerprint": "cpu|cpu|jax 0.4.38|trusted-subprocess/v1"
+  },
+  {
+    "workload": "batched_matmul_loop",
+    "class": "headroom",
+    "shape": [
+      32,
+      128,
+      64,
+      128
+    ],
+    "state": "ACCEPTED",
+    "reason": "speedup 1.485x, 95% CI [1.483, 1.487]; lower bound clears 1 + delta = 1.004; confirmed in 1 fresh session(s)",
+    "delta": 0.004327092555070466,
+    "speedup": [
+      1.4850102832450633,
+      1.4840694524314686
+    ],
+    "ci": [
+      [
+        1.4825098185003238,
+        1.4873210688635503
+      ],
+      [
+        1.4814838340507166,
+        1.4867738651097537
+      ]
+    ],
+    "reference_median_s": [
+      0.0018186249545454546,
+      0.0018168541363636364
+    ],
+    "ceiling_median_s": [
+      0.0012246420454545455,
+      0.0012258352272727273
+    ],
+    "fingerprint": "cpu|cpu|jax 0.4.38|trusted-subprocess/v1"
+  },
+  {
+    "workload": "softmax",
+    "class": "control",
+    "shape": [
+      128,
+      1024
+    ],
+    "state": "VALID_NO_CHANGE",
+    "reason": "speedup 0.998x, 95% CI [0.987, 1.008]; not distinguishable from noise (delta = 0.004)",
+    "delta": 0.0040375879960074185,
+    "speedup": [
+      0.9982446992126586
+    ],
+    "ci": [
+      [
+        0.9868180502699793,
+        1.0077776469040798
+      ]
+    ],
+    "reference_median_s": [
+      0.00011923131212121212
+    ],
+    "ceiling_median_s": [
+      0.00011919810606060606
+    ],
+    "fingerprint": "cpu|cpu|jax 0.4.38|trusted-subprocess/v1"
+  },
+  {
+    "workload": "layer_norm",
+    "class": "control",
+    "shape": [
+      128,
+      1024
+    ],
+    "state": "INTERRUPTED",
+    "reason": "no usable A/A calibration: unstable A/A sessions: session 0: B IQR/median 0.152 > 0.1; baseline drift 0.079 > 0.05",
+    "delta": null,
+    "speedup": [],
+    "ci": [],
+    "reference_median_s": [],
+    "ceiling_median_s": [],
+    "fingerprint": "cpu|cpu|jax 0.4.38|trusted-subprocess/v1"
+  },
+  {
+    "workload": "matmul_gelu",
+    "class": "control",
+    "shape": [
+      128,
+      256,
+      256
+    ],
+    "state": "VALID_NO_CHANGE",
+    "reason": "speedup 0.999x, 95% CI [0.991, 1.009]; not distinguishable from noise (delta = 0.005)",
+    "delta": 0.0047160787422181995,
+    "speedup": [
+      0.9989108018874763
+    ],
+    "ci": [
+      [
+        0.9907037016817722,
+        1.0092822748926578
+      ]
+    ],
+    "reference_median_s": [
+      0.00024408079268292682
+    ],
+    "ceiling_median_s": [
+      0.00024531427439024393
+    ],
+    "fingerprint": "cpu|cpu|jax 0.4.38|trusted-subprocess/v1"
+  }
+]

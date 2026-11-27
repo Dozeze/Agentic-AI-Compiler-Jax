@@ -1,0 +1,24 @@
+{
+  "schema_version": "aa_calibration/v1",
+  "label": "mac-m5-cpu-subprocess-run2",
+  "workload_id": "matmul_gelu",
+  "shape": [
+    128,
+    256,
+    256
+  ],
+  "dtype": "float32",
+  "protocol_hash": "fd6148b5e8ca2ec71c470716ef432e3226a32bc45901fd8c6d2d88aeb6c308d0",
+  "fingerprint": "cpu|cpu|jax 0.4.38|trusted-subprocess/v1",
+  "repeats": 80,
+  "delta": 0.005483708269831333,
+  "aa_relative_differences": [
+    0.002733917868186886,
+    0.005955220139997275,
+    0.0022559997462775483,
+    0.003597660789167567,
+    4.9745064795603255e-05
+  ],
+  "timer_resolution_s": 4.166666666666667e-08,
+  "created_utc": "2026-11-27T13:21:22Z"
+}

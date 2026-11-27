@@ -63,6 +63,8 @@ and `providers.ProposalProvider` (the single structured proposal and accounting 
 - Live runs need an explicit money cap/currency and matching dated `model.prices` in `--config run.json`, plus credentials. None is enabled by default. `--runner subprocess --iterations 0` runs the trusted baseline without a provider; model-written code still requires Docker.
 - Freeze δ: `uv run --locked python scripts/calibrate_aa.py --workload softmax --backend cpu --runner docker --label <population>`, then `--calibration <file>`.
 - NV host, everything GPU in one go: `scripts/phase_b.sh`.
+- Ceilings (no model): `uv run --locked python scripts/measure_ceilings.py --backend cpu --runner docker --calibrations <dir> --out <new dir>`.
+- Live sweep, one search per workload × framing: `uv run --locked python scripts/search_sweep.py --base configs/live_gemini_flash.json --ceilings <results.json> --calibrations <dir> --out runs/<name>` (see `docs/EXPERIMENTS.md`).
 
 ## 5. Status (update every push)
 | Milestone | Tasks | Owner | Status |
@@ -83,6 +85,10 @@ timing yet. The agent cannot propose Pallas yet: `source_policy.py` rejects `jax
 Headroom suite (P30): five workloads where a known rewrite beats XLA on the user's code (`matmul_chain`,
 `pairwise_distances`, `attention_loop`, `layer_norm_loop`, `batched_matmul_loop`; rewrites in `workloads/ceilings/`);
 softmax, layer_norm and matmul_gelu are the controls.
+First live sweep (2026-11-27, Mac CPU in Docker, gemini-2.5-flash, one run per cell, `docs/EXPERIMENTS.md`):
+ceilings 1.31–13.1×; the agent reached ~100 % of the ceiling in 10/10 headroom cells (up to 13.5× on
+matmul_chain) and accepted no change on the controls; USD 0.10 for 46 requests. Development evidence only:
+n = 1, CPU, no held-out evaluation; the tasks are too easy to separate the two prompt framings.
 
 Current handoff: the integrated AIC-015–018 implementation and documentation on `sergio/batch-03`,
 verified by the 781-test offline suite. Target acceptance remains pending; local run artifacts stay excluded.
@@ -215,6 +221,9 @@ remains the default for subsequent work. Local run evidence and credentials are 
   `compiler_complement` (adds the division of labour: XLA does the mechanical work, the agent looks for a different
   computation with the same result). After HALO's framing study, but HALO's prompt named the exact identities of
   two of its tasks; this one names no rewrite or workload, and a test checks that]
+- P32 Implicit prompt caching on Vertex? [pending: Gemini on Vertex reported 1,622 cached input tokens in one
+  request and `providers.py` stopped the run as unpriced billing (`unexpected_cache_usage`). Proposal: charge
+  cached tokens at the full input price, a safe upper bound, instead of stopping. Not applied (P20 owner)]
 - P28 Simplify before the final presentation? [proposal only: `docs/SIMPLIFICATION_PROPOSAL.md` lists dead code,
   duplicate held-out guards, a redundant promotion recheck and over-built provider/storage accounting. Nothing is
   removed until the team agrees; code by another member changes only with that member's agreement]
@@ -332,6 +341,8 @@ Evaluation pipeline (AIC-005 … 009):
 - On a busy Mac, tiny workloads (x + y, µs per call) usually fail the 10 % / 5 % instability limits: the run then
   stops with "no usable A/A calibration" instead of guessing a threshold. That is the protocol working.
 - A measurement population is device + JAX version + runner/image: a change mid-run stops the run (INTERRUPTED).
+- Gemini 2.5 Flash sometimes sends source with literal `\n` escapes (POLICY_REJECTED syntax error) or calls
+  APIs missing in JAX 0.4.38 (`jax.nn.layer_norm`): each costs one candidate slot; the error reaches the next prompt.
 - Never put a `--cpus` quota on a timing container (P29): XLA sizes its CPU thread pool from all visible cores,
   uses up the quota early in each period and the container is throttled until the next one. On the Mac (M5)
   matmul_gelu blocks alternated between ~375 and ~1,130 µs per call and A/A failed with IQR/median ≈ 2. Without
@@ -377,6 +388,7 @@ Compiler feedback, held-out, providers (batch 03):
   than prune acceptance evidence; an active worker can exceed that limit before the host checks its files.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-27 Sergio — AIC-016: first live sweep on the Mac (CPU, Docker, gemini-2.5-flash): `scripts/measure_ceilings.py`, `scripts/search_sweep.py`, `configs/live_gemini_flash.json` (dated prices, USD 0.30 cap per run), `docs/EXPERIMENTS.md`. 10/10 headroom cells at ~100 % of ceiling, 0 false positives on controls, USD 0.10. Calibration records, ceiling results and the sweep summary in `evidence/` (raw work directories ignored). P32 pending.
 - 2026-11-27 Sergio — AIC-014 (P31): `run_config.prompt_framing` = `baseline` | `compiler_complement`; the second adds a task-neutral "work alongside XLA" framing to the system prompt. Tests check validation, that it reaches the prompt and that it names no workload or rewrite.
 - 2026-11-27 Sergio — AIC-017 (P30): headroom suite: `matmul_chain`, `pairwise_distances`, `attention_loop`, `layer_norm_loop`, `batched_matmul_loop` with float64 oracles, edge cases, disjoint held-out split and reviewed ceiling rewrites (`workloads/ceilings/`, also for the three controls); worker image includes the new references. 22 suite tests.
 - 2026-11-27 Sergio — AIC-009 (P29): no `--cpus` quota on worker containers by default; optional `cpuset`/`cpus` in `DockerRunner`; the CPU control is part of the measurement population label. On the Mac the default quota made Docker A/A unstable (matmul_gelu IQR/median ≈ 2); without it softmax, layer_norm and matmul_gelu calibrate in Docker (δ 5.2–5.6 %). Likely cause of P26. Full suite with Docker 801 passed / 11 skipped.

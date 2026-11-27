@@ -27,3 +27,7 @@ evidence/**/*.gz
 # macOS Finder metadata
 .DS_Store
 
+
+# Raw measurement work directories (inputs, logs, per-session JSON); records and summaries are tracked
+evidence/calibration/raw-*/
+evidence/ceilings/*/*/

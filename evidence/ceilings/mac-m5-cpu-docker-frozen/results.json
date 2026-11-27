@@ -1,0 +1,267 @@
+[
+  {
+    "workload": "matmul_chain",
+    "class": "headroom",
+    "shape": [
+      1024,
+      16
+    ],
+    "state": "ACCEPTED",
+    "reason": "speedup 13.137x, 95% CI [12.821, 13.557]; lower bound clears 1 + delta = 1.059; confirmed in 1 fresh session(s)",
+    "delta": 0.059476752084005914,
+    "speedup": [
+      13.136616764399887,
+      13.117099938841603
+    ],
+    "ci": [
+      [
+        12.821335830986067,
+        13.557492192866256
+      ],
+      [
+        12.883119651484614,
+        13.386005236230442
+      ]
+    ],
+    "reference_median_s": [
+      0.000815201375,
+      0.0008040677291666666
+    ],
+    "ceiling_median_s": [
+      6.246093749999999e-05,
+      6.166320833333333e-05
+    ],
+    "fingerprint": "cpu|cpu|jax 0.4.38|aic-worker:cpu-940408e17fadd2f2|cpu none",
+    "calibration": "evidence/calibration/mac-m5-cpu-docker-sweep/matmul_chain-1024x16.json"
+  },
+  {
+    "workload": "pairwise_distances",
+    "class": "headroom",
+    "shape": [
+      256,
+      256,
+      64
+    ],
+    "state": "ACCEPTED",
+    "reason": "speedup 2.295x, 95% CI [2.275, 2.314]; lower bound clears 1 + delta = 1.052; confirmed in 1 fresh session(s)",
+    "delta": 0.0519395068873604,
+    "speedup": [
+      2.294803147520931,
+      2.300768733992975
+    ],
+    "ci": [
+      [
+        2.275153771593572,
+        2.3140945559736728
+      ],
+      [
+        2.2821646380161495,
+        2.328748360434951
+      ]
+    ],
+    "reference_median_s": [
+      0.000454125,
+      0.0004569081590909091
+    ],
+    "ceiling_median_s": [
+      0.00019854781818181818,
+      0.00019910038636363636
+    ],
+    "fingerprint": "cpu|cpu|jax 0.4.38|aic-worker:cpu-940408e17fadd2f2|cpu none",
+    "calibration": "evidence/calibration/mac-m5-cpu-docker-sweep/pairwise_distances-256x256x64.json"
+  },
+  {
+    "workload": "attention_loop",
+    "class": "headroom",
+    "shape": [
+      4,
+      8,
+      256,
+      64
+    ],
+    "state": "ACCEPTED",
+    "reason": "speedup 1.874x, 95% CI [1.851, 1.896]; lower bound clears 1 + delta = 1.055; confirmed in 1 fresh session(s)",
+    "delta": 0.054659617616619846,
+    "speedup": [
+      1.873614095282477,
+      1.881524811129986
+    ],
+    "ci": [
+      [
+        1.8506201342373707,
+        1.8964726570583612
+      ],
+      [
+        1.8678485912543457,
+        1.8955723861077918
+      ]
+    ],
+    "reference_median_s": [
+      0.0094155935,
+      0.0094678335
+    ],
+    "ceiling_median_s": [
+      0.00504347925,
+      0.0050354792500000006
+    ],
+    "fingerprint": "cpu|cpu|jax 0.4.38|aic-worker:cpu-940408e17fadd2f2|cpu none",
+    "calibration": "evidence/calibration/mac-m5-cpu-docker-sweep/attention_loop-4x8x256x64.json"
+  },
+  {
+    "workload": "layer_norm_loop",
+    "class": "headroom",
+    "shape": [
+      32,
+      1024
+    ],
+    "state": "ACCEPTED",
+    "reason": "speedup 4.342x, 95% CI [4.284, 4.396]; lower bound clears 1 + delta = 1.056; confirmed in 1 fresh session(s)",
+    "delta": 0.0558516187809781,
+    "speedup": [
+      4.341926777934707,
+      4.184680242271287
+    ],
+    "ci": [
+      [
+        4.283901846222559,
+        4.396034426577498
+      ],
+      [
+        3.9326347726116873,
+        4.359424498281497
+      ]
+    ],
+    "reference_median_s": [
+      0.00022626364285714288,
+      0.00022223089880952384
+    ],
+    "ceiling_median_s": [
+      5.179860714285714e-05,
+      5.186607738095238e-05
+    ],
+    "fingerprint": "cpu|cpu|jax 0.4.38|aic-worker:cpu-940408e17fadd2f2|cpu none",
+    "calibration": "evidence/calibration/mac-m5-cpu-docker-sweep/layer_norm_loop-32x1024.json"
+  },
+  {
+    "workload": "batched_matmul_loop",
+    "class": "headroom",
+    "shape": [
+      32,
+      128,
+      64,
+      128
+    ],
+    "state": "ACCEPTED",
+    "reason": "speedup 1.313x, 95% CI [1.296, 1.331]; lower bound clears 1 + delta = 1.049; confirmed in 1 fresh session(s)",
+    "delta": 0.04935611005938725,
+    "speedup": [
+      1.3127586563328115,
+      1.288274587918655
+    ],
+    "ci": [
+      [
+        1.2964648783340331,
+        1.3307328876847382
+      ],
+      [
+        1.282867603677693,
+        1.294977852894323
+      ]
+    ],
+    "reference_median_s": [
+      0.001622761269230769,
+      0.0016024759615384616
+    ],
+    "ceiling_median_s": [
+      0.0012442660384615386,
+      0.0012443301153846154
+    ],
+    "fingerprint": "cpu|cpu|jax 0.4.38|aic-worker:cpu-940408e17fadd2f2|cpu none",
+    "calibration": "evidence/calibration/mac-m5-cpu-docker-sweep/batched_matmul_loop-32x128x64x128.json"
+  },
+  {
+    "workload": "softmax",
+    "class": "control",
+    "shape": [
+      128,
+      1024
+    ],
+    "state": "VALID_NO_CHANGE",
+    "reason": "speedup 1.001x, 95% CI [0.991, 1.014]; not distinguishable from noise (delta = 0.054)",
+    "delta": 0.05424635886233885,
+    "speedup": [
+      1.0007859011724705
+    ],
+    "ci": [
+      [
+        0.9907967086033452,
+        1.014064618116559
+      ]
+    ],
+    "reference_median_s": [
+      0.0002191240879120879
+    ],
+    "ceiling_median_s": [
+      0.0002195757802197802
+    ],
+    "fingerprint": "cpu|cpu|jax 0.4.38|aic-worker:cpu-940408e17fadd2f2|cpu none",
+    "calibration": "evidence/calibration/mac-m5-cpu-docker-sweep/softmax-128x1024.json"
+  },
+  {
+    "workload": "layer_norm",
+    "class": "control",
+    "shape": [
+      128,
+      1024
+    ],
+    "state": "VALID_NO_CHANGE",
+    "reason": "speedup 0.993x, 95% CI [0.986, 0.999]; not distinguishable from noise (delta = 0.053)",
+    "delta": 0.05330123319865178,
+    "speedup": [
+      0.992845862530157
+    ],
+    "ci": [
+      [
+        0.9855368579094987,
+        0.9990429732409519
+      ]
+    ],
+    "reference_median_s": [
+      0.00016798576068376066
+    ],
+    "ceiling_median_s": [
+      0.00016846670085470086
+    ],
+    "fingerprint": "cpu|cpu|jax 0.4.38|aic-worker:cpu-940408e17fadd2f2|cpu none",
+    "calibration": "evidence/calibration/mac-m5-cpu-docker-sweep/layer_norm-128x1024.json"
+  },
+  {
+    "workload": "matmul_gelu",
+    "class": "control",
+    "shape": [
+      128,
+      256,
+      256
+    ],
+    "state": "VALID_NO_CHANGE",
+    "reason": "speedup 0.994x, 95% CI [0.987, 1.001]; not distinguishable from noise (delta = 0.055)",
+    "delta": 0.05452463703903304,
+    "speedup": [
+      0.9940575210091508
+    ],
+    "ci": [
+      [
+        0.9871149756647953,
+        1.0008810970414908
+      ]
+    ],
+    "reference_median_s": [
+      0.00036964544339622635
+    ],
+    "ceiling_median_s": [
+      0.0003714068396226415
+    ],
+    "fingerprint": "cpu|cpu|jax 0.4.38|aic-worker:cpu-940408e17fadd2f2|cpu none",
+    "calibration": "evidence/calibration/mac-m5-cpu-docker-sweep/matmul_gelu-128x256x256.json"
+  }
+]

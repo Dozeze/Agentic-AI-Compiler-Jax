@@ -1,0 +1,23 @@
+{
+  "schema_version": "aa_calibration/v1",
+  "label": "exp-docker-cpuset",
+  "workload_id": "softmax",
+  "shape": [
+    128,
+    1024
+  ],
+  "dtype": "float32",
+  "protocol_hash": "fd6148b5e8ca2ec71c470716ef432e3226a32bc45901fd8c6d2d88aeb6c308d0",
+  "fingerprint": "cpu|cpu|jax 0.4.38|aic-worker:cpu-f27d1a16244ff92b",
+  "repeats": 102,
+  "delta": 0.06531234125019054,
+  "aa_relative_differences": [
+    0.007335233744856451,
+    0.0007082164946698999,
+    0.0023676559765921645,
+    0.0043118577487776255,
+    0.012286139576992094
+  ],
+  "timer_resolution_s": 0.001,
+  "created_utc": "2026-11-27T13:32:32Z"
+}

@@ -1,0 +1,23 @@
+{
+  "schema_version": "aa_calibration/v1",
+  "label": "mac-m5-cpu-subprocess-run2",
+  "workload_id": "layer_norm",
+  "shape": [
+    128,
+    1024
+  ],
+  "dtype": "float32",
+  "protocol_hash": "fd6148b5e8ca2ec71c470716ef432e3226a32bc45901fd8c6d2d88aeb6c308d0",
+  "fingerprint": "cpu|cpu|jax 0.4.38|trusted-subprocess/v1",
+  "repeats": 255,
+  "delta": 0.0034050417983370273,
+  "aa_relative_differences": [
+    0.003607747458589161,
+    0.0003176266020183949,
+    0.0008473154193620047,
+    0.0015716054794099321,
+    0.0025942191573284923
+  ],
+  "timer_resolution_s": 4.166666666666667e-08,
+  "created_utc": "2026-11-27T13:21:14Z"
+}

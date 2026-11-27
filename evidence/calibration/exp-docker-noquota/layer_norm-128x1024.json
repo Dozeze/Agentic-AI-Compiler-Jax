@@ -1,0 +1,23 @@
+{
+  "schema_version": "aa_calibration/v1",
+  "label": "exp-docker-cpus10",
+  "workload_id": "layer_norm",
+  "shape": [
+    128,
+    1024
+  ],
+  "dtype": "float32",
+  "protocol_hash": "fd6148b5e8ca2ec71c470716ef432e3226a32bc45901fd8c6d2d88aeb6c308d0",
+  "fingerprint": "cpu|cpu|jax 0.4.38|aic-worker:cpu-f27d1a16244ff92b",
+  "repeats": 126,
+  "delta": 0.051088394826646094,
+  "aa_relative_differences": [
+    0.001399420842685295,
+    0.0013825994162017796,
+    0.005078616032114347,
+    0.00027336469127281493,
+    0.0025522301398785974
+  ],
+  "timer_resolution_s": 0.001,
+  "created_utc": "2026-11-27T13:33:17Z"
+}

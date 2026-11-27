@@ -1,0 +1,23 @@
+{
+  "schema_version": "aa_calibration/v1",
+  "label": "mac-m5-cpu-docker-quiet",
+  "workload_id": "softmax",
+  "shape": [
+    128,
+    1024
+  ],
+  "dtype": "float32",
+  "protocol_hash": "fd6148b5e8ca2ec71c470716ef432e3226a32bc45901fd8c6d2d88aeb6c308d0",
+  "fingerprint": "cpu|cpu|jax 0.4.38|aic-worker:cpu-f27d1a16244ff92b",
+  "repeats": 87,
+  "delta": 0.0531841821945421,
+  "aa_relative_differences": [
+    0.011670209998011716,
+    0.002707545682163248,
+    0.0013773393802942735,
+    0.0038031343511996107,
+    0.0060152250192551104
+  ],
+  "timer_resolution_s": 0.001,
+  "created_utc": "2026-11-27T13:29:46Z"
+}

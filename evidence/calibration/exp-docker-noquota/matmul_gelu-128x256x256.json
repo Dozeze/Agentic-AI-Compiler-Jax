@@ -1,0 +1,24 @@
+{
+  "schema_version": "aa_calibration/v1",
+  "label": "exp-docker-cpus10",
+  "workload_id": "matmul_gelu",
+  "shape": [
+    128,
+    256,
+    256
+  ],
+  "dtype": "float32",
+  "protocol_hash": "fd6148b5e8ca2ec71c470716ef432e3226a32bc45901fd8c6d2d88aeb6c308d0",
+  "fingerprint": "cpu|cpu|jax 0.4.38|aic-worker:cpu-f27d1a16244ff92b",
+  "repeats": 53,
+  "delta": 0.05188089785289348,
+  "aa_relative_differences": [
+    0.0010055724828341717,
+    0.0005271220728141346,
+    0.001500728366454096,
+    0.0027197894203323525,
+    0.0011956942488531297
+  ],
+  "timer_resolution_s": 0.001,
+  "created_utc": "2026-11-27T13:31:23Z"
+}
