@@ -47,7 +47,9 @@ IMAGE_FILES = ("pyproject.toml", "uv.lock", "worker.py", "benchmark.py", "contra
                "array_io.py", "feedback.py", "workloads/__init__.py", "workloads/registry.py", "workloads/oracles.py",
                "workloads/softmax.py", "workloads/layer_norm.py", "workloads/matmul_gelu.py",
                "workloads/example.py", "workloads/matmul_chain.py", "workloads/pairwise_distances.py",
-               "workloads/attention_loop.py", "workloads/layer_norm_loop.py", "workloads/batched_matmul_loop.py")
+               "workloads/attention_loop.py", "workloads/layer_norm_loop.py", "workloads/batched_matmul_loop.py",
+               "workloads/gqa_decode.py", "workloads/top_k_rows.py", "workloads/cross_entropy.py",
+               "workloads/conv3x3.py", "workloads/embedding_lookup.py", "workloads/rnn_layer.py")
 IMAGE_REPOSITORY = "aic-worker"
 VARIANTS = {"cpu": "", "cuda12": "cuda12"}       # variant -> uv extra
 

@@ -59,3 +59,47 @@ def attention_f64(q, k, v) -> np.ndarray:
 
 def batched_matmul_f64(a, b) -> np.ndarray:
     return np.einsum("bij,bjk->bik", np.asarray(a, np.float64), np.asarray(b, np.float64))
+
+
+# Block tier (batch 04).
+
+def gqa_decode_f64(q, k, v) -> np.ndarray:
+    group = q.shape[1] // k.shape[1]
+    k = np.repeat(np.asarray(k, np.float64), group, axis=1)
+    v = np.repeat(np.asarray(v, np.float64), group, axis=1)
+    return attention_f64(q, k, v)
+
+
+def top_k_rows_f64(x, k=8) -> np.ndarray:
+    return -np.sort(-np.asarray(x, np.float64), axis=-1)[:, :k]
+
+
+def cross_entropy_f64(logits, labels) -> np.ndarray:
+    x = np.asarray(logits, np.float64)
+    m = x.max(axis=-1, keepdims=True)
+    lse = (m + np.log(np.exp(x - m).sum(axis=-1, keepdims=True)))[:, 0]
+    return lse - x[np.arange(x.shape[0]), np.asarray(labels)]
+
+
+def conv3x3_f64(x, w) -> np.ndarray:
+    x = np.pad(np.asarray(x, np.float64), ((0, 0), (1, 1), (1, 1), (0, 0)))
+    w = np.asarray(w, np.float64)
+    n, h, wd = x.shape[0], x.shape[1] - 2, x.shape[2] - 2
+    out = np.zeros((n, h, wd, w.shape[-1]))
+    for di in range(3):
+        for dj in range(3):
+            out += x[:, di:di + h, dj:dj + wd, :] @ w[di, dj]
+    return out
+
+
+def embedding_lookup_f64(ids, table) -> np.ndarray:
+    return np.asarray(table, np.float64)[np.asarray(ids)]
+
+
+def rnn_layer_f64(x, w_in, w_rec, bias, h0) -> np.ndarray:
+    x, w_in, w_rec, bias, h = (np.asarray(a, np.float64) for a in (x, w_in, w_rec, bias, h0))
+    out = np.empty((x.shape[0], *h.shape))
+    for t in range(x.shape[0]):
+        h = np.tanh(x[t] @ w_in + h @ w_rec + bias)
+        out[t] = h
+    return out

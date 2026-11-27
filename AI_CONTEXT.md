@@ -216,7 +216,10 @@ remains the default for subsequent work. Local run evidence and credentials are 
   from HALO join them: the reference is written as a user might write it, and a reviewed rewrite in
   `workloads/ceilings/` (never shown to the agent) measures the available speedup before any search. Accepting a
   change on a control is a false positive. Tolerances fixed from the measured reference/rewrite error vs float64
-  oracles (rewrites use at most a third of each); held-out seeds 1000–1019 and two unseen shapes each]
+  oracles (rewrites use at most a third of each); held-out seeds 1000–1019 and two unseen shapes each.
+  Block tier (2026-11-27, after HALO's block suite): `gqa_decode`, `top_k_rows`, `cross_entropy`, `conv3x3`,
+  `embedding_lookup`, `rnn_layer`; the faster form needs an API or a restructured data flow, not only removing a
+  loop. Shapes keep every input <= 8 MiB. HALO's tiny GPT is not ported: it takes pytree parameters]
 - P31 Prompt framing? [`run_config.prompt_framing`: `baseline` (default, the original system prompt) or
   `compiler_complement` (adds the division of labour: XLA does the mechanical work, the agent looks for a different
   computation with the same result). After HALO's framing study, but HALO's prompt named the exact identities of
@@ -389,6 +392,7 @@ Compiler feedback, held-out, providers (batch 03):
   than prune acceptance evidence; an active worker can exceed that limit before the host checks its files.
 
 ## 9. Change log (newest first, one line per push)
+- 2026-11-27 Sergio — AIC-017 (P30): block tier of the headroom suite: `gqa_decode`, `top_k_rows`, `cross_entropy` (int32 labels), `conv3x3`, `embedding_lookup` (int32 ids), `rnn_layer`, with float64 oracles, edge cases, held-out splits and ceiling rewrites; worker image includes them. Docker CPU ceilings 1.27–161×.
 - 2026-11-27 Sergio — P8 (P32): `gemini.py` charges Vertex implicit-cache hits as full-price input instead of reporting separate cache billing, which stopped one sweep cell; regression test added.
 - 2026-11-27 Sergio — AIC-016: first live sweep on the Mac (CPU, Docker, gemini-2.5-flash): `scripts/measure_ceilings.py`, `scripts/search_sweep.py`, `configs/live_gemini_flash.json` (dated prices, USD 0.30 cap per run), `docs/EXPERIMENTS.md`. 10/10 headroom cells at ~100 % of ceiling, 0 false positives on controls, USD 0.10. Calibration records, ceiling results and the sweep summary in `evidence/` (raw work directories ignored). P32 pending.
 - 2026-11-27 Sergio — AIC-014 (P31): `run_config.prompt_framing` = `baseline` | `compiler_complement`; the second adds a task-neutral "work alongside XLA" framing to the system prompt. Tests check validation, that it reaches the prompt and that it names no workload or rewrite.

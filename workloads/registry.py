@@ -13,8 +13,9 @@ from typing import Callable
 
 import numpy as np
 
-from workloads.oracles import (add_f64, attention_f64, batched_matmul_f64, layer_norm_f64, matmul_chain_f64,
-                              matmul_gelu_f64, pairwise_distances_f64, softmax_f64)
+from workloads.oracles import (add_f64, attention_f64, batched_matmul_f64, conv3x3_f64, cross_entropy_f64,
+                              embedding_lookup_f64, gqa_decode_f64, layer_norm_f64, matmul_chain_f64,
+                              matmul_gelu_f64, pairwise_distances_f64, rnn_layer_f64, softmax_f64, top_k_rows_f64)
 
 WORKLOAD_SCHEMA = "workload/v1"
 HERE = Path(__file__).resolve().parent
@@ -403,7 +404,186 @@ BATCHED_MATMUL_LOOP = WorkloadSpec(
     max_input_bytes=REPRESENTATIVE_MAX_INPUT_BYTES, scientific=True, heldout_seeds=tuple(range(1000, 1020)),
 )
 
-HEADROOM = (MATMUL_CHAIN, PAIRWISE_DISTANCES, ATTENTION_LOOP, LAYER_NORM_LOOP, BATCHED_MATMUL_LOOP)
+# Block tier: the building blocks of a language model, after HALO's block suite. Harder than the op tier:
+# the faster form needs knowing an API or restructuring the data flow, not only removing a loop.
+
+def _spec(workload_id, factory, oracle, contract, tolerance, edges, dev, heldout, static=None):
+    return WorkloadSpec(
+        schema_version=WORKLOAD_SCHEMA, workload_id=workload_id, version=1,
+        reference_path=HERE / f"{workload_id}.py", function_name=workload_id, dtypes=("float32",),
+        static_params=static or {}, development_shapes=dev, heldout_shapes=heldout,
+        search_seeds=(0, 1, 2, 3, 4), input_factory=factory, oracle=oracle, output_contract=contract,
+        tolerance=tolerance, edge_cases=tuple(EdgeCase(name, make) for name, make in edges),
+        max_input_bytes=REPRESENTATIVE_MAX_INPUT_BYTES, scientific=True, heldout_seeds=tuple(range(1000, 1020)))
+
+
+def _gqa_inputs(seed, shape, dtype):
+    b, hq, hkv, cache, d = _checked_shape(shape, 5, "gqa_decode")
+    if hq % hkv:
+        raise ValueError("gqa_decode: q heads must be a multiple of kv heads")
+    _check_input_size(b * hq * d + 2 * b * hkv * cache * d, "gqa_decode")
+    rng = np.random.default_rng(seed)
+    return _normal(rng, b, hq, 1, d), _normal(rng, b, hkv, cache, d), _normal(rng, b, hkv, cache, d)
+
+
+def _gqa_edge(kind, shape):
+    q, k, v = _gqa_inputs(EDGE_SEED, shape, "float32")
+    d = shape[-1]
+    if kind == "large_scores":             # scores near 200: overflow without max-subtraction
+        offset = np.float32(np.sqrt(200.0 * np.sqrt(d) / d))
+        q, k = q * np.float32(0.1) + offset, k * np.float32(0.1) + offset
+    elif kind == "kv_head_identity":       # each kv head returns its own constant: catches a wrong grouping
+        k = np.broadcast_to(k[:, :, :1, :], k.shape).copy()
+        v = np.broadcast_to(np.arange(k.shape[1], dtype=np.float32)[None, :, None, None], v.shape).copy()
+    return q, k, v
+
+
+GQA_DECODE = _spec(
+    "gqa_decode", _gqa_inputs, gqa_decode_f64,
+    "single float32 array [batch,q_heads,1,dim]; q head h attends over k/v head h // (q_heads // kv_heads)",
+    Tolerance(rtol=1e-4, atol=2e-5),       # the grouped rewrite needs 5e-6 beyond rtol; keep a 4x margin
+    [(n, lambda shape, kind=n: _gqa_edge(kind, shape)) for n in ("large_scores", "kv_head_identity")],
+    dev=((2, 16, 4, 256, 64), (1, 32, 4, 1024, 128)), heldout=((1, 16, 2, 768, 128), (2, 8, 4, 512, 64)),
+    static={"shape_order": ["batch", "q_heads", "kv_heads", "cache", "dim"], "query_positions": 1,
+            "input_layout": "q[batch,q_heads,1,dim], k and v [batch,kv_heads,cache,dim]", "mask": None})
+
+TOP_K = 8
+
+
+def _top_k_inputs(seed, shape, dtype):
+    rows, cols = _checked_shape(shape, 2, "top_k_rows")
+    _check_input_size(rows * cols, "top_k_rows")
+    return (_normal(np.random.default_rng(seed), rows, cols),)
+
+
+def _top_k_edge(kind, shape):
+    (x,) = _top_k_inputs(EDGE_SEED, shape, "float32")
+    if kind == "ties":
+        x[:, ::100] = np.float32(9.0)
+    elif kind == "ascending_tail":         # the answer sits at the end of every row
+        x[:, -TOP_K:] = np.arange(10, 10 + TOP_K, dtype=np.float32)
+    return (x,)
+
+
+TOP_K_ROWS = _spec(
+    "top_k_rows", _top_k_inputs, top_k_rows_f64,
+    f"single float32 array [rows,{TOP_K}]: the {TOP_K} largest values of each row, largest first",
+    Tolerance(rtol=0.0, atol=0.0),
+    [(n, lambda shape, kind=n: _top_k_edge(kind, shape)) for n in ("ties", "ascending_tail")],
+    dev=((32, 4096), (64, 16384)), heldout=((48, 8192), (16, 32768)), static={"k": TOP_K})
+
+
+def _cross_entropy_inputs(seed, shape, dtype):
+    rows, vocab = _checked_shape(shape, 2, "cross_entropy")
+    _check_input_size(rows * vocab + rows, "cross_entropy")
+    rng = np.random.default_rng(seed)
+    return _normal(rng, rows, vocab) * np.float32(3.0), rng.integers(0, vocab, size=(rows,), dtype=np.int32)
+
+
+def _cross_entropy_edge(kind, shape):
+    logits, labels = _cross_entropy_inputs(EDGE_SEED, shape, "float32")
+    if kind == "large_logits":             # exp overflows without max-subtraction
+        logits = logits / np.float32(3.0) + np.float32(500.0)
+    elif kind == "peaked_on_label":
+        logits[np.arange(len(labels)), labels] += np.float32(30.0)
+    elif kind == "boundary_labels":
+        labels = np.where(np.arange(len(labels)) % 2, logits.shape[1] - 1, 0).astype(np.int32)
+    return logits, labels
+
+
+CROSS_ENTROPY = _spec(
+    "cross_entropy", _cross_entropy_inputs, cross_entropy_f64,
+    "single float32 array [rows]: logsumexp(logits[i]) - logits[i, labels[i]]; labels are int32 in [0, vocab)",
+    Tolerance(rtol=1e-4, atol=1e-4),
+    [(n, lambda shape, kind=n: _cross_entropy_edge(kind, shape))
+     for n in ("large_logits", "peaked_on_label", "boundary_labels")],
+    dev=((128, 1024), (384, 4096)), heldout=((200, 3000), (96, 8192)),
+    static={"input_layout": "logits[rows,vocab] float32, labels[rows] int32"})
+
+
+def _conv_inputs(seed, shape, dtype):
+    n, h, w, c_in, c_out = _checked_shape(shape, 5, "conv3x3")
+    _check_input_size(n * h * w * c_in + 9 * c_in * c_out, "conv3x3")
+    rng = np.random.default_rng(seed)
+    return _normal(rng, n, h, w, c_in), _normal(rng, 3, 3, c_in, c_out) / np.float32(np.sqrt(9 * c_in))
+
+
+def _conv_edge(kind, shape):
+    x, w = _conv_inputs(EDGE_SEED, shape, "float32")
+    if kind == "corner_impulse":           # catches wrong padding or a flipped kernel
+        x = np.zeros_like(x)
+        x[:, 0, 0, 0] = np.float32(1.0)
+    elif kind == "centre_tap_only":
+        centre = np.zeros_like(w)
+        centre[1, 1] = w[1, 1]
+        w = centre
+    return x, w
+
+
+CONV3X3 = _spec(
+    "conv3x3", _conv_inputs, conv3x3_f64,
+    "single float32 array [n,h,w,c_out]: 3x3 convolution, stride 1, zero padding 1 (SAME), NHWC/HWIO",
+    Tolerance(rtol=1e-4, atol=1e-4),
+    [(n, lambda shape, kind=n: _conv_edge(kind, shape)) for n in ("corner_impulse", "centre_tap_only")],
+    dev=((2, 16, 16, 16, 32), (8, 32, 32, 32, 64)), heldout=((4, 24, 24, 32, 48), (1, 64, 64, 16, 32)),
+    static={"shape_order": ["n", "h", "w", "c_in", "c_out"], "layout": "x NHWC, w HWIO", "padding": "SAME"})
+
+
+def _embedding_inputs(seed, shape, dtype):
+    batch, seq, vocab, dim = _checked_shape(shape, 4, "embedding_lookup")
+    _check_input_size(vocab * dim + batch * seq, "embedding_lookup")
+    rng = np.random.default_rng(seed)
+    return rng.integers(0, vocab, size=(batch, seq), dtype=np.int32), _normal(rng, vocab, dim)
+
+
+def _embedding_edge(kind, shape):
+    ids, table = _embedding_inputs(EDGE_SEED, shape, "float32")
+    if kind == "boundary_ids":
+        ids = np.where(np.random.default_rng(EDGE_SEED).random(ids.shape) < 0.5, 0, table.shape[0] - 1).astype(np.int32)
+    elif kind == "single_id":
+        ids = np.full_like(ids, table.shape[0] // 2)
+    return ids, table
+
+
+EMBEDDING_LOOKUP = _spec(
+    "embedding_lookup", _embedding_inputs, embedding_lookup_f64,
+    "single float32 array [batch,seq,dim]: out[b,t] = table[ids[b,t]]; ids are int32 in [0, vocab)",
+    Tolerance(rtol=0.0, atol=0.0),
+    [(n, lambda shape, kind=n: _embedding_edge(kind, shape)) for n in ("boundary_ids", "single_id")],
+    dev=((4, 64, 1024, 128), (8, 128, 4096, 256)), heldout=((2, 200, 3000, 128), (16, 64, 2048, 256)),
+    static={"shape_order": ["batch", "seq", "vocab", "dim"], "input_layout": "ids[batch,seq] int32, table[vocab,dim]"})
+
+
+def _rnn_inputs(seed, shape, dtype):
+    steps, batch, inp, hidden = _checked_shape(shape, 4, "rnn_layer")
+    _check_input_size(steps * batch * inp + inp * hidden + hidden * hidden + hidden + batch * hidden, "rnn_layer")
+    rng = np.random.default_rng(seed)
+    return (_normal(rng, steps, batch, inp), _normal(rng, inp, hidden) * np.float32(0.05),
+            _normal(rng, hidden, hidden) * np.float32(0.05), _normal(rng, hidden) * np.float32(0.1),
+            _normal(rng, batch, hidden))
+
+
+def _rnn_edge(kind, shape):
+    x, w_in, w_rec, bias, h0 = _rnn_inputs(EDGE_SEED, shape, "float32")
+    if kind == "no_recurrence":
+        w_rec = np.zeros_like(w_rec)
+    elif kind == "state_only":             # only the carried state drives the output
+        w_in, h0 = np.zeros_like(w_in), h0 * np.float32(5.0)
+    return x, w_in, w_rec, bias, h0
+
+
+RNN_LAYER = _spec(
+    "rnn_layer", _rnn_inputs, rnn_layer_f64,
+    "single float32 array [steps,batch,hidden]: h_t = tanh(x_t @ w_in + h_(t-1) @ w_rec + bias), h_(-1) = h0",
+    Tolerance(rtol=1e-4, atol=1e-5),
+    [(n, lambda shape, kind=n: _rnn_edge(kind, shape)) for n in ("no_recurrence", "state_only")],
+    dev=((32, 16, 64, 64), (128, 32, 256, 256)), heldout=((96, 16, 128, 192), (64, 64, 128, 128)),
+    static={"shape_order": ["steps", "batch", "input", "hidden"],
+            "input_layout": "x[steps,batch,input], w_in[input,hidden], w_rec[hidden,hidden], bias[hidden], h0[batch,hidden]"})
+
+OP_TIER = (MATMUL_CHAIN, PAIRWISE_DISTANCES, ATTENTION_LOOP, LAYER_NORM_LOOP, BATCHED_MATMUL_LOOP)
+BLOCK_TIER = (GQA_DECODE, TOP_K_ROWS, CROSS_ENTROPY, CONV3X3, EMBEDDING_LOOKUP, RNN_LAYER)
+HEADROOM = (*OP_TIER, *BLOCK_TIER)
 CONTROLS = (SOFTMAX, LAYER_NORM, MATMUL_GELU)
 
 
